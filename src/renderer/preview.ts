@@ -4,10 +4,10 @@ import { defaultPreferences } from '../shared/schema';
 export function previewBridge(): ClientBridge {
   let state: AppView = {
     brand: 'StarRail Network', version: '0.1.0', environment: 'test', demo: true, loggedIn: true,
-    account: { email: 'pr***@example.invalid', planName: '星轨 · 标准套餐（示例）', expiryKind: 'finite', expiresAt: new Date(Date.now() + 19 * 86400000).toISOString(), quotaKind: 'finite', usedBytes: '31353261260', quotaBytes: '214748364800', observedAt: new Date().toISOString(), status: '示例套餐' },
+    account: { email: 'pr***@example.invalid', planName: '标准套餐（示例）', expiryKind: 'finite', expiresAt: new Date(Date.now() + 19 * 86400000).toISOString(), quotaKind: 'finite', usedBytes: '31353261260', quotaBytes: '214748364800', observedAt: new Date().toISOString(), status: '示例套餐' },
     connection: 'Disconnected', selectedNode: null, actualNode: null, sync: 'Fresh', lastSync: Date.now(), usableUntil: Date.now() + 86400000, error: null,
     nodes: ['日本 · 东京 01', '新加坡 · 狮城 01', '香港 · 港岛 01', '美国 · 洛杉矶 01'].map((name, i) => ({ id: String(i).padStart(64, '0'), name, group: '示例节点', region: null, protocol: 'vless', compatible: true, reason: null, latency: null, probe: 'untested' })),
-    preferences: { ...defaultPreferences }, storage: 'memory', helperReady: false, policy: '使用内置设置', announcement: null, update: '更新发布源尚未配置', pendingRenewal: false, links: { website: true, renew: true, help: true }, now: Date.now(),
+    preferences: { ...defaultPreferences }, storage: 'memory', helperReady: false, policy: '使用内置设置', announcement: null, update: '更新发布源尚未配置', manualUpdate: false, pendingRenewal: false, links: { website: true, renew: true, help: true }, now: Date.now(),
     download: { status: 'idle', version: null, received: 0, total: 0, error: null }, rules: '使用内置大陆分流规则', showTrafficSummary: true,
   };
   const listeners = new Set<(s: AppView) => void>();

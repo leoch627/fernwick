@@ -1,0 +1,10 @@
+{
+  "id": "starrail-network",
+  "name": "StarRail Network",
+  "appId": "work.starrail.client",
+  "api": ["https://api.starrail.work", "https://host.leiterup.de"],
+  "website": "https://host.leiterup.de/",
+  "endpoint": "https://updates.starrail.work",
+  "updatePublicKey": "-----BEGIN PUBLIC KEY-----\nreplace with keys/release/public.pem\n-----END PUBLIC KEY-----\n",
+  "policyPublicKey": "-----BEGIN PUBLIC KEY-----\nreplace with keys/policy/public.pem\n-----END PUBLIC KEY-----\n"
+}

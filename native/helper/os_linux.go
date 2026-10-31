@@ -17,9 +17,9 @@ import (
 	"time"
 )
 
-func stateRoot() string  { return "/var/lib/starrail-network" }
-func helperRoot() string { return "/usr/lib/starrail-network" }
-func socketPath() string { return "/run/starrail-network/helper.sock" }
+func stateRoot() string  { return "/var/lib/" + serviceID() }
+func helperRoot() string { return "/usr/lib/" + serviceID() }
+func socketPath() string { return "/run/" + serviceID() + "/helper.sock" }
 func signalContext() (context.Context, context.CancelFunc) {
 	return signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 }
@@ -176,7 +176,7 @@ func platformPrepare(ctx context.Context, j *Journal) error {
 	}
 	return nil
 }
-func nftName(j *Journal) string { return "starrail_" + j.ID[:16] }
+func nftName(j *Journal) string { return ruleTag() + "_" + j.ID[:16] }
 func platformProtect(ctx context.Context, j *Journal) error {
 	var ipv4, ipv6 []string
 	for _, v := range append(append([]string{}, lan...), j.Bypass...) {
@@ -189,7 +189,7 @@ func platformProtect(ctx context.Context, j *Journal) error {
 			}
 		}
 	}
-	rules := "table inet " + nftName(j) + " {\n comment \"StarRail:" + j.ID + "\"\n chain output { type filter hook output priority -150; policy accept;\n oifname { \"lo\", \"" + j.Tun + "\" } accept\n meta mark " + itoa(mark) + " accept\n"
+	rules := "table inet " + nftName(j) + " {\n comment \"" + ruleTag() + ":" + j.ID + "\"\n chain output { type filter hook output priority -150; policy accept;\n oifname { \"lo\", \"" + j.Tun + "\" } accept\n meta mark " + itoa(mark) + " accept\n"
 	if len(ipv4) > 0 {
 		rules += "ip daddr { " + strings.Join(ipv4, ", ") + " } accept\n"
 	}
@@ -233,7 +233,7 @@ func platformUnprotect(ctx context.Context, j *Journal) error {
 		return nil
 	}
 	data, e = run(ctx, fixedTool("nft"), nil, "list", "table", "inet", nftName(j))
-	if e != nil || !strings.Contains(string(data), "StarRail:"+j.ID) {
+	if e != nil || !strings.Contains(string(data), ruleTag()+":"+j.ID) {
 		return failure("NETWORK_RECOVERY_REQUIRED")
 	}
 	_, e = run(ctx, fixedTool("nft"), nil, "delete", "table", "inet", nftName(j))
@@ -277,12 +277,12 @@ func platformRecover(ctx context.Context, j *Journal) error {
 	return last
 }
 func platformStopService(ctx context.Context) error {
-	_, e := run(ctx, fixedTool("systemctl"), nil, "stop", "starrail-network.service")
+	_, e := run(ctx, fixedTool("systemctl"), nil, "stop", serviceID()+".service")
 	return e
 }
 func platformInstall(value Installation) error {
-	unit := "[Unit]\nDescription=StarRail Network protected network service\nAfter=network.target systemd-resolved.service\nWants=systemd-resolved.service\n[Service]\nType=simple\nExecStart=/usr/lib/starrail-network/helper serve\nExecStopPost=/usr/lib/starrail-network/helper recover\nRestart=on-failure\nRestartSec=1\nTimeoutStopSec=8\nKillMode=control-group\nUMask=0077\nRuntimeDirectory=starrail-network\nRuntimeDirectoryMode=0755\nProtectHome=read-only\nProtectSystem=strict\nReadWritePaths=/var/lib/starrail-network /run/starrail-network\nPrivateTmp=true\nNoNewPrivileges=true\nRestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK\nCapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_DAC_READ_SEARCH CAP_SYS_PTRACE CAP_KILL\n[Install]\nWantedBy=multi-user.target\n"
-	if e := os.WriteFile("/etc/systemd/system/starrail-network.service", []byte(unit), 0644); e != nil {
+	unit := "[Unit]\nDescription=" + build.DisplayName + " protected network service\nAfter=network.target systemd-resolved.service\nWants=systemd-resolved.service\n[Service]\nType=simple\nExecStart=" + helperRoot() + "/helper serve\nExecStopPost=" + helperRoot() + "/helper recover\nRestart=on-failure\nRestartSec=1\nTimeoutStopSec=8\nKillMode=control-group\nUMask=0077\nRuntimeDirectory=" + serviceID() + "\nRuntimeDirectoryMode=0755\nProtectHome=read-only\nProtectSystem=strict\nReadWritePaths=" + stateRoot() + " /run/" + serviceID() + "\nPrivateTmp=true\nNoNewPrivileges=true\nRestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK\nCapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_DAC_READ_SEARCH CAP_SYS_PTRACE CAP_KILL\n[Install]\nWantedBy=multi-user.target\n"
+	if e := os.WriteFile("/etc/systemd/system/"+serviceID()+".service", []byte(unit), 0644); e != nil {
 		return e
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -290,14 +290,14 @@ func platformInstall(value Installation) error {
 	if _, e := run(ctx, fixedTool("systemctl"), nil, "daemon-reload"); e != nil {
 		return e
 	}
-	_, e := run(ctx, fixedTool("systemctl"), nil, "enable", "--now", "starrail-network.service")
+	_, e := run(ctx, fixedTool("systemctl"), nil, "enable", "--now", serviceID()+".service")
 	return e
 }
 func platformUninstall() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
-	_, _ = run(ctx, fixedTool("systemctl"), nil, "disable", "--now", "starrail-network.service")
-	if e := os.Remove("/etc/systemd/system/starrail-network.service"); e != nil && !os.IsNotExist(e) {
+	_, _ = run(ctx, fixedTool("systemctl"), nil, "disable", "--now", serviceID()+".service")
+	if e := os.Remove("/etc/systemd/system/" + serviceID() + ".service"); e != nil && !os.IsNotExist(e) {
 		return e
 	}
 	_, e := run(ctx, fixedTool("systemctl"), nil, "daemon-reload")

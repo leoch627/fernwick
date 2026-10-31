@@ -5,7 +5,8 @@ import { resolve, dirname, join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 await mkdir('work/packaged-profile', { recursive: true });
-const executablePath = resolve(process.argv[2] ?? 'release/linux-unpacked/starrail-network-dev');
+const config = JSON.parse(await readFile('dist/build-config.json', 'utf8'));
+const executablePath = resolve(process.argv[2] ?? `release/linux-unpacked/${config.productId}`);
 const resourceRoot = join(dirname(executablePath), 'resources');
 const coreLock = JSON.parse(await readFile(join(resourceRoot, 'core-lock.json'), 'utf8'));
 const pinned = coreLock.assets.find(a => a.target === 'linux-x64');
@@ -19,7 +20,7 @@ assert((await readFile(join(resourceRoot, 'rules/import-rules.py'), 'utf8')).inc
 const application = await electron.launch({ executablePath, args: ['--demo', '--no-sandbox', '--ozone-platform=headless'], env: { ...process.env, TZ: 'Asia/Tokyo', STARRAIL_DEV_UI: '1', XDG_CONFIG_HOME: `${process.cwd()}/work/packaged-profile`, XDG_CACHE_HOME: `${process.cwd()}/work/packaged-cache` } });
 try {
   const page = await application.firstWindow();
-  await page.getByRole('heading', { name: '欢迎来到 StarRail' }).waitFor();
+  await page.getByRole('heading', { name: `欢迎来到 ${config.name}` }).waitFor();
   const result = await page.evaluate(() => window.starrail.command({ type: 'state' }));
   assert.equal(result.state.demo, false); assert.equal(result.state.loggedIn, false);
   assert.equal(result.state.rules, '使用内置大陆分流规则'); assert.equal(result.state.download.status, 'idle');

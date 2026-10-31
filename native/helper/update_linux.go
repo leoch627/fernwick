@@ -21,7 +21,7 @@ func validatePlatformUpdate(ctx context.Context, path string, a Artifact) error 
 	return nil
 }
 func launchUpdateWorker(ctx context.Context, worker, id string) error {
-	_, e := run(ctx, fixedTool("systemd-run"), nil, "--unit=starrail-update-"+id, "--collect", "--service-type=exec", worker, "update-worker", id)
+	_, e := run(ctx, fixedTool("systemd-run"), nil, "--unit="+serviceID()+"-update-"+id, "--collect", "--service-type=exec", worker, "update-worker", id)
 	return e
 }
 func installPlatformUpdate(ctx context.Context, job UpdateJob) error {
@@ -51,7 +51,7 @@ func installPlatformUpdate(ctx context.Context, job UpdateJob) error {
 	return nil
 }
 func launchRecoveryWorker(ctx context.Context, worker, id string) error {
-	_, e := run(ctx, fixedTool("systemd-run"), nil, "--unit=starrail-recovery-"+id, "--collect", "--service-type=exec", worker, "update-recover", id)
+	_, e := run(ctx, fixedTool("systemd-run"), nil, "--unit="+serviceID()+"-recovery-"+id, "--collect", "--service-type=exec", worker, "update-recover", id)
 	return e
 }
 func restorePlatformBackup(ctx context.Context) error {

@@ -59,7 +59,7 @@ func validatePlatformUpdate(ctx context.Context, path string, a Artifact) error 
 	return nil
 }
 func launchUpdateWorker(ctx context.Context, worker, id string) error {
-	_, e := run(ctx, "/bin/launchctl", nil, "submit", "-l", "work.starrail.update."+id, "--", worker, "update-worker", id)
+	_, e := run(ctx, "/bin/launchctl", nil, "submit", "-l", build.HelperLabel+".update."+id, "--", worker, "update-worker", id)
 	return e
 }
 func installPlatformUpdate(ctx context.Context, job UpdateJob) error {
@@ -80,7 +80,7 @@ func installPlatformUpdate(ctx context.Context, job UpdateJob) error {
 		return e
 	}
 	staged := filepath.Join(job.Path+".unpacked", filepath.Base(installed.AppRoot))
-	replacement := installed.AppRoot + ".starrail-new"
+	replacement := installed.AppRoot + ".update-new"
 	_ = os.RemoveAll(replacement)
 	if e := longRun(ctx, "/usr/bin/ditto", "", staged, replacement); e != nil {
 		return e
@@ -91,7 +91,7 @@ func installPlatformUpdate(ctx context.Context, job UpdateJob) error {
 	if e := markUpdateApplying(job); e != nil {
 		return e
 	}
-	old := installed.AppRoot + ".starrail-old"
+	old := installed.AppRoot + ".update-old"
 	_ = os.RemoveAll(old)
 	if e := os.Rename(installed.AppRoot, old); e != nil {
 		return e
@@ -118,7 +118,7 @@ func installPlatformUpdate(ctx context.Context, job UpdateJob) error {
 	return nil
 }
 func launchRecoveryWorker(ctx context.Context, worker, id string) error {
-	_, e := run(ctx, "/bin/launchctl", nil, "submit", "-l", "work.starrail.recovery."+id, "--", worker, "update-recover", id)
+	_, e := run(ctx, "/bin/launchctl", nil, "submit", "-l", build.HelperLabel+".recovery."+id, "--", worker, "update-recover", id)
 	return e
 }
 func restorePlatformBackup(ctx context.Context) error {

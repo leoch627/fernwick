@@ -16,7 +16,7 @@ def main():
     parser.add_argument('target', choices=['linux-x64', 'win32-x64', 'darwin-x64', 'darwin-arm64'])
     parser.add_argument('--archive', type=Path, help='Use an already downloaded archive; hashes are still checked.')
     args = parser.parse_args()
-    lock = json.loads((ROOT / 'resources/core-lock.json').read_text())
+    lock = json.loads((ROOT / 'resources/core-lock.json').read_text(encoding='utf-8'))
     asset = next(x for x in lock['assets'] if x['target'] == args.target)
     destination = ROOT / 'resources/native' / args.target
     destination.mkdir(parents=True, exist_ok=True)

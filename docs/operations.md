@@ -2,16 +2,14 @@
 
 ## 配置边界
 
-`config/development.json` 为当前可运行开发配置，`config/production.pending.json` 为正式配置草稿。生产/开发 appId、productId、channel 不相同；主备 URL 和所有可信来源都通过构建写入 `dist/build-config.json`。打包运行不能经命令行或环境变量更换生产 API。
+`config/development.json` 是开发配置（test 渠道）。正式包用 `npm run brand` 从品牌文件或 CI 变量生成 `work/build-config.json`（production 渠道），字段说明见 README「品牌配置」。主备 URL 和所有可信来源都在构建时写入 `dist/build-config.json`，打包后不能经命令行或环境变量更换 API。
 
-构建时可用 `STARRAIL_BUILD_CONFIG` 指定版本化 JSON 文件。通过构建配置修改入口是开发者能力，不是远程新增域名。修改订阅来源必须是明确允许的精确 origin；不允许替换订阅 host 拼接 token。路径、端口、scheme、userinfo 和转义均经过检查。
+修改订阅来源必须是明确允许的精确 origin；不允许替换订阅 host 拼接 token。路径、端口、scheme、userinfo 和转义均经过检查。
 
 ```sh
 npm run config:check -- config/development.json
-npm run config:check -- config/production.pending.json
+npm run brand -- config/brand.json && npm run release:check
 ```
-
-第二条当前应失败：缺少部署验收、协议能力、发布域和独立公钥等。`npm run package:release` 同样主动拒绝发布。不要通过设置布尔值、填任意哈希或空证据目录来绕过门禁。
 
 ## 策略与发布索引
 

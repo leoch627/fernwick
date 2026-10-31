@@ -28,13 +28,13 @@ func targetID() string         { return "win32-x64" }
 func windowsDirectory() string { v, _ := windows.GetSystemDirectory(); return v }
 func stateRoot() string {
 	v, _ := windows.KnownFolderPath(windows.FOLDERID_ProgramData, 0)
-	return filepath.Join(v, "StarRail Network")
+	return filepath.Join(v, serviceID())
 }
 func helperRoot() string {
 	v, _ := windows.KnownFolderPath(windows.FOLDERID_ProgramFiles, 0)
-	return filepath.Join(v, "StarRail Network Service")
+	return filepath.Join(v, serviceID()+"-service")
 }
-func socketPath() string        { return `\\.\pipe\StarRailNetwork.Helper.v1` }
+func socketPath() string        { return `\\.\pipe\` + serviceID() + `.helper.v1` }
 func samePath(a, b string) bool { return strings.EqualFold(filepath.Clean(a), filepath.Clean(b)) }
 func safeEnvironment() []string {
 	return []string{"SystemRoot=" + filepath.Dir(windowsDirectory()), "WINDIR=" + filepath.Dir(windowsDirectory()), "PATH=" + windowsDirectory(), "TEMP=" + stateRoot(), "TMP=" + stateRoot(), "XRAY_LOCATION_ASSET=" + filepath.Dir(installed.CorePath)}
@@ -108,7 +108,7 @@ func machineLock() (io.Closer, error) {
 	if e != nil {
 		return nil, e
 	}
-	name, _ := windows.UTF16PtrFromString(`Global\StarRailNetwork.NetworkOwner`)
+	name, _ := windows.UTF16PtrFromString(`Global\` + serviceID() + `.network-owner`)
 	h, e := windows.CreateMutex(&windows.SecurityAttributes{Length: uint32(unsafe.Sizeof(windows.SecurityAttributes{})), SecurityDescriptor: sd}, true, name)
 	if e != nil {
 		if h != 0 {
@@ -270,7 +270,7 @@ func powershell(ctx context.Context, script string, value any) ([]byte, error) {
 	return run(ctx, filepath.Join(windowsDirectory(), "WindowsPowerShell", "v1.0", "powershell.exe"), jsonBytes(value), "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", `$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; [Console]::OutputEncoding=[Text.UTF8Encoding]::new(); $v=[Console]::In.ReadToEnd()|ConvertFrom-Json; `+script)
 }
 func discoverInterface(ctx context.Context) (Interface, error) {
-	data, e := powershell(ctx, `$r=Get-NetRoute -DestinationPrefix '0.0.0.0/0' | Where-Object {$_.InterfaceAlias -ne 'StarRailTun'} | Sort-Object RouteMetric | Select-Object -First 1; if(!$r){throw 'route'}; $a=Get-NetIPAddress -InterfaceIndex $r.InterfaceIndex; @{name=$r.InterfaceAlias;index=[int]$r.InterfaceIndex;gateway=$r.NextHop;addresses=@($a.IPAddress)}|ConvertTo-Json -Compress`, nil)
+	data, e := powershell(ctx, `$r=Get-NetRoute -DestinationPrefix '0.0.0.0/0' | Where-Object {$_.InterfaceAlias -ne $v.tun} | Sort-Object RouteMetric | Select-Object -First 1; if(!$r){throw 'route'}; $a=Get-NetIPAddress -InterfaceIndex $r.InterfaceIndex; @{name=$r.InterfaceAlias;index=[int]$r.InterfaceIndex;gateway=$r.NextHop;addresses=@($a.IPAddress)}|ConvertTo-Json -Compress`, object{"tun": tunName()})
 	if e != nil {
 		return Interface{}, e
 	}
@@ -279,7 +279,7 @@ func discoverInterface(ctx context.Context) (Interface, error) {
 	return physical, e
 }
 func platformPrepare(ctx context.Context, j *Journal) error {
-	_, e := powershell(ctx, `if(Get-NetAdapter -Name 'StarRailTun' -ErrorAction SilentlyContinue){throw 'conflict'}; if(!(Test-Path -LiteralPath $v.dll)){throw 'driver'}`, object{"dll": filepath.Join(helperRoot(), "wintun.dll")})
+	_, e := powershell(ctx, `if(Get-NetAdapter -Name $v.tun -ErrorAction SilentlyContinue){throw 'conflict'}; if(!(Test-Path -LiteralPath $v.dll)){throw 'driver'}`, object{"dll": filepath.Join(helperRoot(), "wintun.dll"), "tun": tunName()})
 	return e
 }
 func subtractPrefix(root, except netip.Prefix) []netip.Prefix {
@@ -321,7 +321,7 @@ func blockedAddresses(j *Journal) []string {
 	return out
 }
 func platformProtect(ctx context.Context, j *Journal) error {
-	_, e := powershell(ctx, `New-NetFirewallRule -Name ('StarRail.'+$v.id) -DisplayName 'StarRail connection transition' -Group ('StarRail.'+$v.id) -Direction Outbound -Action Block -Enabled True -Profile Any -InterfaceAlias $v.interface -RemoteAddress $v.blocked | Out-Null`, object{"id": j.ID, "interface": j.Interface.Name, "blocked": blockedAddresses(j)})
+	_, e := powershell(ctx, `New-NetFirewallRule -Name ($v.tag+'.'+$v.id) -DisplayName ($v.tag+' connection transition') -Group ($v.tag+'.'+$v.id) -Direction Outbound -Action Block -Enabled True -Profile Any -InterfaceAlias $v.interface -RemoteAddress $v.blocked | Out-Null`, object{"id": j.ID, "tag": ruleTag(), "interface": j.Interface.Name, "blocked": blockedAddresses(j)})
 	return e
 }
 func platformApply(context.Context, *Journal) error { return nil } // Xray owns adapter routes, DNS and dynamic WFP filters on Windows.
@@ -329,11 +329,11 @@ func platformUnprotect(ctx context.Context, j *Journal) error {
 	if !j.Protection {
 		return nil
 	}
-	_, e := powershell(ctx, `Get-NetFirewallRule -Group ('StarRail.'+$v.id) -ErrorAction SilentlyContinue | Remove-NetFirewallRule`, object{"id": j.ID})
+	_, e := powershell(ctx, `Get-NetFirewallRule -Group ($v.tag+'.'+$v.id) -ErrorAction SilentlyContinue | Remove-NetFirewallRule`, object{"id": j.ID, "tag": ruleTag()})
 	return e
 }
 func platformRecover(ctx context.Context, j *Journal) error {
-	_, e := powershell(ctx, `$a=Get-NetAdapter -Name 'StarRailTun' -ErrorAction SilentlyContinue; if($a -and $a.InterfaceDescription -like '*StarRail*'){Get-NetRoute -InterfaceIndex $a.ifIndex -ErrorAction SilentlyContinue | Where-Object {$_.DestinationPrefix -in @('0.0.0.0/0','::/0')} | Remove-NetRoute -Confirm:$false; Set-DnsClientServerAddress -InterfaceIndex $a.ifIndex -ResetServerAddresses}; Get-NetFirewallRule -Group ('StarRail.'+$v.id) -ErrorAction SilentlyContinue | Remove-NetFirewallRule`, object{"id": j.ID})
+	_, e := powershell(ctx, `$a=Get-NetAdapter -Name $v.tun -ErrorAction SilentlyContinue; if($a -and $a.InterfaceDescription -like ('*'+$v.tag+'*')){Get-NetRoute -InterfaceIndex $a.ifIndex -ErrorAction SilentlyContinue | Where-Object {$_.DestinationPrefix -in @('0.0.0.0/0','::/0')} | Remove-NetRoute -Confirm:$false; Set-DnsClientServerAddress -InterfaceIndex $a.ifIndex -ResetServerAddresses}; Get-NetFirewallRule -Group ($v.tag+'.'+$v.id) -ErrorAction SilentlyContinue | Remove-NetFirewallRule`, object{"id": j.ID, "tag": ruleTag(), "tun": tunName()})
 	if e == nil {
 		j.Protection = false
 	}
@@ -386,14 +386,14 @@ func (serviceHandler) Execute(_ []string, requests <-chan svc.ChangeRequest, sta
 		}
 	}
 }
-func runService() error { return svc.Run("StarRailNetwork", serviceHandler{}) }
+func runService() error { return svc.Run(serviceID(), serviceHandler{}) }
 func platformStopService(ctx context.Context) error {
 	manager, e := mgr.Connect()
 	if e != nil {
 		return e
 	}
 	defer manager.Disconnect()
-	service, e := manager.OpenService("StarRailNetwork")
+	service, e := manager.OpenService(serviceID())
 	if e != nil {
 		return nil
 	}
@@ -422,9 +422,9 @@ func platformInstall(value Installation) error {
 		return e
 	}
 	defer manager.Disconnect()
-	service, e := manager.OpenService("StarRailNetwork")
+	service, e := manager.OpenService(serviceID())
 	if e != nil {
-		service, e = manager.CreateService("StarRailNetwork", value.HelperPath, mgr.Config{DisplayName: "StarRail Network Service", StartType: mgr.StartAutomatic, ServiceStartName: "LocalSystem"}, "serve")
+		service, e = manager.CreateService(serviceID(), value.HelperPath, mgr.Config{DisplayName: build.DisplayName + " Service", StartType: mgr.StartAutomatic, ServiceStartName: "LocalSystem"}, "serve")
 	}
 	if e != nil {
 		return e
@@ -440,7 +440,7 @@ func platformUninstall() error {
 		return e
 	}
 	defer manager.Disconnect()
-	s, e := manager.OpenService("StarRailNetwork")
+	s, e := manager.OpenService(serviceID())
 	if e != nil {
 		return nil
 	}
@@ -457,7 +457,7 @@ func startDetached(path string, args ...string) error {
 	return command.Process.Release()
 }
 func platformNetworkFingerprint(ctx context.Context, p Interface) (string, error) {
-	data, e := powershell(ctx, `$r=@(Get-NetRoute | Where-Object {$_.DestinationPrefix -in @('0.0.0.0/0','::/0') -and $_.InterfaceAlias -ne 'StarRailTun'} | Sort-Object InterfaceIndex,DestinationPrefix,NextHop | Select-Object InterfaceIndex,DestinationPrefix,NextHop,RouteMetric);$d=@(Get-DnsClientServerAddress | Where-Object {$_.InterfaceAlias -ne 'StarRailTun'} | Sort-Object InterfaceIndex,AddressFamily | Select-Object InterfaceIndex,AddressFamily,ServerAddresses);@{routes=$r;dns=$d}|ConvertTo-Json -Depth 5 -Compress`, nil)
+	data, e := powershell(ctx, `$r=@(Get-NetRoute | Where-Object {$_.DestinationPrefix -in @('0.0.0.0/0','::/0') -and $_.InterfaceAlias -ne $v.tun} | Sort-Object InterfaceIndex,DestinationPrefix,NextHop | Select-Object InterfaceIndex,DestinationPrefix,NextHop,RouteMetric);$d=@(Get-DnsClientServerAddress | Where-Object {$_.InterfaceAlias -ne $v.tun} | Sort-Object InterfaceIndex,AddressFamily | Select-Object InterfaceIndex,AddressFamily,ServerAddresses);@{routes=$r;dns=$d}|ConvertTo-Json -Depth 5 -Compress`, object{"tun": tunName()})
 	if e != nil {
 		return "", e
 	}

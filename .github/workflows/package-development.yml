@@ -1,7 +1,24 @@
-name: Build development installers (no runtime tests)
+name: Build installers
+# Manual runs build the development configuration unless "production" is ticked.
+# Production builds take the brand from repository variables (BRAND_*, UPDATE_ENDPOINT, *_PUBLIC_KEY);
+# any input below overrides the matching variable. See README "发布".
 on:
   workflow_dispatch:
+    inputs:
+      production: { description: 'Build with the brand configuration', type: boolean, default: false }
+      brand_name: { description: '机场名称 (overrides vars.BRAND_NAME)', type: string, required: false }
+      brand_id: { description: 'Stable ID, a-z 0-9 - (overrides vars.BRAND_ID)', type: string, required: false }
+      api_primary: { description: '主 API (overrides vars.BRAND_API_PRIMARY)', type: string, required: false }
+      api_backup: { description: '备用 API (overrides vars.BRAND_API_BACKUP)', type: string, required: false }
+      website: { description: '官网 (overrides vars.BRAND_WEBSITE)', type: string, required: false }
   workflow_call:
+    inputs:
+      production: { type: boolean, default: false }
+      brand_name: { type: string, required: false }
+      brand_id: { type: string, required: false }
+      api_primary: { type: string, required: false }
+      api_backup: { type: string, required: false }
+      website: { type: string, required: false }
 permissions:
   contents: read
 jobs:
@@ -23,6 +40,9 @@ jobs:
             target: darwin-x64
             package: --mac dmg zip --x64
     runs-on: ${{ matrix.os }}
+    env:
+      # Windows Python otherwise reads files with the ANSI code page.
+      PYTHONUTF8: '1'
     defaults:
       run:
         shell: bash
@@ -41,18 +61,38 @@ jobs:
         with:
           python-version: '3.13'
       - run: npm ci
+      - name: Brand configuration
+        if: inputs.production
+        env:
+          BRAND_NAME: ${{ inputs.brand_name || vars.BRAND_NAME }}
+          BRAND_ID: ${{ inputs.brand_id || vars.BRAND_ID }}
+          BRAND_APP_ID: ${{ vars.BRAND_APP_ID }}
+          BRAND_API_PRIMARY: ${{ inputs.api_primary || vars.BRAND_API_PRIMARY }}
+          BRAND_API_BACKUP: ${{ inputs.api_backup || vars.BRAND_API_BACKUP }}
+          BRAND_WEBSITE: ${{ inputs.website || vars.BRAND_WEBSITE }}
+          BRAND_SUBSCRIPTION_ORIGINS: ${{ vars.BRAND_SUBSCRIPTION_ORIGINS }}
+          BRAND_ENDPOINT: ${{ vars.UPDATE_ENDPOINT }}
+          BRAND_UPDATE_PUBLIC_KEY: ${{ vars.UPDATE_PUBLIC_KEY }}
+          BRAND_POLICY_PUBLIC_KEY: ${{ vars.POLICY_PUBLIC_KEY }}
+        run: |
+          npm run brand -- --out work/build-config.json
+          echo "STARRAIL_BUILD_CONFIG=work/build-config.json" >> "$GITHUB_ENV"
       - run: python tools/fetch-core.py ${{ matrix.target }}
       - run: python tools/build-native.py --target ${{ matrix.target }}
       - run: npm run build
       - run: npx electron-builder --config electron-builder.cjs ${{ matrix.package }} --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Name installers and record metadata
+        run: node tools/release-assets.mjs manifest ${{ matrix.target }}
       - uses: actions/upload-artifact@v4
         with:
-          name: starrail-development-${{ matrix.target }}
+          name: installers-${{ matrix.target }}
           if-no-files-found: error
           path: |
             release/*.exe
             release/*.dmg
             release/*.zip
             release/*.deb
+            release/manifest-*.json
+            release/build-config.json

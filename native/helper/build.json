@@ -1,5 +1,7 @@
 {
   "productId": "starrail-network-test",
+  "displayName": "StarRail Network Dev",
+  "helperLabel": "work.starrail.client.test.helper",
   "environment": "test",
   "channel": "test",
   "version": "0.1.0",
@@ -34,9 +36,9 @@
   ],
   "updateKeys": {},
   "trustedUpdateOrigins": [],
-  "appExecutableName": "starrail-network-dev",
+  "appExecutableName": "starrail-network-test",
   "appExecutableNames": {
-    "linux-x64": "starrail-network-dev",
+    "linux-x64": "starrail-network-test",
     "win32-x64": "StarRail Network Dev.exe",
     "darwin-x64": "StarRail Network Dev",
     "darwin-arm64": "StarRail Network Dev"
@@ -45,5 +47,5 @@
     "wintun.dll": "e5da8447dc2c320edc0fc52fa01885c103de8c118481f683643cacc3220dafce",
     "LICENSE-Wintun": "183adac21e7d96c508c8fd34d394b7b6708bc81564ad1bad61ab66143a008cd2"
   },
-  "buildId": "c2b0b80cd1c515c47291fecb6fc252d4933239c11acbbdf69158391969a429b3"
+  "buildId": "e507425f991ea4f2740233a7698d5f85e581500ba80892eb17970f99086002b1"
 }

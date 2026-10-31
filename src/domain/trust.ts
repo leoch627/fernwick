@@ -1,6 +1,7 @@
 import { createPublicKey } from 'node:crypto';
 import { BuildSchema, type BuildConfig } from '../shared/schema';
 import { assert } from '../shared/errors';
+import { appIdPattern, displayNamePattern, productIdPattern } from './identity';
 export function httpsUrl(raw: string): URL {
   let u: URL; try { u = new URL(raw); } catch { throw new Error('Invalid URL'); }
   assert(u.protocol === 'https:' && !u.username && !u.password && !u.hash, 'INVALID_INPUT');
@@ -14,6 +15,8 @@ export function trustedUrl(raw: string, origins: readonly string[]): string {
 }
 export function validateBuild(input: unknown): BuildConfig {
   const config = BuildSchema.parse(input);
+  // productId and appId become paths, service names and labels in the native helper.
+  assert(productIdPattern.test(config.productId) && appIdPattern.test(config.appId) && config.appId.length <= 120 && displayNamePattern.test(config.name), 'CONFIGURATION_REQUIRED');
   assert((config.environment === 'production') === (config.channel === 'stable'));
   const ids = config.apiEndpoints.map(e => e.id); assert(new Set(ids).size === ids.length);
   const origins = [...config.trustedSubscriptionOrigins, ...config.trustedWebOrigins, ...config.trustedResourceOrigins, ...config.trustedUpdateOrigins];

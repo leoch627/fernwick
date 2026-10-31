@@ -19,6 +19,7 @@
     "build": "node --import tsx tools/build.ts",
     "check": "npm run typecheck && npm test && npm run build",
     "config:check": "node --import tsx tools/config-check.ts",
+    "brand": "node --import tsx tools/brand.ts",
     "release:check": "node --import tsx tools/release-check.ts",
     "policy": "node --import tsx tools/sign.ts",
     "package:test": "npm run build && electron-builder --config electron-builder.cjs --linux deb --x64",

@@ -118,7 +118,7 @@ export class ClientController {
       }),
       preferences: { ...this.preferences }, storage: this.deps.secure.mode, helperReady: this.network.ready,
       policy: active ? `已验证策略 v${active.policyVersion}` : '使用内置设置', announcement: active?.ui.announcement?.text ?? null,
-      update: this.updateStatus, pendingRenewal: this.renewalUntil > this.clock.now(),
+      update: this.updateStatus, manualUpdate: this.manualUpdate, pendingRenewal: this.renewalUntil > this.clock.now(),
       download: this.deps.download?.view ?? { status: 'idle', version: null, received: 0, total: 0, error: null },
       rules: this.deps.resources?.status ?? '内置规则待配置', showTrafficSummary: active?.ui.showTrafficSummary ?? true,
       links: { website: !!this.link('website'), renew: !!this.link('renew'), help: !!this.link('help') }, now: this.clock.now(),
@@ -212,6 +212,12 @@ export class ClientController {
     await this.network.connect(candidate, () => !this.gate() && generation === this.policy.generation && session === this.session?.generation && eligible(node, this.policy.active, false)); this.actualNode = node.id;
   }
   private link(key: 'website' | 'renew' | 'help') { return this.policy.active?.links[key] ?? this.deps.build.links[key]; }
+  // The native updater requires Authenticode/Developer ID signatures; unsigned Windows/macOS builds update from the download page.
+  private get manualUpdate() { return this.updateArtifact?.signatureIdentity === 'unsigned' && process.platform !== 'linux'; }
+  private async openDownloadPage() {
+    const feed = this.deps.build.updateFeedUrls[0]; if (!feed) throw new AppError('CONFIGURATION_REQUIRED');
+    await this.deps.openExternal(trustedUrl(`${new URL(feed).origin}/`, this.deps.build.trustedWebOrigins));
+  }
   private async checkPolicy() {
     if (this.policyBusy) return; this.policyBusy = true; const budget = new Budget(6000, this.publicAbort.signal);
     try { for (const url of this.deps.build.policyUrls) { try { const response = await this.deps.http.request({ url, maxBytes: 262144 }, budget); requireSuccess(response, 'public'); await this.policy.accept(response.body); void this.deps.resources?.apply(response.body); break; } catch { if (!budget.remaining) break; } } }
@@ -230,7 +236,7 @@ export class ClientController {
         this.releaseIndex = index;
         this.updateArtifact = selectUpdate(index, { platform: process.platform, arch: process.arch, version: this.deps.version ?? '0.1.0', osCompatible: minimum => this.deps.osCompatible?.(minimum) ?? false });
         await this.deps.download?.select(this.updateArtifact);
-        this.updateStatus = this.updateArtifact ? `发现新版本 ${this.updateArtifact.version}，下载由你决定` : '当前没有兼容的新版本';
+        this.updateStatus = !this.updateArtifact ? '当前没有兼容的新版本' : this.manualUpdate ? `发现新版本 ${this.updateArtifact.version}，请从下载页安装` : `发现新版本 ${this.updateArtifact.version}，下载由你决定`;
       }
     } finally { budget.dispose(); this.updateBusy = false; this.emit(); }
   }
@@ -274,11 +280,13 @@ export class ClientController {
         case 'check-update': await this.checkUpdate(); break;
         case 'download-update': {
           if (!this.updateArtifact || !this.deps.download) throw new AppError('CONFIGURATION_REQUIRED');
+          if (this.manualUpdate) { await this.openDownloadPage(); break; }
           void this.deps.download.start().catch(() => this.fail('UPDATE_DOWNLOAD_FAILED')); break;
         }
         case 'pause-update': await this.deps.download?.pause(); break;
         case 'cancel-update': await this.deps.download?.cancel(); break;
         case 'install-update': {
+          if (this.manualUpdate) { await this.openDownloadPage(); break; }
           if (!this.updateArtifact || !this.deps.download || !this.deps.installer?.ready) throw new AppError('COMPONENTS_UNAVAILABLE');
           const selected = this.updateArtifact;
           if (!await this.deps.confirmInstall?.(selected.version)) break;

@@ -1,65 +1,110 @@
 name: Release
-# Push a tag matching package.json, e.g. `git tag v0.1.0 && git push origin v0.1.0`.
+# Tag push (git tag v0.2.0 && git push origin v0.2.0): build the brand from repository variables,
+# publish a GitHub Release, upload to R2 and register the version with the update endpoint.
+# Manual run: optionally override name/API for a one-off build; publishing to the endpoint is opt-in.
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      brand_name: { description: '机场名称 (default vars.BRAND_NAME)', type: string, required: false }
+      brand_id: { description: 'Stable ID (default vars.BRAND_ID)', type: string, required: false }
+      api_primary: { description: '主 API (default vars.BRAND_API_PRIMARY)', type: string, required: false }
+      api_backup: { description: '备用 API (default vars.BRAND_API_BACKUP)', type: string, required: false }
+      website: { description: '官网 (default vars.BRAND_WEBSITE)', type: string, required: false }
+      publish_endpoint: { description: 'Push this build to the update endpoint (clients will update)', type: boolean, default: false }
 permissions:
   contents: read
 jobs:
   version:
     runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
-      - name: Tag matches package.json
+      - id: version
+        name: Version from package.json
         run: |
           version=$(node -p "require('./package.json').version")
-          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "v$version" ]; then
             echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $version"
             exit 1
           fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
   check:
     needs: version
     uses: ./.github/workflows/check.yml
   package:
     needs: check
     uses: ./.github/workflows/package-development.yml
+    with:
+      production: true
+      brand_name: ${{ inputs.brand_name }}
+      brand_id: ${{ inputs.brand_id }}
+      api_primary: ${{ inputs.api_primary }}
+      api_backup: ${{ inputs.api_backup }}
+      website: ${{ inputs.website }}
   publish:
-    needs: package
+    needs: [version, package]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          pattern: starrail-development-*
+          pattern: installers-*
           path: release
           merge-multiple: true
       - name: Checksums
         working-directory: release
-        # GitHub rewrites spaces in asset names, so rename first to keep SHA256SUMS accurate.
         run: |
-          shopt -s nullglob
-          for f in *' '*; do mv -- "$f" "${f// /-}"; done
-          sha256sum -- * > SHA256SUMS.txt && cat SHA256SUMS.txt
+          ls -l
+          sha256sum -- *.exe *.dmg *.zip *.deb > SHA256SUMS.txt && cat SHA256SUMS.txt
       - name: Release notes
         run: |
-          cat > notes.md <<'EOF'
-          Development build of StarRail Network (test channel). Not production-signed and not yet runtime-tested on real devices.
+          name=$(node -p "require('./release/build-config.json').name")
+          cat > notes.md <<EOF
+          ${name} ${VERSION}
 
-          | Platform | File |
+          | 系统 | 文件 |
           | --- | --- |
-          | Windows 11 x64 | `*-win-x64.exe` |
-          | macOS 14+ Apple Silicon | `*-mac-arm64.dmg` (or `.zip`) |
-          | macOS 14+ Intel | `*-mac-x64.dmg` (or `.zip`) |
-          | Ubuntu 24.04 x64 | `*-linux-amd64.deb` |
+          | Windows 11 x64 | \`*-windows-x64.exe\` |
+          | macOS 14+ Apple 芯片 | \`*-macos-arm64.dmg\` |
+          | macOS 14+ Intel | \`*-macos-x64.dmg\` |
+          | Ubuntu 24.04 x64 | \`*-linux-amd64.deb\` |
 
-          - Windows: SmartScreen will warn about an unknown publisher; choose "More info" → "Run anyway".
-          - macOS: the app is not notarized. After moving it to /Applications, run `xattr -dr com.apple.quarantine "/Applications/StarRail Network Dev.app"` before the first launch.
-          - Linux: `sudo apt install ./<file>.deb`.
-
-          Verify downloads against `SHA256SUMS.txt`.
+          安装包未做平台代码签名：Windows 首次运行点“更多信息 → 仍要运行”；macOS 拖入“应用程序”后执行
+          \`xattr -dr com.apple.quarantine "/Applications/${name}.app"\`。可用 SHA256SUMS.txt 校验下载。
           EOF
-      - name: Publish pre-release
+      - name: GitHub Release
+        run: |
+          tag="v$VERSION"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" release/*.exe release/*.dmg release/*.zip release/*.deb release/SHA256SUMS.txt --clobber
+          else
+            gh release create "$tag" release/*.exe release/*.dmg release/*.zip release/*.deb release/SHA256SUMS.txt \
+              --title "$(node -p "require('./release/build-config.json').name") $tag" --notes-file notes.md --target "$GITHUB_SHA"
+          fi
+      - name: Upload to R2 and register with the update endpoint
+        if: github.event_name == 'push' || inputs.publish_endpoint
         env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" release/* --repo "$GITHUB_REPOSITORY" --title "StarRail Network $GITHUB_REF_NAME (development)" --notes-file notes.md --prerelease --verify-tag
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          ADMIN_TOKEN: ${{ secrets.UPDATE_ADMIN_TOKEN }}
+          ENDPOINT: ${{ vars.UPDATE_ENDPOINT }}
+          BUCKET: ${{ vars.R2_BUCKET || 'v2board-client-files' }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$ADMIN_TOKEN" ] || [ -z "$ENDPOINT" ]; then
+            echo "::warning::Update endpoint not configured (CLOUDFLARE_API_TOKEN, UPDATE_ADMIN_TOKEN, vars.UPDATE_ENDPOINT); skipped."
+            exit 0
+          fi
+          for f in release/*.exe release/*.dmg release/*.zip release/*.deb; do
+            npx --yes wrangler@4.151.1 r2 object put "$BUCKET/releases/$VERSION/$(basename "$f")" --file "$f" --remote
+          done
+          node tools/release-assets.mjs payload "$VERSION" > payload.json
+          curl --fail-with-body -sS -X POST "${ENDPOINT%/}/admin/release" \
+            -H "Authorization: Bearer $ADMIN_TOKEN" -H 'Content-Type: application/json' --data-binary @payload.json

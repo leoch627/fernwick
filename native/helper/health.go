@@ -142,7 +142,7 @@ func controlRequest(ctx context.Context, input *ControlRequest, physical Interfa
 		}
 		request.Header.Set(name, value)
 	}
-	request.Header.Set("User-Agent", "StarRail-Control/0.1")
+	request.Header.Set("User-Agent", "v2board-client/"+build.Version)
 	request.Header.Set("Accept-Encoding", "identity")
 	response, e := client.Do(request)
 	if e != nil {
@@ -206,7 +206,7 @@ func boundedHTTP(ctx context.Context, target HealthTarget) bool {
 	}
 	request.Header.Set("Accept-Encoding", "identity")
 	request.Header.Set("Cache-Control", "no-store")
-	request.Header.Set("User-Agent", "StarRail-Health/0.1")
+	request.Header.Set("User-Agent", "v2board-client-health/"+build.Version)
 	response, e := client.Do(request)
 	if e != nil {
 		return false

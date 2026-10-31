@@ -11,15 +11,11 @@ import re
 import sys
 
 
-def main():
-    # The optional path also supports the rules/source layout shipped inside the DEB.
-    root = Path(sys.argv[1]) if len(sys.argv) > 1 else Path('resources/rules')
-    manifest = json.loads((root / 'manifest.json').read_text(encoding='utf-8'))
+def convert(sources):
+    """Convert {'direct.txt': bytes, 'cncidr.txt': bytes} into the client's rules JSON bytes."""
     values = {}
     for name in ('direct.txt', 'cncidr.txt'):
-        data = (root / 'source' / name).read_bytes()
-        if hashlib.sha256(data).hexdigest() != manifest['files']['source/' + name]:
-            raise ValueError('Source hash mismatch')
+        data = sources[name]
         lines = data.decode('utf-8').rstrip('\n').split('\n')
         if lines.pop(0) != 'payload:':
             raise ValueError('Unexpected source format')
@@ -43,11 +39,31 @@ def main():
         raise ValueError('Dataset exceeds client limits')
     rules = dict(schemaVersion=1, directDomains=suffixes, directFullDomains=exact, proxyDomains=[], blockedDomains=[], directIPs=prefixes)
     data = (json.dumps(rules, ensure_ascii=False, separators=(',', ':')) + '\n').encode('utf-8')
-    digest = hashlib.sha256(data).hexdigest()
-    if len(data) > 33554432 or digest != manifest['files']['baseline.json']:
+    if len(data) > 33554432:
+        raise ValueError('Dataset exceeds client limits')
+    return data, dict(directSuffixes=len(suffixes), directExact=len(exact), ipPrefixes=len(prefixes), outputSha256=hashlib.sha256(data).hexdigest())
+
+
+def main():
+    # --convert <direct.txt> <cncidr.txt> <out.json>: publish newer upstream data for remote rule updates.
+    if len(sys.argv) == 5 and sys.argv[1] == '--convert':
+        data, stats = convert({'direct.txt': Path(sys.argv[2]).read_bytes(), 'cncidr.txt': Path(sys.argv[3]).read_bytes()})
+        Path(sys.argv[4]).write_bytes(data)
+        print(json.dumps(dict(stats, bytes=len(data))))
+        return
+    # The optional path also supports the rules/source layout shipped inside the DEB.
+    root = Path(sys.argv[1]) if len(sys.argv) > 1 else Path('resources/rules')
+    manifest = json.loads((root / 'manifest.json').read_text(encoding='utf-8'))
+    sources = {}
+    for name in ('direct.txt', 'cncidr.txt'):
+        sources[name] = (root / 'source' / name).read_bytes()
+        if hashlib.sha256(sources[name]).hexdigest() != manifest['files']['source/' + name]:
+            raise ValueError('Source hash mismatch')
+    data, stats = convert(sources)
+    if stats['outputSha256'] != manifest['files']['baseline.json']:
         raise ValueError('Conversion differs from the reviewed pinned baseline')
     (root / 'baseline.json').write_bytes(data)
-    print(json.dumps(dict(directSuffixes=len(suffixes), directExact=len(exact), ipPrefixes=len(prefixes), outputSha256=digest)))
+    print(json.dumps(stats))
 
 
 if __name__ == '__main__':

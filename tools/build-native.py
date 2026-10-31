@@ -13,10 +13,10 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--target', action='append', choices=['linux-x64', 'win32-x64', 'darwin-x64', 'darwin-arm64'])
     args = parser.parse_args()
-    config = json.loads((ROOT / os.environ.get('STARRAIL_BUILD_CONFIG', 'config/development.json')).read_text())
-    lock = json.loads((ROOT / 'resources/core-lock.json').read_text())
+    config = json.loads((ROOT / os.environ.get('STARRAIL_BUILD_CONFIG', 'config/development.json')).read_text(encoding='utf-8'))
+    lock = json.loads((ROOT / 'resources/core-lock.json').read_text(encoding='utf-8'))
     signatures_path = ROOT / 'resources/native-signatures.json'
-    signatures = json.loads(signatures_path.read_text()) if signatures_path.exists() else {}
+    signatures = json.loads(signatures_path.read_text(encoding='utf-8')) if signatures_path.exists() else {}
     core_hashes = {}
     for asset in lock['assets']:
         expected = asset['executableSha256']; signed = signatures.get(asset['target'])
@@ -27,10 +27,11 @@ def main():
         if path.exists() and sha(path) != expected: raise ValueError('Native core has changed outside the pinned signing pipeline')
         core_hashes[asset['target']] = expected
     origins = sorted(set([item['baseUrl'].rstrip('/') for item in config['apiEndpoints']] + config['trustedSubscriptionOrigins'] + config['trustedResourceOrigins'] + [__import__('urllib.parse', fromlist=['urlsplit']).urlsplit(u)._replace(path='', query='', fragment='').geturl() for u in config['policyUrls'] + config['updateFeedUrls']]))
-    product = 'StarRail Network Dev' if config['environment'] == 'test' else 'StarRail Network'
-    names = {'linux-x64': 'starrail-network-dev' if config['environment'] == 'test' else 'starrail-network', 'win32-x64': product + '.exe', 'darwin-x64': product, 'darwin-arm64': product}
-    version = json.loads((ROOT / 'package.json').read_text())['version']
-    native = {'productId': config['productId'], 'environment': config['environment'], 'channel': config['channel'], 'version': version, 'coreVersion': lock['version'], 'coreHashes': {a['target']: a['executableSha256'] for a in lock['assets']}, 'controlOrigins': origins, 'controlHosts': sorted(set(__import__('urllib.parse', fromlist=['urlsplit']).urlsplit(u).hostname for u in origins)), 'healthTargets': config['healthTargets'], 'updateKeys': config['updateKeys'], 'trustedUpdateOrigins': config['trustedUpdateOrigins'], 'appExecutableName': names['linux-x64'], 'appExecutableNames': names, 'nativeHashes': lock['assets'][-1].get('extras', {})}
+    # Must match electron-builder.cjs: productName for Windows/macOS, productId for the Linux executable.
+    product = config['name'] + (' Dev' if config['environment'] == 'test' else '')
+    names = {'linux-x64': config['productId'], 'win32-x64': product + '.exe', 'darwin-x64': product, 'darwin-arm64': product}
+    version = json.loads((ROOT / 'package.json').read_text(encoding='utf-8'))['version']
+    native = {'productId': config['productId'], 'displayName': product, 'helperLabel': config['appId'] + '.helper', 'environment': config['environment'], 'channel': config['channel'], 'version': version, 'coreVersion': lock['version'], 'coreHashes': {a['target']: a['executableSha256'] for a in lock['assets']}, 'controlOrigins': origins, 'controlHosts': sorted(set(__import__('urllib.parse', fromlist=['urlsplit']).urlsplit(u).hostname for u in origins)), 'healthTargets': config['healthTargets'], 'updateKeys': config['updateKeys'], 'trustedUpdateOrigins': config['trustedUpdateOrigins'], 'appExecutableName': names['linux-x64'], 'appExecutableNames': names, 'nativeHashes': lock['assets'][-1].get('extras', {})}
     native['coreHashes'] = core_hashes
     digest = hashlib.sha256(json.dumps(native, sort_keys=True).encode())
     for path in sorted((ROOT / 'native/helper').glob('*')):
@@ -38,7 +39,7 @@ def main():
     native['buildId'] = digest.hexdigest()
     (ROOT / 'native/helper/build.json').write_text(json.dumps(native, indent=2) + '\n')
     targets = args.target or list(names)
-    previous = json.loads((ROOT / 'resources/native-manifest.json').read_text())
+    previous = json.loads((ROOT / 'resources/native-manifest.json').read_text(encoding='utf-8'))
     components = [c for c in previous['components'] if c['type'] == 'core' or (c['target'] not in targets and previous.get('buildId') == native['buildId'])]
     for c in components:
         if c['type'] == 'core': c['sha256'] = core_hashes[c['target']]

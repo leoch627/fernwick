@@ -141,7 +141,7 @@ export async function probeHttps(auth: ProbeCredentials, target: ProbeTarget, si
     agent = new https.Agent({ keepAlive: false, maxSockets: 1 }); agent.createConnection = () => secure!;
     await new Promise<void>((resolve, reject) => {
       let size = 0; const hash = createHash('sha256');
-      const request = https.request(url, { method: 'GET', agent: agent!, signal, headers: { 'User-Agent': 'StarRail-Health/0.1', 'Accept-Encoding': 'identity', 'Cache-Control': 'no-store', 'Connection': 'close' } }, response => {
+      const request = https.request(url, { method: 'GET', agent: agent!, signal, headers: { 'User-Agent': 'v2board-client-health/0.1', 'Accept-Encoding': 'identity', 'Cache-Control': 'no-store', 'Connection': 'close' } }, response => {
         if (response.statusCode !== target.status) { response.destroy(); reject(new AppError('CONNECT_TIMEOUT')); return; }
         response.on('data', (chunk: Buffer) => { size += chunk.length; if (size > 65536) { response.destroy(); reject(new AppError('CONNECT_TIMEOUT')); } else hash.update(chunk); });
         response.once('error', () => reject(new AppError('CONNECT_TIMEOUT')));

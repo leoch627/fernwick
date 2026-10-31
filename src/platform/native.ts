@@ -1,7 +1,7 @@
 import { connect } from 'node:net';
 import { randomUUID, createHash, verify, createPublicKey } from 'node:crypto';
 import { readFile, lstat } from 'node:fs/promises';
-import { join, dirname } from 'node:path';
+import { join } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { z } from 'zod';
@@ -14,6 +14,7 @@ import type { Budget } from '../domain/time';
 import type { Artifact } from '../services/update';
 import type { ProxyNode } from '../domain/model';
 import { RulesSchema } from '../domain/compiler';
+import { helperRoot, helperSocket } from '../domain/identity';
 const execute = promisify(execFile);
 const Reply = z.object({ id: z.string(), ok: z.boolean(), error: z.string().optional(), protocol: z.literal(1), productId: z.string(), buildId: z.string(), version: z.string(), state: z.string(), ready: z.boolean(), owned: z.boolean(), ticket: z.string().optional(), signature: z.string().optional(), proof: z.object({ tcp: z.boolean(), udp: z.boolean(), dns: z.boolean(), ipv6: z.boolean() }).optional(), http: z.object({ status: z.number().int(), headers: z.record(z.string(), z.string()), body: z.string() }).optional() }).strict();
 type Reply = z.infer<typeof Reply>;
@@ -23,11 +24,11 @@ export class NativeDriver implements NetworkDriver {
   private ticket = ''; private heartbeat: ReturnType<typeof setInterval> | null = null; private beatRunning = false;
   private deadline = 0; private installRunning: Promise<void> | null = null; private closing = false;
   constructor(private build: BuildConfig, private manifest: NativeManifest, private resources: string, private appRoot: string, private packaged: boolean, private failed: (code: ErrorCode) => void) {}
-  private get socket() { return process.platform === 'win32' ? '\\\\.\\pipe\\StarRailNetwork.Helper.v1' : process.platform === 'darwin' ? '/var/run/starrail-network/helper.sock' : '/run/starrail-network/helper.sock'; }
+  private get socket() { return helperSocket(this.build); }
   private async rpc(action: string, input: Record<string, unknown> = {}, signal?: AbortSignal): Promise<Reply> {
     if (signal?.aborted) throw new AppError('CANCELLED');
     if (process.platform !== 'win32') { const stat = await lstat(this.socket).catch(() => null); if (!stat?.isSocket() || stat.uid !== 0) throw new AppError('COMPONENTS_UNAVAILABLE'); }
-    const identityRoot = process.platform === 'win32' ? join(dirname(this.appRoot), 'StarRail Network Service') : process.platform === 'darwin' ? '/Library/PrivilegedHelperTools/work.starrail.network' : '/usr/lib/starrail-network';
+    const identityRoot = helperRoot(this.build, this.appRoot);
     const publicKey = createPublicKey(await readFile(join(identityRoot, 'server-public.pem'))); if (publicKey.asymmetricKeyType !== 'ed25519') throw new AppError('COMPONENTS_UNAVAILABLE');
     const id = randomUUID(), challenge = randomUUID(), helloId = randomUUID(); let authenticated = false;
     return new Promise((resolve, reject) => {

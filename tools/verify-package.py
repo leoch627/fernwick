@@ -9,15 +9,20 @@ import tarfile
 
 package = Path(sys.argv[1]) if len(sys.argv) > 1 else next(Path('release').glob('*.deb'))
 metadata = subprocess.check_output(['dpkg-deb', '--show', '--showformat=${Package}\n${Version}\n${Architecture}', str(package)], text=True).splitlines()
-assert metadata == ['starrail-network-dev', '0.1.0', 'amd64'], metadata
-lock = json.loads(Path('resources/core-lock.json').read_text())
+# Names come from the build configuration the package was built with (see electron-builder.cjs).
+config = json.loads(Path('dist/build-config.json').read_text(encoding='utf-8'))
+version = json.loads(Path('package.json').read_text(encoding='utf-8'))['version']
+executable = config['productId']
+product = config['name'] + (' Dev' if config['environment'] == 'test' else '')
+assert metadata == [executable, version, 'amd64'], metadata
+lock = json.loads(Path('resources/core-lock.json').read_text(encoding='utf-8'))
 core = next(asset for asset in lock['assets'] if asset['target'] == 'linux-x64')
-prefix = './opt/StarRail Network Dev/'
+prefix = './opt/' + product + '/'
 resource = prefix + 'resources/'
 expected = {resource + 'native/linux-x64/' + core['executable']: core['executableSha256'], resource + 'native/linux-x64/LICENSE': core['licenseSha256']}
-manifest = json.loads(Path('resources/rules/manifest.json').read_text())
+manifest = json.loads(Path('resources/rules/manifest.json').read_text(encoding='utf-8'))
 expected.update({resource + 'rules/' + name: value for name, value in manifest['files'].items()})
-required = {prefix + 'starrail-network-dev', resource + 'app.asar', prefix + 'LICENSE.electron.txt', prefix + 'LICENSES.chromium.html', resource + 'THIRD_PARTY_NOTICES.md', resource + 'rules/import-rules.py'}
+required = {prefix + executable, resource + 'app.asar', prefix + 'LICENSE.electron.txt', prefix + 'LICENSES.chromium.html', resource + 'THIRD_PARTY_NOTICES.md', resource + 'rules/import-rules.py'}
 seen = set()
 process = subprocess.Popen(['dpkg-deb', '--fsys-tarfile', str(package)], stdout=subprocess.PIPE)
 try:
@@ -35,7 +40,7 @@ try:
                     seen.add(member.name)
                 if member.name in required:
                     seen.add(member.name)
-                if member.name == prefix + 'starrail-network-dev':
+                if member.name == prefix + executable:
                     assert member.mode == 0o755
                 if member.name == resource + 'app.asar':
                     assert member.mode == 0o644

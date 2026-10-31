@@ -303,4 +303,4 @@ func ensureSameInstallation() error {
 	}
 	return checkCore()
 }
-func logCode(code string) { fmt.Fprintln(os.Stderr, "starrail-helper:", cleanError(failure(code))) }
+func logCode(code string) { fmt.Fprintln(os.Stderr, serviceID()+"-helper:", cleanError(failure(code))) }

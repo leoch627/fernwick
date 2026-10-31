@@ -19,9 +19,9 @@ import (
 	"time"
 )
 
-func stateRoot() string  { return "/Library/Application Support/StarRail Network" }
-func helperRoot() string { return "/Library/PrivilegedHelperTools/work.starrail.network" }
-func socketPath() string { return "/var/run/starrail-network/helper.sock" }
+func stateRoot() string  { return "/Library/Application Support/" + serviceID() }
+func helperRoot() string { return "/Library/PrivilegedHelperTools/" + build.HelperLabel }
+func socketPath() string { return "/var/run/" + serviceID() + "/helper.sock" }
 func signalContext() (context.Context, context.CancelFunc) {
 	return signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 }
@@ -181,7 +181,7 @@ func platformPrepare(ctx context.Context, j *Journal) error {
 	}
 	return nil
 }
-func anchorName(j *Journal) string { return "com.apple/StarRail." + j.ID }
+func anchorName(j *Journal) string { return "com.apple/" + ruleTag() + "." + j.ID }
 func platformProtect(ctx context.Context, j *Journal) error {
 	// macOS's default pf.conf already evaluates com.apple/* anchors. Refuse custom roots that do not.
 	active, e := run(ctx, "/sbin/pfctl", nil, "-sr")
@@ -286,27 +286,27 @@ func platformUnprotect(ctx context.Context, j *Journal) error {
 	return nil
 }
 func platformStopService(ctx context.Context) error {
-	if _, e := run(ctx, "/bin/launchctl", nil, "print", "system/work.starrail.network"); e != nil {
+	if _, e := run(ctx, "/bin/launchctl", nil, "print", "system/"+build.HelperLabel); e != nil {
 		return nil
 	}
-	_, e := run(ctx, "/bin/launchctl", nil, "bootout", "system/work.starrail.network")
+	_, e := run(ctx, "/bin/launchctl", nil, "bootout", "system/"+build.HelperLabel)
 	return e
 }
 func platformInstall(Installation) error {
-	value := `<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>Label</key><string>work.starrail.network</string><key>ProgramArguments</key><array><string>/Library/PrivilegedHelperTools/work.starrail.network/helper</string><string>serve</string></array><key>RunAtLoad</key><true/><key>KeepAlive</key><true/><key>ThrottleInterval</key><integer>1</integer><key>ExitTimeOut</key><integer>8</integer><key>Umask</key><integer>63</integer></dict></plist>`
-	if e := os.WriteFile("/Library/LaunchDaemons/work.starrail.network.plist", []byte(value), 0644); e != nil {
+	value := `<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>Label</key><string>` + build.HelperLabel + `</string><key>ProgramArguments</key><array><string>` + helperRoot() + `/helper</string><string>serve</string></array><key>RunAtLoad</key><true/><key>KeepAlive</key><true/><key>ThrottleInterval</key><integer>1</integer><key>ExitTimeOut</key><integer>8</integer><key>Umask</key><integer>63</integer></dict></plist>`
+	if e := os.WriteFile("/Library/LaunchDaemons/"+build.HelperLabel+".plist", []byte(value), 0644); e != nil {
 		return e
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
-	_, e := run(ctx, "/bin/launchctl", nil, "bootstrap", "system", "/Library/LaunchDaemons/work.starrail.network.plist")
+	_, e := run(ctx, "/bin/launchctl", nil, "bootstrap", "system", "/Library/LaunchDaemons/"+build.HelperLabel+".plist")
 	return e
 }
 func platformUninstall() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
 	_ = platformStopService(ctx)
-	return os.Remove("/Library/LaunchDaemons/work.starrail.network.plist")
+	return os.Remove("/Library/LaunchDaemons/" + build.HelperLabel + ".plist")
 }
 func fileOwner(path string, p Peer) error {
 	s, e := os.Lstat(path)

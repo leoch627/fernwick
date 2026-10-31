@@ -3,13 +3,13 @@ On macOS, copy the signed app from the DMG to `/Applications`, then connect or c
 Independent recovery:
 
 ```sh
-sudo '/Library/PrivilegedHelperTools/work.starrail.network/helper' repair
+sudo '/Library/PrivilegedHelperTools/<appId>.helper/helper' repair
 ```
 
 Uninstall the service before removing the application:
 
 ```sh
-sudo '/Library/PrivilegedHelperTools/work.starrail.network/helper' uninstall
+sudo '/Library/PrivilegedHelperTools/<appId>.helper/helper' uninstall
 ```
 
 Production builds require Developer ID signing and notarization. The in-app ZIP updater checks the signed release index, file hash, code signature Team ID and Gatekeeper assessment before replacing the app. It keeps one application backup.

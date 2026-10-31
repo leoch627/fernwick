@@ -18,9 +18,9 @@ func tunName() string {
 		return "utun50"
 	}
 	if runtime.GOOS == "windows" {
-		return "StarRailTun"
+		return "ProxyTun"
 	}
-	return "starr0"
+	return "vbtun0"
 }
 func tunDNS() string {
 	if runtime.GOOS == "darwin" {
@@ -93,7 +93,7 @@ func compileCore(c Candidate, j Journal) []byte {
 	}
 	routes = append(routes, object{"type": "field", "network": "tcp,udp", "outboundTag": "proxy"})
 	dns = append(dns, object{"address": "https://1.1.1.1/dns-query", "tag": "dns-proxy", "skipFallback": false, "finalQuery": true})
-	tun := object{"name": j.Tun, "desc": "StarRail Network TUN", "mtu": 1500, "gateway": []string{"172.19.0.1/30", "fdfe:dcba:9876::1/126"}, "autoSystemRoutingTable": []string{}, "autoOutboundsInterface": j.Interface.Name, "autoSystemDnsToGateway": false}
+	tun := object{"name": j.Tun, "desc": ruleTag() + " TUN", "mtu": 1500, "gateway": []string{"172.19.0.1/30", "fdfe:dcba:9876::1/126"}, "autoSystemRoutingTable": []string{}, "autoOutboundsInterface": j.Interface.Name, "autoSystemDnsToGateway": false}
 	// Windows Xray owns its adapter's routes, DNS and dynamic WFP filters. Other platforms use helper-owned routing/DNS.
 	if runtime.GOOS == "windows" {
 		tun["autoSystemRoutingTable"] = []string{"0.0.0.0/0", "::/0"}

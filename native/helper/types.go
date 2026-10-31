@@ -163,6 +163,8 @@ type HealthTarget struct {
 }
 type Build struct {
 	ProductID            string            `json:"productId"`
+	DisplayName          string            `json:"displayName"`
+	HelperLabel          string            `json:"helperLabel"`
 	Environment          string            `json:"environment"`
 	Channel              string            `json:"channel"`
 	Version              string            `json:"version"`
@@ -184,6 +186,8 @@ var installed Installation
 var hex64 = regexp.MustCompile(`^[a-f0-9]{64}$`)
 var uuidPattern = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 var labelPattern = regexp.MustCompile(`^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$`)
+var realityKeyPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`)
+var shortIDPattern = regexp.MustCompile(`^(?:[a-fA-F0-9]{2}){0,8}$`)
 
 func domain(value string) bool {
 	if len(value) < 1 || len(value) > 253 {
@@ -231,7 +235,7 @@ func (c *Candidate) validate() error {
 		if !uuidPattern.MatchString(n.Credential) || !contains([]string{"tls", "reality"}, n.Security) {
 			return failure("NO_COMPATIBLE_NODES")
 		}
-		if n.Security == "reality" && (n.Transport != "tcp" || !regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`).MatchString(n.PublicKey) || !regexp.MustCompile(`^(?:[a-fA-F0-9]{2}){0,8}$`).MatchString(n.ShortID) || !contains([]string{"", "xtls-rprx-vision"}, n.Flow)) {
+		if n.Security == "reality" && (n.Transport != "tcp" || !realityKeyPattern.MatchString(n.PublicKey) || !shortIDPattern.MatchString(n.ShortID) || !contains([]string{"", "xtls-rprx-vision"}, n.Flow)) {
 			return failure("NO_COMPATIBLE_NODES")
 		}
 		if n.Security == "tls" && n.Flow != "" {

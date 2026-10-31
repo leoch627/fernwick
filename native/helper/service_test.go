@@ -11,7 +11,7 @@ var intruder = Peer{PID: 200, User: "502", Birth: "2", Executable: "/opt/StarRai
 
 func ownedService(t *testing.T) *service {
 	t.Helper()
-	withBuild(t, Build{ProductID: "starrail-test", BuildID: "build-1", Version: "0.1.0"})
+	withBuild(t, Build{ProductID: "starrail-test", DisplayName: "StarRail Test", HelperLabel: "work.starrail.test.helper", BuildID: "build-1", Version: "0.1.0"})
 	withInstalled(t, Installation{BuildID: "build-1"})
 	return &service{state: "Connected", journal: &Journal{Owner: owner}, ticket: "ticket-1"}
 }

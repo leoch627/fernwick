@@ -142,7 +142,7 @@ func recoverAlone() error {
 	return s.cleanup()
 }
 func main() {
-	if strictJSON(buildJSON, &build) != nil || len(build.BuildID) != 64 {
+	if strictJSON(buildJSON, &build) != nil || len(build.BuildID) != 64 || !validIdentity(build) {
 		os.Exit(1)
 	}
 	if name := build.AppExecutableNames[targetID()]; name != "" {
@@ -159,7 +159,7 @@ func main() {
 		return
 	}
 	if len(args) == 1 && args[0] == "version" {
-		fmt.Printf("StarRail helper %s protocol %d build %s\n", build.Version, protocolVersion, build.BuildID)
+		fmt.Printf("%s helper %s protocol %d build %s\n", build.DisplayName, build.Version, protocolVersion, build.BuildID)
 		return
 	}
 	if e := requireAdministrator(); e != nil {

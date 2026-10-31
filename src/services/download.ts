@@ -16,7 +16,7 @@ export interface DownloadTransport { open(url: string, offset: number, etag: str
 export class HttpsDownloadTransport implements DownloadTransport {
   open(raw: string, offset: number, etag: string | null, signal: AbortSignal): Promise<DownloadResponse> {
     return new Promise((resolve, reject) => {
-      const request = https.get(raw, { agent: false, signal, headers: { 'user-agent': 'StarRail-Updater/0.1', 'accept-encoding': 'identity', ...(offset ? { range: `bytes=${offset}-`, ...(etag ? { 'if-range': etag } : {}) } : {}) } }, response => {
+      const request = https.get(raw, { agent: false, signal, headers: { 'user-agent': 'v2board-client-updater/0.1', 'accept-encoding': 'identity', ...(offset ? { range: `bytes=${offset}-`, ...(etag ? { 'if-range': etag } : {}) } : {}) } }, response => {
         const headers: Record<string, string | undefined> = {};
         for (const [name, value] of Object.entries(response.headers)) headers[name] = typeof value === 'string' ? value : undefined;
         // No redirects, cookies, API tokens or system proxy inheritance.

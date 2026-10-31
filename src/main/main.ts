@@ -58,7 +58,7 @@ async function boot() {
     installer: { get ready() { return native.verified; }, install: async (artifact, path, envelope) => { await native.install(artifact, path, envelope); app.quit(); } },
     reminders, resources, download: new ArtifactDownload(join(dataRoot, 'updates'), build),
     osCompatible: minimum => supportedDistribution && osVersionAtLeast(osVersion, minimum),
-    confirmInstall: async version => (await dialog.showMessageBox({ type: 'question', title: '重启并安装更新', message: `安装 StarRail Network ${version}？`, detail: '将断开当前连接并开始系统安装。也可以稍后再安装。', buttons: ['重启并安装', '稍后'], cancelId: 1 })).response === 0,
+    confirmInstall: async version => (await dialog.showMessageBox({ type: 'question', title: '重启并安装更新', message: `安装 ${build.name} ${version}？`, detail: '将断开当前连接并开始系统安装。也可以稍后再安装。', buttons: ['重启并安装', '稍后'], cancelId: 1 })).response === 0,
     probe: async (node, signal) => {
       const coreRoot = app.isPackaged ? join(process.resourcesPath, 'native') : join(__dirname, '../../resources/native');
       return (await CoreRuntime.load(coreRoot, app.isPackaged ? nativeManifest : undefined)).probe(node, build.healthTargets, signal);
@@ -73,7 +73,7 @@ async function boot() {
     },
     exportDiagnostics: async report => {
       const confirmation = await dialog.showMessageBox({ type: 'info', title: '导出诊断', message: '仅导出版本、平台、时间、错误码与操作耗时。', detail: '不包含账号、订阅链接、节点凭据或访问记录；文件仅保存在本机。', buttons: ['选择保存位置', '取消'], cancelId: 1 }); if (confirmation.response !== 0) return;
-      const result = await dialog.showSaveDialog({ title: '保存诊断文件', defaultPath: `starrail-diagnostics-${new Date().toISOString().slice(0, 10)}.json`, filters: [{ name: 'JSON', extensions: ['json'] }] });
+      const result = await dialog.showSaveDialog({ title: '保存诊断文件', defaultPath: `${build.productId}-diagnostics-${new Date().toISOString().slice(0, 10)}.json`, filters: [{ name: 'JSON', extensions: ['json'] }] });
       if (!result.canceled && result.filePath) await atomicWrite(result.filePath, JSON.stringify(report, null, 2));
     },
     launchAtLogin: async value => {
@@ -82,7 +82,7 @@ async function boot() {
         const folder = join(app.getPath('appData'), 'autostart'); const path = join(folder, `${build.appId}.desktop`);
         if (!value) { await rm(path, { force: true }); return; }
         await mkdir(folder, { recursive: true }); const executable = process.execPath.replace(/["\\`$]/g, '\\$&');
-        await atomicWrite(path, `[Desktop Entry]\nType=Application\nName=StarRail Network\nExec="${executable}"\nX-GNOME-Autostart-enabled=true\n`);
+        await atomicWrite(path, `[Desktop Entry]\nType=Application\nName=${build.name}\nExec="${executable}"\nX-GNOME-Autostart-enabled=true\n`);
       } else app.setLoginItemSettings({ openAtLogin: value });
     },
   });
@@ -98,8 +98,8 @@ async function boot() {
     window.on('close', event => {
       if (quitting) return; event.preventDefault();
       if (tray && controller.view().preferences.closeBehavior === 'tray') {
-        window?.hide(); if (!closedTip) { closedTip = true; void dialog.showMessageBox({ message: 'StarRail Network 将继续在托盘中运行', detail: '通过托盘菜单可以重新打开窗口或退出客户端。' }); }
-      } else void dialog.showMessageBox({ message: '退出 StarRail Network？', detail: '退出将断开连接并停止同步。', buttons: ['继续使用', '退出客户端'], cancelId: 0 }).then(answer => { if (answer.response === 1) app.quit(); });
+        window?.hide(); if (!closedTip) { closedTip = true; void dialog.showMessageBox({ message: `${build.name} 将继续在托盘中运行`, detail: '通过托盘菜单可以重新打开窗口或退出客户端。' }); }
+      } else void dialog.showMessageBox({ message: `退出 ${build.name}？`, detail: '退出将断开连接并停止同步。', buttons: ['继续使用', '退出客户端'], cancelId: 0 }).then(answer => { if (answer.response === 1) app.quit(); });
     });
     window.once('ready-to-show', () => window?.show());
     if (!app.isPackaged && process.env.STARRAIL_DEV_UI === '1') await window.loadURL('http://127.0.0.1:5173');
@@ -112,7 +112,7 @@ async function boot() {
   await createWindow();
   controller.subscribe(state => { if (window && !window.isDestroyed()) window.webContents.send('starrail:state', state); });
   if (process.platform !== 'linux') {
-    try { tray = new Tray(nativeImage.createFromPath(join(__dirname, '../icon.png'))); tray.setToolTip(build.name); tray.setContextMenu(Menu.buildFromTemplate([{ label: '打开 StarRail Network', click: () => window?.show() }, { label: '断开连接', click: () => void controller.command({ type: 'disconnect' }) }, { type: 'separator' }, { label: '退出客户端', click: () => app.quit() }])); tray.on('click', () => window?.show()); } catch { tray = null; }
+    try { tray = new Tray(nativeImage.createFromPath(join(__dirname, '../icon.png'))); tray.setToolTip(build.name); tray.setContextMenu(Menu.buildFromTemplate([{ label: `打开 ${build.name}`, click: () => window?.show() }, { label: '断开连接', click: () => void controller.command({ type: 'disconnect' }) }, { type: 'separator' }, { label: '退出客户端', click: () => app.quit() }])); tray.on('click', () => window?.show()); } catch { tray = null; }
   }
   app.on('second-instance', () => { window?.show(); window?.focus(); });
   app.on('activate', () => window?.show());
@@ -127,4 +127,4 @@ async function boot() {
   await controller.start();
   if (demo) await controller.command({ type: 'login', email: 'preview@example.invalid', password: 'demo' });
 }
-void boot().catch(() => { dialog.showErrorBox('StarRail Network 启动失败', '无法读取或验证本地配置，请使用完整安装包修复。'); app.exit(1); });
+void boot().catch(() => { dialog.showErrorBox('客户端启动失败', '无法读取或验证本地配置，请使用完整安装包修复。'); app.exit(1); });

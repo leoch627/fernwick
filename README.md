@@ -1,47 +1,96 @@
-# StarRail Network
+# V2Board 桌面客户端
 
-按附件 V2Board_Xray.md 实现的 Electron + TypeScript + Xray 桌面客户端，品牌 StarRail Network。主 API 为 https://api.starrail.work，备用 https://host.leiterup.de；适配 wyx2685/v2board 的固定提交。
+Electron + TypeScript + Xray 的 V2Board 桌面客户端，支持 Windows 11 x64、macOS 14+（Apple 芯片 / Intel）和 Ubuntu 24.04 x64。机场名称、主备 API 都在打包时提供，同一份代码可以给不同机场出包。配套的 Cloudflare Worker（`server/`）负责自动更新、远程规则更新和安装包下载页。
 
-本轮已接入实际原生连接、系统服务安装/修复、路由/DNS/防火墙、心跳与恢复、更新安装和回退功能。按用户要求，本轮只编译打包，没有运行测试。交付为待用户测试的开发版，不能把编译成功当作实机验收通过。
+- 登录、套餐/到期/流量、续费跳转，主备 API 自动切换，严格订阅解析，加密本地缓存
+- 规则/全局模式，自动/手动选节点，节点测速，到期提醒，托盘与开机启动
+- Go 原生服务（systemd / launchd / Windows 服务）接管 TUN、路由、DNS，崩溃与断电后可恢复
+- 签名更新索引与签名策略（Ed25519），远程规则更新，断点续传下载
 
-默认使用 X25519 初始密钥交换：未指定指纹时使用固定 Xray 支持的 hellochrome_120；订阅中明确指定的有效指纹保留。不会把无效的 x25519 字符串填进 fingerprint。
+## 开发
 
-## 构建
-
-需要 Node.js 24、Python 3、Go 1.27.3。Linux 示例：
+需要 Node.js 24、Python 3、Go 1.27。
 
 ```sh
 npm ci
-npm run core:fetch -- linux-x64
-npm run native:build -- --target linux-x64
-npm run build
-npm run package:test
+npm run dev        # 源码运行（config/development.json）
+npm run demo       # 示例数据界面，不连接网络
+npm run check      # 类型检查 + 单元测试 + 构建
+cd native/helper && go test ./...
 ```
 
-核心下载和原生构建目标可替换为 win32-x64、darwin-x64、darwin-arm64。Linux 使用 DEB，Windows 使用 npm run package:windows，macOS 使用 npm run package:macos 生成 DMG/ZIP。实际连接请安装完整包，GUI 使用普通用户运行；首次连接/修复会调用系统权限流程。macOS 应放入 /Applications。
+## 品牌配置（机场名、API）
 
-npm run dev 用于源码界面与业务调试；npm run demo 是明确标识的示例模式，不模拟代理成功。真正的系统服务只授权已安装且身份匹配的应用。手动四目标打包流程位于 .github/workflows/package-development.yml。
+复制 `config/brand.example.json` 并填写：
 
-## 功能
+| 字段 | 说明 |
+| --- | --- |
+| `id` | 稳定标识，小写字母/数字/连字符。决定系统路径、服务名、Linux 包名。**发布后不要改**，否则用户需要重新安装 |
+| `name` | 显示名称，可用中文，可以随时改 |
+| `appId` | 可选，反向域名形式，默认 `app.<id>` |
+| `api` | API 地址数组，第一个为主，其余为备用 |
+| `subscriptionOrigins` | 可选，订阅链接域名与 API 不同时填写 |
+| `website` | 可选，官网/续费页，默认主 API 域名 |
+| `endpoint` | 更新端点地址（部署 `server/` 后得到） |
+| `updatePublicKey` / `policyPublicKey` | 两把不同的签名公钥，见下文 |
 
-- 登录、套餐/到期/流量、续费、串行同步、主备 API、严格订阅解析、加密缓存与授权期限。
-- 中文界面、规则/全局、自动/手动节点、节点探测、到期通知、主题/启动设置及本地诊断。
-- Go 原生服务：Linux systemd、macOS launchd、Windows service；受限 IPC、双向身份确认、机器级所有权、实际 Xray TUN、DNS/UDP/IPv6、恢复日志和离线修复。
-- 固定大陆直连规则、独立签名策略/规则更新、签名更新索引、暂停/续传、保护目录复验、平台安装器、备份和中断恢复。
-- 四目标固定核心/helper，Windows Wintun DLL。原生签名流水线保留签名前后哈希，防止签名改变二进制后无法运行。
+```sh
+npm run brand -- config/brand.json          # 生成 work/build-config.json
+export STARRAIL_BUILD_CONFIG=work/build-config.json
+npm run core:fetch -- darwin-arm64           # linux-x64 / win32-x64 / darwin-x64 / darwin-arm64
+npm run native:build -- --target darwin-arm64
+npm run build && npx electron-builder --config electron-builder.cjs --mac dmg zip --arm64
+```
 
-运营策略/更新发布地址、公钥和平台证书尚未配置，相关代码保留真实接入入口。生产发布仍需配置和用户验收，不生成假的发布服务或测试通过结果。
+## 更新端点（Cloudflare Worker + R2）
 
-## 交付与文档
+1. 生成两对密钥（放在仓库之外）：
+   ```sh
+   npm run policy -- generate-key ~/keys/release
+   npm run policy -- generate-key ~/keys/policy
+   ```
+2. Cloudflare 创建 API Token（权限：Workers Scripts 编辑、Workers R2 Storage 编辑），记下 Account ID。
+3. GitHub 仓库 Settings → Secrets and variables → Actions：
 
-交付产物在 work/delivery；安装包清单以交付说明.md 和 SHA256SUMS.txt 为准。源码压缩包不包含 node_modules 或二进制缓存，原生组件另附压缩包。
+   | Secrets | 内容 |
+   | --- | --- |
+   | `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` | 上一步 |
+   | `RELEASE_SIGNING_KEY` / `POLICY_SIGNING_KEY` | `~/keys/*/private.pem` 全文 |
+   | `UPDATE_ADMIN_TOKEN` | 任意长随机串（`openssl rand -hex 32`） |
 
-- docs/DELIVERY.md：本轮实现、编译与接入边界。
-- docs/native-service.md：构建、原生签名、安装和离线修复。
-- docs/user-guide.md：客户端使用。
-- docs/api-contract.md：固定 V2Board 合同。
-- docs/operations.md：运营策略与更新发布。
-- docs/acceptance-status.md、support-matrix.json：待用户测试的验收追踪。
-- docs/verification.md：本轮编译记录与明确隔离的历史测试记录。
+   | Variables | 内容 |
+   | --- | --- |
+   | `BRAND_ID` / `BRAND_NAME` | 同品牌配置 |
+   | `BRAND_API_PRIMARY` / `BRAND_API_BACKUP` | 主备 API |
+   | `BRAND_WEBSITE`、`BRAND_APP_ID`、`BRAND_SUBSCRIPTION_ORIGINS` | 可选 |
+   | `UPDATE_ENDPOINT` | Worker 地址，如 `https://v2board-client-updates.<账号>.workers.dev` 或自定义域名 |
+   | `UPDATE_PUBLIC_KEY` / `POLICY_PUBLIC_KEY` | `~/keys/*/public.pem` 全文 |
+   | `R2_BUCKET` | 可选，默认 `v2board-client-files` |
 
-原始需求保留在 docs/requirements.md。测试源码仍保留，但本轮没有执行 npm test、UI/核心冒烟、真实网络接管或安装升级测试。
+4. Actions → **Update endpoint** → action 选 `deploy`。之后打开 `UPDATE_ENDPOINT` 就是下载页。
+
+端点接口：`/v1/release`（签名更新索引，每 6 小时重签）、`/v1/policy`（签名策略，携带规则更新）、`/files/...`（支持断点续传）、`/`（下载页）、`/admin/*`（仅 CI 使用，需要 `UPDATE_ADMIN_TOKEN`）。
+
+## 发布
+
+```sh
+npm version 0.2.0 --no-git-tag-version   # 改 package.json 版本并提交
+git tag v0.2.0 && git push origin v0.2.0
+```
+
+**Release** 工作流会检查、四平台打包、创建 GitHub Release、上传 R2 并登记新版本，已安装的客户端会收到更新。也可以在 Actions 里手动运行 Release，临时填写其他机场名和 API 出包；勾选 `publish_endpoint` 才会推给现有用户。
+
+- **规则更新**：Actions → Update endpoint → `rules`，或等每周一自动运行，会把最新的 Loyalsoldier/clash-rules 转换后下发。
+- **代码签名**：CI 目前不做 Windows/macOS 代码签名。客户端在这两个平台检测到新版本时会打开下载页，由用户手动安装；Linux 可以在客户端内直接更新。以后接入 Windows 证书或 Apple Developer ID 签名公证，并在打包时设置 `SIGNATURE_IDENTITY`（Windows 为证书 Subject，macOS 为 Team ID），这两个平台也能在客户端内更新。
+
+## 目录
+
+| 路径 | 内容 |
+| --- | --- |
+| `src/` | Electron 主进程、界面、领域逻辑 |
+| `native/helper/` | Go 原生服务 |
+| `server/` | 更新端点 Worker |
+| `tools/` | 构建、品牌、签名、发布脚本 |
+| `docs/` | 需求、架构、API 合同、运维说明 |
+
+验收进度见 `docs/acceptance-status.md` 和 `support-matrix.json`；四个平台都还没有完成实机验收。

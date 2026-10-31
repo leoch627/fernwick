@@ -94,7 +94,33 @@ func newerVersion(next, current string) bool {
 			return a[i] > b[i]
 		}
 	}
-	return ap == "" && bp != ""
+	if ap == "" || bp == "" {
+		return ap == "" && bp != ""
+	}
+	return newerPrerelease(ap, bp)
+}
+
+// newerPrerelease orders pre-release tags per SemVer 2.0 §11, matching the client's semver.gt.
+func newerPrerelease(next, current string) bool {
+	x, y := strings.Split(next, "."), strings.Split(current, ".")
+	for i := 0; i < len(x) && i < len(y); i++ {
+		if x[i] == y[i] {
+			continue
+		}
+		xn, xe := strconv.Atoi(x[i])
+		yn, ye := strconv.Atoi(y[i])
+		switch {
+		case xe == nil && ye == nil:
+			return xn > yn
+		case xe == nil:
+			return false
+		case ye == nil:
+			return true
+		default:
+			return x[i] > y[i]
+		}
+	}
+	return len(x) > len(y)
 }
 func verifiedRelease(raw, id string) (Artifact, Watermark, error) {
 	invalid := func() (Artifact, Watermark, error) { return Artifact{}, Watermark{}, failure("UPDATE_VERIFY_FAILED") }

@@ -6,7 +6,19 @@ const { Arch } = require('builder-util');
 const { flipFuses, FuseVersion, FuseV1Options } = require('@electron/fuses');
 const config = JSON.parse(fs.readFileSync('dist/build-config.json', 'utf8'));
 process.umask(0o022);
-const packageName = config.environment === 'test' ? 'starrail-network-dev' : 'starrail-network';
+// Must match tools/build-native.py: the helper verifies these executable names and install paths.
+const packageName = config.productId;
+const productName = config.name + (config.environment === 'test' ? ' Dev' : '');
+// Without a Developer ID certificate, ad-hoc sign the whole bundle so Apple silicon gets a sealed, launchable app.
+// Hardened runtime would make library validation reject Electron's own frameworks under an ad-hoc identity.
+const macCertificate = !!(process.env.CSC_LINK || process.env.CSC_NAME);
+// Installer scripts need the service ID that the helper derives from productId.
+function render(template) {
+  const output = path.join('work/packaging', template);
+  fs.mkdirSync(path.dirname(output), { recursive: true });
+  fs.writeFileSync(output, fs.readFileSync(path.join('packaging', template), 'utf8').replaceAll('@SERVICE_ID@', config.productId), { mode: 0o755 });
+  return path.resolve(output);
+}
 async function normalizePermissions(directory) {
   await fs.promises.chmod(directory, 0o755);
   for (const entry of await fs.promises.readdir(directory, { withFileTypes: true })) {
@@ -17,12 +29,12 @@ async function normalizePermissions(directory) {
 }
 module.exports = {
   appId: config.appId,
-  productName: config.environment === 'test' ? 'StarRail Network Dev' : 'StarRail Network',
+  productName,
   directories: { output: 'release', buildResources: 'resources' },
   toolsets: { wine: '1.0.1' },
   files: ['dist/**/*', 'package.json'], asar: true, npmRebuild: false,
   extraResources: [{ from: 'THIRD_PARTY_NOTICES.md', to: 'THIRD_PARTY_NOTICES.md' }, { from: 'resources/licenses', to: 'licenses' }, { from: 'resources/core-lock.json', to: 'core-lock.json' }, { from: 'resources/rules', to: 'rules' }, { from: 'tools/import-rules.py', to: 'rules/import-rules.py' }],
-  extraMetadata: { main: 'dist/main/main.cjs', desktopName: config.appId, homepage: 'https://host.leiterup.de/' },
+  extraMetadata: { main: 'dist/main/main.cjs', desktopName: config.appId, homepage: config.links.website ?? undefined },
   beforePack: async () => { if (config.environment === 'production') execFileSync(process.execPath, ['--import', 'tsx', 'tools/release-check.ts'], { stdio: 'inherit' }); },
   afterPack: async context => {
     const target = `${context.electronPlatformName}-${Arch[context.arch]}`;
@@ -40,8 +52,8 @@ module.exports = {
   },
   artifactName: '${productName}-${version}-${os}-${arch}.${ext}',
   win: { target: [{ target: 'nsis', arch: ['x64'] }], icon: 'resources/icon.png', signExts: ['!xray.exe', '!helper.exe', '!wintun.dll'] },
-  nsis: { oneClick: false, perMachine: true, allowToChangeInstallationDirectory: false, deleteAppDataOnUninstall: false, include: 'packaging/windows/installer.nsh' },
-  mac: { target: ['dmg', 'zip'], category: 'public.app-category.utilities', hardenedRuntime: true, minimumSystemVersion: '14.0', icon: 'resources/icon.png', signIgnore: ['native/[^/]+/(xray|helper)$'] },
-  linux: { target: [{ target: 'deb', arch: ['x64'] }], executableName: packageName, syncDesktopName: true, category: 'Network', icon: 'resources/icon.png', maintainer: 'StarRail Network', synopsis: 'StarRail Network development desktop client' },
-  deb: { packageName, depends: ['libgtk-3-0', 'libnss3', 'libasound2t64', 'libgbm1', 'libsecret-1-0', 'iproute2', 'nftables', 'systemd-resolved', 'polkitd', 'pkexec', 'dpkg-repack'], afterInstall: 'packaging/linux/after-install.sh', fpm: ['--before-remove=' + path.resolve('packaging/linux/before-remove.sh')] },
+  nsis: { oneClick: false, perMachine: true, allowToChangeInstallationDirectory: false, deleteAppDataOnUninstall: false, include: render('windows/installer.nsh') },
+  mac: { target: ['dmg', 'zip'], category: 'public.app-category.utilities', hardenedRuntime: macCertificate, identity: macCertificate ? undefined : '-', minimumSystemVersion: '14.0', icon: 'resources/icon.png', signIgnore: ['native/[^/]+/(xray|helper)$'] },
+  linux: { target: [{ target: 'deb', arch: ['x64'] }], executableName: packageName, syncDesktopName: true, category: 'Network', icon: 'resources/icon.png', maintainer: config.name, synopsis: `${config.name} desktop client` },
+  deb: { packageName, depends: ['libgtk-3-0', 'libnss3', 'libasound2t64', 'libgbm1', 'libsecret-1-0', 'iproute2', 'nftables', 'systemd-resolved', 'polkitd', 'pkexec', 'dpkg-repack'], afterInstall: 'packaging/linux/after-install.sh', fpm: ['--before-remove=' + render('linux/before-remove.sh')] },
 };

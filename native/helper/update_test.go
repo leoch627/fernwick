@@ -30,7 +30,7 @@ func newReleaseFixture(t *testing.T) *releaseFixture {
 	}
 	der, _ := x509.MarshalPKIXPublicKey(public)
 	withBuild(t, Build{
-		ProductID: "starrail-test", Environment: "test", Channel: "test", Version: "0.1.0",
+		ProductID: "starrail-test", HelperLabel: "work.starrail.test.helper", Environment: "test", Channel: "test", Version: "0.1.0",
 		UpdateKeys:           map[string]string{"release-1": string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der}))},
 		TrustedUpdateOrigins: []string{"https://updates.example.com"},
 	})

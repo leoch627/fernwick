@@ -18,11 +18,11 @@ def main():
     platform = args.target.split('-')[0]
     if sys.platform != platform: raise RuntimeError('Run native signing on the target operating system')
     identity = os.environ['STARRAIL_NATIVE_SIGN_IDENTITY']
-    build = json.loads((ROOT/os.environ.get('STARRAIL_BUILD_CONFIG', 'config/development.json')).read_text())
+    build = json.loads((ROOT/os.environ.get('STARRAIL_BUILD_CONFIG', 'config/development.json')).read_text(encoding='utf-8'))
     if build['environment'] == 'production' and identity == '-': raise RuntimeError('Production requires a real signing identity')
     extension = '.exe' if platform == 'win32' else ''
     path = ROOT/'resources/native'/args.target/(('xray' if args.stage == 'core' else 'helper') + extension)
-    lock = json.loads((ROOT/'resources/core-lock.json').read_text())
+    lock = json.loads((ROOT/'resources/core-lock.json').read_text(encoding='utf-8'))
     asset = next(a for a in lock['assets'] if a['target'] == args.target)
     if args.stage == 'core' and digest(path) != asset['executableSha256']: raise RuntimeError('Fetch the exact upstream core again before signing')
     if platform == 'darwin':
@@ -36,11 +36,11 @@ def main():
         subprocess.run([tool, 'verify', '/pa', str(path)], check=True)
     if args.stage == 'core':
         record = ROOT/'resources/native-signatures.json'
-        values = json.loads(record.read_text()) if record.exists() else {}
+        values = json.loads(record.read_text(encoding='utf-8')) if record.exists() else {}
         values[args.target] = {'upstreamSha256': asset['executableSha256'], 'signedSha256': digest(path), 'identity': identity}
         record.write_text(json.dumps(values, indent=2)+'\n')
     else:
-        record = ROOT/'resources/native-manifest.json'; value = json.loads(record.read_text())
+        record = ROOT/'resources/native-manifest.json'; value = json.loads(record.read_text(encoding='utf-8'))
         item = next(c for c in value['components'] if c['type'] == 'helper' and c['target'] == args.target)
         item['sha256'] = digest(path); item['signatureIdentity'] = identity
         record.write_text(json.dumps(value, indent=2)+'\n')

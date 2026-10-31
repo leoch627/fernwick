@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { ProxyNode } from './model';
 import { compileOutbound, compileRouting, lanCIDRs, RulesSchema, type Rules } from './compiler';
 import { assert } from '../shared/errors';
+import { tunNames } from './identity';
 import type { ProbeCredentials } from '../platform/core';
 
 const binding = z.string().min(1).max(128).regex(/^[\p{L}\p{N} _.:{}-]+$/u);
@@ -34,7 +35,7 @@ export function compileTun(node: ProxyNode, mode: 'rule' | 'global', rules: Rule
   proxy.streamSettings.sockopt = { interface: network.interface, domainStrategy: 'UseIP' };
   const directDomains = mode === 'rule' ? [...rules.directDomains.map(value => `domain:${value}`), ...(rules.directFullDomains ?? []).map(value => `full:${value}`)] : [];
   const proxyDomains = mode === 'rule' ? rules.proxyDomains.map(value => `domain:${value}`) : [];
-  const tunName = network.platform === 'darwin' ? 'utun50' : network.platform === 'win32' ? 'StarRailTun' : 'starr0';
+  const tunName = tunNames[network.platform];
   const routing = compileRouting(mode, rules);
   return {
     log: { loglevel: 'none', access: 'none', error: 'none' },
