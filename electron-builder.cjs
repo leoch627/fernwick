@@ -19,6 +19,24 @@ function render(template) {
   fs.writeFileSync(output, fs.readFileSync(path.join('packaging', template), 'utf8').replaceAll('@SERVICE_ID@', config.productId), { mode: 0o755 });
   return path.resolve(output);
 }
+// The helper embeds native/helper/build.json from its own native:build run. One built for another configuration
+// (STARRAIL_BUILD_CONFIG set for npm run build but not for native:build) fails its identity check on users' machines.
+function checkHelperConfiguration() {
+  const helper = JSON.parse(fs.readFileSync('native/helper/build.json', 'utf8'));
+  const { buildId } = JSON.parse(fs.readFileSync('resources/native-manifest.json', 'utf8'));
+  const { version } = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+  const controlOrigins = [...new Set([
+    ...config.apiEndpoints.map(e => e.baseUrl.replace(/\/+$/, '')), ...config.trustedSubscriptionOrigins, ...config.trustedResourceOrigins,
+    ...[...config.policyUrls, ...config.updateFeedUrls].map(url => new URL(url).origin),
+  ])].sort();
+  const expected = {
+    productId: config.productId, displayName: productName, helperLabel: `${config.appId}.helper`, environment: config.environment, channel: config.channel,
+    version, controlOrigins, healthTargets: config.healthTargets, updateKeys: config.updateKeys, trustedUpdateOrigins: config.trustedUpdateOrigins, buildId,
+  };
+  const canonical = value => JSON.stringify(value, (_, v) => v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : 1))) : v);
+  const wrong = Object.keys(expected).filter(key => canonical(helper[key]) !== canonical(expected[key]));
+  if (wrong.length) throw new Error(`native/helper/build.json does not match dist/build-config.json (${wrong.join(', ')}). Run npm run native:build with the same STARRAIL_BUILD_CONFIG as npm run build.`);
+}
 async function normalizePermissions(directory) {
   await fs.promises.chmod(directory, 0o755);
   for (const entry of await fs.promises.readdir(directory, { withFileTypes: true })) {
@@ -35,7 +53,10 @@ module.exports = {
   files: ['dist/**/*', 'package.json'], asar: true, npmRebuild: false,
   extraResources: [{ from: 'THIRD_PARTY_NOTICES.md', to: 'THIRD_PARTY_NOTICES.md' }, { from: 'resources/licenses', to: 'licenses' }, { from: 'resources/core-lock.json', to: 'core-lock.json' }, { from: 'resources/rules', to: 'rules' }, { from: 'tools/import-rules.py', to: 'rules/import-rules.py' }],
   extraMetadata: { main: 'dist/main/main.cjs', desktopName: config.appId, homepage: config.links.website ?? undefined },
-  beforePack: async () => { if (config.environment === 'production') execFileSync(process.execPath, ['--import', 'tsx', 'tools/release-check.ts'], { stdio: 'inherit' }); },
+  beforePack: async () => {
+    checkHelperConfiguration();
+    if (config.environment === 'production') execFileSync(process.execPath, ['--import', 'tsx', 'tools/release-check.ts'], { stdio: 'inherit' });
+  },
   afterPack: async context => {
     const target = `${context.electronPlatformName}-${Arch[context.arch]}`;
     const core = JSON.parse(fs.readFileSync('resources/core-lock.json', 'utf8')).assets.find(a => a.target === target);

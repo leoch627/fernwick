@@ -122,6 +122,16 @@ it('rejects unauthenticated and inconsistent publishing', async () => {
   ]) expect((await publish(body)).status).toBe(400);
 });
 
+it('keeps serving the installed brand: renames pass, another product is refused', async () => {
+  expect((await publish()).status).toBe(200);
+  expect((await publish({ brand: { ...brand, name: '月云' }, version: '0.2.0', files })).status).toBe(200);
+  const other = await publish({ brand: { ...brand, productId: 'other-cloud' }, version: '0.2.0', files });
+  expect(other.status).toBe(400);
+  expect(await other.text()).toContain('separate endpoint');
+  expect((await publish({ brand: { ...brand, environment: 'test', channel: 'test' }, version: '0.2.0', files })).status).toBe(400);
+  expect(verifyPolicy(await (await call('/v1/policy')).text(), build, null, Date.now()).policy.productId).toBe(build.productId);
+});
+
 it('serves resumable downloads but never signing state', async () => {
   await publish();
   const key = '/files/releases/0.2.0/app-linux-amd64.deb';

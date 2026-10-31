@@ -13,6 +13,7 @@ import { strictJson } from '../src/domain/json';
 import { validateBuild } from '../src/domain/trust';
 import { appIdPattern, displayNamePattern, productIdPattern } from '../src/domain/identity';
 import type { BuildConfig } from '../src/shared/schema';
+import { KEY_ID } from '../server/src/signing';
 
 const https = z.string().url().refine(v => new URL(v).protocol === 'https:', 'must be https');
 const pem = z.string().includes('-----BEGIN PUBLIC KEY-----');
@@ -47,7 +48,7 @@ export function brandConfig(input: unknown, base: Pick<BuildConfig, 'healthTarge
     policyUrls: [`${endpoint}/v1/policy`], updateFeedUrls: [`${endpoint}/v1/release`],
     links: { website, renew: brand.renew ?? website, help: brand.help ?? website },
     // One key signs both; the purpose prefix in each signature keeps policy and release index apart.
-    policyKeys: { 'key-1': brand.publicKey }, updateKeys: { 'key-1': brand.publicKey },
+    policyKeys: { [KEY_ID]: brand.publicKey }, updateKeys: { [KEY_ID]: brand.publicKey },
     protocolCapabilities: ['vless-tls', 'vless-reality', 'vmess-ws-tls', 'trojan-tls', 'shadowsocks-aead'],
     nodeCapabilitiesConfirmed: true, allowUnverifiedNodeTrials: false,
     healthTargets: base.healthTargets, hardLimits: base.hardLimits,

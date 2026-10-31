@@ -28,8 +28,15 @@ jobs:
         run: $WRANGLER r2 bucket create "$BUCKET" || echo "Bucket $BUCKET already exists"
       - name: Deploy
         working-directory: server
+        env:
+          ENDPOINT: ${{ vars.UPDATE_ENDPOINT }}
         run: |
-          args=(--var "PUBLIC_ORIGIN:${{ vars.UPDATE_ENDPOINT }}")
+          args=(--var "PUBLIC_ORIGIN:$ENDPOINT")
+          # UPDATE_ENDPOINT is the only place the domain is configured: attach it as the Worker's custom domain.
+          if [ -n "$ENDPOINT" ]; then
+            host=$(node -p 'new URL(process.argv[1]).hostname' "$ENDPOINT")
+            if [[ "$host" != *.workers.dev ]]; then args+=(--domain "$host"); fi
+          fi
           if [ "$BUCKET" != v2board-client-files ]; then sed -i "s/\"v2board-client-files\"/\"$BUCKET\"/" wrangler.jsonc; fi
           $WRANGLER deploy "${args[@]}"
       - name: Signing key

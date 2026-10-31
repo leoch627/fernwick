@@ -44,6 +44,8 @@ jobs:
       api_primary: ${{ inputs.api_primary }}
       api_backup: ${{ inputs.api_backup }}
       website: ${{ inputs.website }}
+    secrets:
+      SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
   publish:
     needs: [version, package]
     runs-on: ubuntu-24.04

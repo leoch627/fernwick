@@ -6,6 +6,7 @@ import { validateBuild } from '../src/domain/trust';
 import { PolicySchema } from '../src/shared/schema';
 import { ReleaseSchema, verifyRelease } from '../src/services/update';
 import { verifyPolicy } from '../src/services/policy';
+import { KEY_ID } from '../server/src/signing';
 async function main() {
   const [action, kind, input, keyPath, output] = process.argv.slice(2);
   if (action === 'generate-key' && kind && !input) {
@@ -22,8 +23,7 @@ async function main() {
   if (action !== 'sign' || !output) throw new Error('usage');
   const raw = await readFile(input); const payload = strictJson(raw.toString('utf8')); (kind === 'policy' ? PolicySchema : ReleaseSchema).parse(payload);
   const key = createPrivateKey(await readFile(keyPath)); if (key.asymmetricKeyType !== 'ed25519') throw new Error('key');
-  const keyId = process.env.STARRAIL_SIGNING_KEY_ID; if (!keyId || !/^[A-Za-z0-9._-]{1,128}$/.test(keyId)) throw new Error('key-id');
   const signature = sign(null, Buffer.concat([Buffer.from(kind === 'policy' ? 'v2board-client-policy-v1\n' : 'v2board-client-release-v1\n'), raw]), key);
-  await writeFile(output, JSON.stringify({ keyId, payload: raw.toString('base64url'), signature: signature.toString('base64url') }, null, 2), { flag: 'wx' }); console.log('Signed envelope written without changing the payload bytes.');
+  await writeFile(output, JSON.stringify({ keyId: KEY_ID, payload: raw.toString('base64url'), signature: signature.toString('base64url') }, null, 2), { flag: 'wx' }); console.log('Signed envelope written without changing the payload bytes.');
 }
-void main().catch(() => { console.error('Usage: npm run policy -- generate-key <directory> | sign <policy|release> <payload.json> <private.pem> <out.json> | verify <policy|release> <envelope.json> <build.json>. Signing requires STARRAIL_SIGNING_KEY_ID.'); process.exitCode = 1; });
+void main().catch(() => { console.error('Usage: npm run sign -- generate-key <directory> | sign <policy|release> <payload.json> <private.pem> <out.json> | verify <policy|release> <envelope.json> <build.json>.'); process.exitCode = 1; });

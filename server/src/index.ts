@@ -92,6 +92,11 @@ async function admin(request: Request, env: Env, path: string, origin: string, n
         const head = await env.FILES.head(file.key);
         if (!head || head.size !== file.bytes) throw new InputError(`${file.key} is missing or has a different size in R2`);
       }
+      // Installed clients only accept their own productId/environment/channel; another brand would strand them all.
+      const current = await load<Brand>(env, STATE.brand);
+      if (current && (['productId', 'environment', 'channel'] as const).some(k => current[k] !== input.brand[k])) {
+        throw new InputError(`this endpoint serves ${current.productId} (${current.channel}); deploy a separate endpoint for ${input.brand.productId} (${input.brand.channel})`);
+      }
       await save(env, STATE.brand, input.brand);
       const previous = await load<ReleaseState>(env, STATE.release);
       const release = await signRelease(env, input.brand, {

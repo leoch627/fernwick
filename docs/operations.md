@@ -8,7 +8,8 @@
 
 ```sh
 npm run config:check -- config/development.json
-npm run brand -- config/brand.json && npm run release:check
+npm run brand -- config/brand.json
+STARRAIL_BUILD_CONFIG=work/build-config.json npm run build && npm run release:check   # 检查的是 dist/ 里实际要打包的配置
 ```
 
 ## 策略与发布索引
@@ -25,19 +26,19 @@ Ed25519 签名覆盖用途前缀、换行和原始 UTF-8 JSON bytes：
 一把 Ed25519 密钥同时签策略和发布索引（签名带用途前缀，两者不能互相冒充）。正常发布由 `server/` 自动签名，下面的命令只用于手工签名排查。密钥目录放在仓库之外，私钥权限 0600：
 
 ```sh
-npm run policy -- generate-key /secure/signing
+npm run sign -- generate-key /secure/signing
 ```
 
 客户端仅写入公钥。不要将签名私钥、平台证书或真实凭据提交仓库、测试夹具、安装包或普通日志。
 
 ```sh
-STARRAIL_SIGNING_KEY_ID=key-1 npm run policy -- sign policy payload.json /secure/signing/private.pem envelope.json
-npm run policy -- verify policy envelope.json config/your-build.json
-STARRAIL_SIGNING_KEY_ID=key-1 npm run policy -- sign release index.json /secure/signing/private.pem signed-index.json
-npm run policy -- verify release signed-index.json config/your-build.json
+npm run sign -- sign policy payload.json /secure/signing/private.pem envelope.json
+npm run sign -- verify policy envelope.json config/your-build.json
+npm run sign -- sign release index.json /secure/signing/private.pem signed-index.json
+npm run sign -- verify release signed-index.json config/your-build.json
 ```
 
-Windows 可在 PowerShell 中先设置 `$env:STARRAIL_SIGNING_KEY_ID`。命令不会输出密钥内容。`sign` 是签名工具，完整跨字段、环境、来源、期限验证需要随后运行 `verify`，现存发布序号还需对发布记录比较。
+命令不会输出密钥内容。`sign` 是签名工具，完整跨字段、环境、来源、期限验证需要随后运行 `verify`，现存发布序号还需对发布记录比较。
 
 策略参数只允许在 Schema 范围内变更；完整同步周期 × 1.1 + 80 秒必须小于缓存窗口。远程不能下发脚本、raw Xray、动态执行文件、关闭 TLS、强制升级字段或信任根。
 

@@ -1,6 +1,6 @@
 name: Build installers
 # Manual runs build the development configuration unless "production" is ticked.
-# Production builds take the brand from repository variables (BRAND_*, UPDATE_ENDPOINT, SIGNING_PUBLIC_KEY);
+# Production builds take the brand from repository variables (BRAND_*, UPDATE_ENDPOINT) and the public half of secrets.SIGNING_KEY;
 # any input below overrides the matching variable. See README "发布".
 on:
   workflow_dispatch:
@@ -19,6 +19,8 @@ on:
       api_primary: { type: string, required: false }
       api_backup: { type: string, required: false }
       website: { type: string, required: false }
+    secrets:
+      SIGNING_KEY: { required: false }
 permissions:
   contents: read
 jobs:
@@ -60,6 +62,19 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
+      # The embedded public key comes from the Worker's own private key, so the two cannot drift apart.
+      # Runs before npm ci so no installed package shares a step with the secret.
+      - name: Public key
+        if: inputs.production
+        env:
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+        run: |
+          if [ -z "$SIGNING_KEY" ]; then echo "::error::GitHub secret SIGNING_KEY is missing"; exit 1; fi
+          {
+            echo 'BRAND_PUBLIC_KEY<<PEM'
+            node -e "process.stdout.write(require('node:crypto').createPublicKey(process.env.SIGNING_KEY).export({ type: 'spki', format: 'pem' }))"
+            echo PEM
+          } >> "$GITHUB_ENV"
       - run: npm ci
       - name: Brand configuration
         if: inputs.production
@@ -72,7 +87,6 @@ jobs:
           BRAND_WEBSITE: ${{ inputs.website || vars.BRAND_WEBSITE }}
           BRAND_SUBSCRIPTION_ORIGINS: ${{ vars.BRAND_SUBSCRIPTION_ORIGINS }}
           BRAND_ENDPOINT: ${{ vars.UPDATE_ENDPOINT }}
-          BRAND_PUBLIC_KEY: ${{ vars.SIGNING_PUBLIC_KEY }}
         run: |
           npm run brand -- --out work/build-config.json
           echo "STARRAIL_BUILD_CONFIG=work/build-config.json" >> "$GITHUB_ENV"

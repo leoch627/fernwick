@@ -32,7 +32,7 @@ cd native/helper && go test ./...
 | `subscriptionOrigins` | 可选，订阅链接域名与 API 不同时填写 |
 | `website` | 可选，官网/续费页，默认主 API 域名 |
 | `endpoint` | 更新端点地址（部署 `server/` 后得到） |
-| `publicKey` | 签名公钥（`public.pem` 全文），见下文 |
+| `publicKey` | 签名公钥（`public.pem` 全文），见下文；CI 打包不用填，自动从 `SIGNING_KEY` 计算 |
 
 ```sh
 npm run brand -- config/brand.json          # 生成 work/build-config.json
@@ -44,13 +44,12 @@ npm run build && npx electron-builder --config electron-builder.cjs --mac dmg zi
 
 ## 更新端点（Cloudflare Worker + R2）
 
-整套只需要一把签名密钥：Worker 用它给更新索引和规则策略签名，客户端内置对应公钥校验；CI 调用 Worker 管理接口的令牌也从这把私钥推导，不用另配。
+整套只需要一把签名密钥，也只配置一次（`SIGNING_KEY`）：Worker 用它给更新索引和规则策略签名；CI 打包时从它算出公钥内置进客户端；CI 调用 Worker 管理接口的令牌也从它推导。
 
 1. 生成密钥，写进 GitHub（私钥只进 Secrets，`~/keys/signing` 留作备份）：
    ```sh
-   npm run policy -- generate-key ~/keys/signing
+   npm run sign -- generate-key ~/keys/signing
    gh secret set SIGNING_KEY < ~/keys/signing/private.pem
-   gh variable set SIGNING_PUBLIC_KEY < ~/keys/signing/public.pem
    ```
 2. Cloudflare（用托管端点域名的那个账号）：开通 R2；My Profile → API Tokens 用「Edit Cloudflare Workers」模板建 Token，并加上 Account → Workers R2 Storage → Edit。
    ```sh
@@ -58,7 +57,7 @@ npm run build && npx electron-builder --config electron-builder.cjs --mac dmg zi
    gh secret set CLOUDFLARE_ACCOUNT_ID --body '<account id>'
    ```
 3. GitHub Variables 填品牌：`BRAND_ID`、`BRAND_NAME`、`BRAND_API_PRIMARY`、`BRAND_API_BACKUP`、`UPDATE_ENDPOINT`，可选 `BRAND_APP_ID`、`BRAND_WEBSITE`、`BRAND_SUBSCRIPTION_ORIGINS`、`R2_BUCKET`（默认 `v2board-client-files`）。
-4. Actions → **Update endpoint** → `deploy`。然后在 Cloudflare 的 Workers & Pages → `v2board-client-updates` → Settings → Domains & Routes 添加 Custom domain（即 `UPDATE_ENDPOINT` 的域名；`workers.dev` 在大陆访问不了）。打开该地址就是下载页。
+4. Actions → **Update endpoint** → `deploy`。`UPDATE_ENDPOINT` 的域名会自动绑定为 Worker 的 Custom domain（该域名须托管在同一 Cloudflare 账号，且没有同名 DNS 记录；`workers.dev` 在大陆访问不了）。打开该地址就是下载页。
 
 端点接口：`/v1/release`（签名更新索引，每 6 小时重签）、`/v1/policy`（签名策略，携带规则更新）、`/files/...`（支持断点续传）、`/`（下载页）、`/admin/*`（仅 CI 使用）。
 
@@ -69,10 +68,10 @@ npm version 0.2.0 --no-git-tag-version   # 改 package.json 版本并提交
 git tag v0.2.0 && git push origin v0.2.0
 ```
 
-**Release** 工作流会检查、四平台打包、创建 GitHub Release、上传 R2 并登记新版本，已安装的客户端会收到更新。也可以在 Actions 里手动运行 Release，临时填写其他机场名和 API 出包；勾选 `publish_endpoint` 才会推给现有用户。
+**Release** 工作流会检查、四平台打包、创建 GitHub Release、上传 R2 并登记新版本，已安装的客户端会收到更新。也可以在 Actions 里手动运行 Release，临时填写其他机场名和 API 出包；勾选 `publish_endpoint` 才会推给现有用户（端点只接受同一个 `id`，换 `id` 的包需要单独部署端点）。
 
 - **规则更新**：Actions → Update endpoint → `rules`，或等每周一自动运行，会把最新的 Loyalsoldier/clash-rules 转换后下发。
-- **代码签名**：CI 目前不做 Windows/macOS 代码签名。客户端在这两个平台检测到新版本时会打开下载页，由用户手动安装；Linux 可以在客户端内直接更新。以后接入 Windows 证书或 Apple Developer ID 签名公证，并在打包时设置 `SIGNATURE_IDENTITY`（Windows 为证书 Subject，macOS 为 Team ID），这两个平台也能在客户端内更新。
+- **代码签名**：CI 目前不做 Windows/macOS 代码签名。客户端在这两个平台检测到新版本时会打开下载页，由用户手动安装；Linux 可以在客户端内直接更新。以后接入 Windows 证书或 Apple Developer ID 签名公证后，这两个平台也能在客户端内更新：打包脚本直接从签好的安装包读出证书 Subject / Team ID 写进更新索引，不需要另外填写。
 
 ## 目录
 
