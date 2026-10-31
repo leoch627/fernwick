@@ -9,7 +9,7 @@ const base = JSON.parse(readFileSync('config/development.json', 'utf8')) as Buil
 const key = () => generateKeyPairSync('ed25519').publicKey.export({ type: 'spki', format: 'pem' }).toString();
 const brand = () => ({
   id: 'moon-cloud', name: '月云加速', api: ['https://api.mooncloud.net/', 'https://backup.mooncloud.org'],
-  endpoint: 'https://updates.mooncloud.net', updatePublicKey: key(), policyPublicKey: key(),
+  endpoint: 'https://updates.mooncloud.net', publicKey: key(),
 });
 
 it('builds a valid production configuration from a brand', () => {
@@ -24,6 +24,7 @@ it('builds a valid production configuration from a brand', () => {
   expect(config.trustedWebOrigins).toContain('https://updates.mooncloud.net');
   expect(config.links.website).toBe('https://api.mooncloud.net/');
   expect(config.protocolCapabilities).toHaveLength(5);
+  expect(config.policyKeys).toEqual(config.updateKeys);
 });
 
 it('derives system names from the stable id, not the display name', () => {
@@ -42,10 +43,9 @@ it.each([
   ['plain http api', { api: ['http://api.mooncloud.net'] }],
   ['no api', { api: [] }],
   ['placeholder host', { endpoint: 'https://updates.example.com' }],
-  ['shared signing key', { policyPublicKey: 'same' }],
+  ['not a public key', { publicKey: 'ssh-ed25519 AAAA' }],
   ['unknown field', { extra: true }],
 ])('rejects %s', (_name, change: Record<string, unknown>) => {
   const input: Record<string, unknown> = { ...brand(), ...change };
-  if (change.policyPublicKey === 'same') input.policyPublicKey = input.updatePublicKey;
   expect(() => brandConfig(input, base)).toThrow();
 });

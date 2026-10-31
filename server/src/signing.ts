@@ -9,8 +9,12 @@ export function base64url(bytes: Uint8Array): string {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
+/** One key signs both the release index and the policy; the purpose prefix keeps the two apart. */
+export const KEY_ID = 'key-1';
+const pemBody = (pem: string) => pem.replace(/-----(BEGIN|END) [A-Z ]+-----/g, '').replace(/\s+/g, '');
+
 export async function importSigningKey(pem: string): Promise<CryptoKey> {
-  const body = pem.replace(/-----(BEGIN|END) PRIVATE KEY-----/g, '').replace(/\s+/g, '');
+  const body = pemBody(pem);
   const der = Uint8Array.from(atob(body), c => c.charCodeAt(0));
   return crypto.subtle.importKey('pkcs8', der, { name: 'Ed25519' }, false, ['sign']);
 }
@@ -23,7 +27,13 @@ export async function signEnvelope(key: CryptoKey, keyId: string, purpose: Purpo
   return JSON.stringify(envelope);
 }
 
-/** Constant-time comparison of a presented bearer token against the configured one. */
+/** The /admin bearer token, derived from the signing key so CI and the Worker share no extra secret. */
+export async function adminToken(signingKey: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`v2board-client-admin-v1\n${pemBody(signingKey)}`));
+  return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** Constant-time comparison of a presented bearer token against the expected one. */
 export async function sameSecret(presented: string, expected: string): Promise<boolean> {
   if (!expected) return false;
   const digest = async (value: string) => new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)));

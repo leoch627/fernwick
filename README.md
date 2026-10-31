@@ -32,7 +32,7 @@ cd native/helper && go test ./...
 | `subscriptionOrigins` | 可选，订阅链接域名与 API 不同时填写 |
 | `website` | 可选，官网/续费页，默认主 API 域名 |
 | `endpoint` | 更新端点地址（部署 `server/` 后得到） |
-| `updatePublicKey` / `policyPublicKey` | 两把不同的签名公钥，见下文 |
+| `publicKey` | 签名公钥（`public.pem` 全文），见下文 |
 
 ```sh
 npm run brand -- config/brand.json          # 生成 work/build-config.json
@@ -44,32 +44,23 @@ npm run build && npx electron-builder --config electron-builder.cjs --mac dmg zi
 
 ## 更新端点（Cloudflare Worker + R2）
 
-1. 生成两对密钥（放在仓库之外）：
+整套只需要一把签名密钥：Worker 用它给更新索引和规则策略签名，客户端内置对应公钥校验；CI 调用 Worker 管理接口的令牌也从这把私钥推导，不用另配。
+
+1. 生成密钥，写进 GitHub（私钥只进 Secrets，`~/keys/signing` 留作备份）：
    ```sh
-   npm run policy -- generate-key ~/keys/release
-   npm run policy -- generate-key ~/keys/policy
+   npm run policy -- generate-key ~/keys/signing
+   gh secret set SIGNING_KEY < ~/keys/signing/private.pem
+   gh variable set SIGNING_PUBLIC_KEY < ~/keys/signing/public.pem
    ```
-2. Cloudflare 创建 API Token（权限：Workers Scripts 编辑、Workers R2 Storage 编辑），记下 Account ID。
-3. GitHub 仓库 Settings → Secrets and variables → Actions：
+2. Cloudflare（用托管端点域名的那个账号）：开通 R2；My Profile → API Tokens 用「Edit Cloudflare Workers」模板建 Token，并加上 Account → Workers R2 Storage → Edit。
+   ```sh
+   gh secret set CLOUDFLARE_API_TOKEN --body '<token>'
+   gh secret set CLOUDFLARE_ACCOUNT_ID --body '<account id>'
+   ```
+3. GitHub Variables 填品牌：`BRAND_ID`、`BRAND_NAME`、`BRAND_API_PRIMARY`、`BRAND_API_BACKUP`、`UPDATE_ENDPOINT`，可选 `BRAND_APP_ID`、`BRAND_WEBSITE`、`BRAND_SUBSCRIPTION_ORIGINS`、`R2_BUCKET`（默认 `v2board-client-files`）。
+4. Actions → **Update endpoint** → `deploy`。然后在 Cloudflare 的 Workers & Pages → `v2board-client-updates` → Settings → Domains & Routes 添加 Custom domain（即 `UPDATE_ENDPOINT` 的域名；`workers.dev` 在大陆访问不了）。打开该地址就是下载页。
 
-   | Secrets | 内容 |
-   | --- | --- |
-   | `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` | 上一步 |
-   | `RELEASE_SIGNING_KEY` / `POLICY_SIGNING_KEY` | `~/keys/*/private.pem` 全文 |
-   | `UPDATE_ADMIN_TOKEN` | 任意长随机串（`openssl rand -hex 32`） |
-
-   | Variables | 内容 |
-   | --- | --- |
-   | `BRAND_ID` / `BRAND_NAME` | 同品牌配置 |
-   | `BRAND_API_PRIMARY` / `BRAND_API_BACKUP` | 主备 API |
-   | `BRAND_WEBSITE`、`BRAND_APP_ID`、`BRAND_SUBSCRIPTION_ORIGINS` | 可选 |
-   | `UPDATE_ENDPOINT` | Worker 地址，如 `https://v2board-client-updates.<账号>.workers.dev` 或自定义域名 |
-   | `UPDATE_PUBLIC_KEY` / `POLICY_PUBLIC_KEY` | `~/keys/*/public.pem` 全文 |
-   | `R2_BUCKET` | 可选，默认 `v2board-client-files` |
-
-4. Actions → **Update endpoint** → action 选 `deploy`。之后打开 `UPDATE_ENDPOINT` 就是下载页。
-
-端点接口：`/v1/release`（签名更新索引，每 6 小时重签）、`/v1/policy`（签名策略，携带规则更新）、`/files/...`（支持断点续传）、`/`（下载页）、`/admin/*`（仅 CI 使用，需要 `UPDATE_ADMIN_TOKEN`）。
+端点接口：`/v1/release`（签名更新索引，每 6 小时重签）、`/v1/policy`（签名策略，携带规则更新）、`/files/...`（支持断点续传）、`/`（下载页）、`/admin/*`（仅 CI 使用）。
 
 ## 发布
 

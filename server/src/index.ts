@@ -1,4 +1,4 @@
-import { importSigningKey, sameSecret, signEnvelope } from './signing';
+import { adminToken, importSigningKey, KEY_ID, sameSecret, signEnvelope } from './signing';
 import {
   InputError, nextSequence, parseRelease, parseRules, policyPayload, releaseArtifacts, releasePayload, POLICY_RENEW_MS,
   type Brand, type PolicyState, type ReleaseState,
@@ -15,9 +15,8 @@ export interface R2BucketLike {
 }
 export interface Env {
   FILES: R2BucketLike;
-  /** PKCS#8 PEM private keys; their public halves are the brand's updatePublicKey / policyPublicKey. */
-  RELEASE_SIGNING_KEY: string; POLICY_SIGNING_KEY: string;
-  ADMIN_TOKEN: string;
+  /** PKCS#8 PEM private key; its public half is the brand's publicKey. Also derives the /admin token. */
+  SIGNING_KEY: string;
   /** Public origin clients use, e.g. https://updates.example.net. Defaults to the request origin. */
   PUBLIC_ORIGIN?: string;
 }
@@ -33,7 +32,7 @@ const save = (env: Env, key: string, value: unknown) => env.FILES.put(key, JSON.
 
 async function signRelease(env: Env, brand: Brand, state: Omit<ReleaseState, 'sequence' | 'envelope' | 'signedAt'> & { sequence?: number }, now: number): Promise<ReleaseState> {
   const sequence = nextSequence(state.sequence ?? 0, now);
-  const envelope = await signEnvelope(await importSigningKey(env.RELEASE_SIGNING_KEY), 'release-1', 'v2board-client-release-v1', releasePayload(brand, { ...state, sequence }, now));
+  const envelope = await signEnvelope(await importSigningKey(env.SIGNING_KEY), KEY_ID, 'v2board-client-release-v1', releasePayload(brand, { ...state, sequence }, now));
   const signed: ReleaseState = { ...state, sequence, envelope, signedAt: new Date(now).toISOString() };
   await save(env, STATE.release, signed);
   return signed;
@@ -41,7 +40,7 @@ async function signRelease(env: Env, brand: Brand, state: Omit<ReleaseState, 'se
 async function signPolicy(env: Env, brand: Brand, previous: PolicyState | null, rules: PolicyState['rules'], now: number): Promise<PolicyState> {
   const version = nextSequence(previous?.version ?? 0, now);
   const payload = policyPayload(brand, version, rules, now);
-  const envelope = await signEnvelope(await importSigningKey(env.POLICY_SIGNING_KEY), 'policy-1', 'v2board-client-policy-v1', payload);
+  const envelope = await signEnvelope(await importSigningKey(env.SIGNING_KEY), KEY_ID, 'v2board-client-policy-v1', payload);
   const signed: PolicyState = { version, rules, envelope, signedAt: new Date(now).toISOString(), expiresAt: payload.expiresAt };
   await save(env, STATE.policy, signed);
   return signed;
@@ -83,7 +82,7 @@ async function serveFile(request: Request, env: Env, key: string): Promise<Respo
 
 async function admin(request: Request, env: Env, path: string, origin: string, now: number): Promise<Response> {
   const token = /^Bearer (.+)$/.exec(request.headers.get('authorization') ?? '')?.[1] ?? '';
-  if (!await sameSecret(token, env.ADMIN_TOKEN)) return json({ error: 'unauthorized' }, 401);
+  if (!env.SIGNING_KEY || !await sameSecret(token, await adminToken(env.SIGNING_KEY))) return json({ error: 'unauthorized' }, 401);
   let body: unknown = null;
   if (request.method === 'POST') { try { body = await request.json(); } catch { return json({ error: 'invalid json' }, 400); } }
   try {

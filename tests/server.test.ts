@@ -2,6 +2,7 @@ import { createHash, generateKeyPairSync } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { beforeEach, expect, it } from 'vitest';
 import worker, { renew, type Env, type R2BucketLike } from '../server/src/index';
+import { adminToken } from '../server/src/signing';
 import { brandConfig } from '../tools/brand';
 import { verifyRelease, selectUpdate } from '../src/services/update';
 import { checkWatermark, verifyPolicy } from '../src/services/policy';
@@ -10,9 +11,9 @@ import type { BuildConfig } from '../src/shared/schema';
 
 const base = JSON.parse(readFileSync('config/development.json', 'utf8')) as BuildConfig;
 const pair = () => { const k = generateKeyPairSync('ed25519'); return { private: k.privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(), public: k.publicKey.export({ type: 'spki', format: 'pem' }).toString() }; };
-const releaseKey = pair(), policyKey = pair();
+const signingKey = pair();
 const ORIGIN = 'https://updates.mooncloud.net';
-const build = brandConfig({ id: 'moon-cloud', name: '月云加速', api: ['https://api.mooncloud.net', 'https://backup.mooncloud.org'], endpoint: ORIGIN, updatePublicKey: releaseKey.public, policyPublicKey: policyKey.public }, base);
+const build = brandConfig({ id: 'moon-cloud', name: '月云加速', api: ['https://api.mooncloud.net', 'https://backup.mooncloud.org'], endpoint: ORIGIN, publicKey: signingKey.public }, base);
 // The Worker escapes whatever name it is given; the client build itself forbids markup characters.
 const brand = { productId: build.productId, name: '月云 & <Co>', environment: build.environment, channel: build.channel, endpointIds: build.apiEndpoints.map(e => e.id), links: build.links as { website: string; renew: string; help: string } };
 
@@ -29,7 +30,7 @@ class MemoryBucket implements R2BucketLike {
   async put(key: string, value: string) { this.set(key, value); }
 }
 
-let bucket: MemoryBucket, env: Env;
+let bucket: MemoryBucket, env: Env, token: string;
 const call = (path: string, init: RequestInit & { token?: string } = {}) => worker.fetch(new Request(`${ORIGIN}${path}`, {
   ...init, headers: { ...(init.token !== undefined ? { authorization: `Bearer ${init.token}` } : {}), ...(init.body ? { 'content-type': 'application/json' } : {}), ...init.headers as Record<string, string> },
 }), env);
@@ -45,12 +46,13 @@ const files = [
   file('releases/0.2.0/app-mac-arm64.dmg', 'darwin', 'arm64', 'dmg'),
   file('releases/0.2.0/app-mac-arm64.zip', 'darwin', 'arm64', 'zip'),
 ];
-const publish = (body: unknown = { brand, version: '0.2.0', files }, token = 'admin-secret') => call('/admin/release', { method: 'POST', token, body: JSON.stringify(body) });
+const publish = (body: unknown = { brand, version: '0.2.0', files }, bearer = token) => call('/admin/release', { method: 'POST', token: bearer, body: JSON.stringify(body) });
 
-beforeEach(() => {
+beforeEach(async () => {
   bucket = new MemoryBucket();
   for (const f of files) bucket.set(f.key, installer);
-  env = { FILES: bucket, RELEASE_SIGNING_KEY: releaseKey.private, POLICY_SIGNING_KEY: policyKey.private, ADMIN_TOKEN: 'admin-secret' };
+  env = { FILES: bucket, SIGNING_KEY: signingKey.private };
+  token = await adminToken(signingKey.private);
 });
 
 it('publishes a release index the client verifies and selects from', async () => {
@@ -67,7 +69,7 @@ it('publishes a release index the client verifies and selects from', async () =>
 });
 
 it('serves a policy the client accepts, and carries rule updates', async () => {
-  expect((await call('/admin/rules', { method: 'POST', token: 'admin-secret', body: JSON.stringify({ key: 'rules/x/rules.json', sha256: 'a'.repeat(64), bytes: 1 }) })).status).toBe(400);
+  expect((await call('/admin/rules', { method: 'POST', token, body: JSON.stringify({ key: 'rules/x/rules.json', sha256: 'a'.repeat(64), bytes: 1 }) })).status).toBe(400);
   await publish();
   const first = verifyPolicy(await (await call('/v1/policy')).text(), build, null, Date.now());
   expect(first.policy.routing.resource).toBeNull();
@@ -75,7 +77,7 @@ it('serves a policy the client accepts, and carries rule updates', async () => {
 
   const rules = new TextEncoder().encode(JSON.stringify({ schemaVersion: 1, directDomains: ['cn'], proxyDomains: [], blockedDomains: [], directIPs: ['1.0.1.0/24'] }));
   bucket.set('rules/20261031/rules.json', rules);
-  const response = await call('/admin/rules', { method: 'POST', token: 'admin-secret', body: JSON.stringify({ key: 'rules/20261031/rules.json', sha256: sha(rules), bytes: rules.length }) });
+  const response = await call('/admin/rules', { method: 'POST', token, body: JSON.stringify({ key: 'rules/20261031/rules.json', sha256: sha(rules), bytes: rules.length }) });
   expect(response.status).toBe(200);
   const second = verifyPolicy(await (await call('/v1/policy')).text(), build, first.watermark, Date.now());
   const resource = second.policy.routing.resource!;
@@ -95,6 +97,14 @@ it('re-signs with increasing sequences the client accepts as newer', async () =>
   // A fresh policy is not re-signed until it nears expiry; rule descriptors stay stable.
   expect((await renew(env, Date.now() + 3600_000)).policy).toBe(false);
   expect((await renew(env, Date.now() + 30 * 3600_000)).policy).toBe(true);
+});
+
+it('derives the admin token from the signing key, independent of PEM line wrapping', async () => {
+  expect(token).toMatch(/^[a-f0-9]{64}$/);
+  expect(await adminToken(signingKey.private.replace(/\n/g, '\r\n'))).toBe(token);
+  expect(await adminToken(pair().private)).not.toBe(token);
+  expect((await call('/admin/status', { token: await adminToken(pair().private) })).status).toBe(401);
+  expect((await call('/admin/status', { token })).status).toBe(200);
 });
 
 it('rejects unauthenticated and inconsistent publishing', async () => {

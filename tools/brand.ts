@@ -24,7 +24,7 @@ export const BrandSchema = z.object({
   subscriptionOrigins: z.array(https).max(8).default([]),
   website: https.optional(), renew: https.optional(), help: https.optional(),
   endpoint: https,
-  updatePublicKey: pem, policyPublicKey: pem,
+  publicKey: pem,
 }).strict();
 export type Brand = z.infer<typeof BrandSchema>;
 
@@ -46,7 +46,8 @@ export function brandConfig(input: unknown, base: Pick<BuildConfig, 'healthTarge
     trustedResourceOrigins: [endpoint], trustedUpdateOrigins: [endpoint],
     policyUrls: [`${endpoint}/v1/policy`], updateFeedUrls: [`${endpoint}/v1/release`],
     links: { website, renew: brand.renew ?? website, help: brand.help ?? website },
-    policyKeys: { 'policy-1': brand.policyPublicKey }, updateKeys: { 'release-1': brand.updatePublicKey },
+    // One key signs both; the purpose prefix in each signature keeps policy and release index apart.
+    policyKeys: { 'key-1': brand.publicKey }, updateKeys: { 'key-1': brand.publicKey },
     protocolCapabilities: ['vless-tls', 'vless-reality', 'vmess-ws-tls', 'trojan-tls', 'shadowsocks-aead'],
     nodeCapabilitiesConfirmed: true, allowUnverifiedNodeTrials: false,
     healthTargets: base.healthTargets, hardLimits: base.hardLimits,
@@ -61,7 +62,7 @@ function fromEnvironment(env: NodeJS.ProcessEnv) {
     api: [...list(env.BRAND_API_PRIMARY), ...list(env.BRAND_API_BACKUP)],
     subscriptionOrigins: list(env.BRAND_SUBSCRIPTION_ORIGINS),
     website: optional(env.BRAND_WEBSITE), endpoint: env.BRAND_ENDPOINT,
-    updatePublicKey: env.BRAND_UPDATE_PUBLIC_KEY, policyPublicKey: env.BRAND_POLICY_PUBLIC_KEY,
+    publicKey: env.BRAND_PUBLIC_KEY,
   };
 }
 

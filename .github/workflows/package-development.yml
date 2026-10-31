@@ -1,6 +1,6 @@
 name: Build installers
 # Manual runs build the development configuration unless "production" is ticked.
-# Production builds take the brand from repository variables (BRAND_*, UPDATE_ENDPOINT, *_PUBLIC_KEY);
+# Production builds take the brand from repository variables (BRAND_*, UPDATE_ENDPOINT, SIGNING_PUBLIC_KEY);
 # any input below overrides the matching variable. See README "发布".
 on:
   workflow_dispatch:
@@ -72,8 +72,7 @@ jobs:
           BRAND_WEBSITE: ${{ inputs.website || vars.BRAND_WEBSITE }}
           BRAND_SUBSCRIPTION_ORIGINS: ${{ vars.BRAND_SUBSCRIPTION_ORIGINS }}
           BRAND_ENDPOINT: ${{ vars.UPDATE_ENDPOINT }}
-          BRAND_UPDATE_PUBLIC_KEY: ${{ vars.UPDATE_PUBLIC_KEY }}
-          BRAND_POLICY_PUBLIC_KEY: ${{ vars.POLICY_PUBLIC_KEY }}
+          BRAND_PUBLIC_KEY: ${{ vars.SIGNING_PUBLIC_KEY }}
         run: |
           npm run brand -- --out work/build-config.json
           echo "STARRAIL_BUILD_CONFIG=work/build-config.json" >> "$GITHUB_ENV"

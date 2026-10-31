@@ -1,5 +1,5 @@
 name: Update endpoint
-# deploy: create the R2 bucket if needed, deploy server/ and install its secrets from GitHub Secrets.
+# deploy: create the R2 bucket if needed, deploy server/ and install SIGNING_KEY from GitHub Secrets.
 # rules:  convert the latest Loyalsoldier/clash-rules data and publish it as a remote rule update (also weekly).
 on:
   workflow_dispatch:
@@ -32,17 +32,13 @@ jobs:
           args=(--var "PUBLIC_ORIGIN:${{ vars.UPDATE_ENDPOINT }}")
           if [ "$BUCKET" != v2board-client-files ]; then sed -i "s/\"v2board-client-files\"/\"$BUCKET\"/" wrangler.jsonc; fi
           $WRANGLER deploy "${args[@]}"
-      - name: Secrets
+      - name: Signing key
         working-directory: server
         env:
-          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
-          POLICY_SIGNING_KEY: ${{ secrets.POLICY_SIGNING_KEY }}
-          ADMIN_TOKEN: ${{ secrets.UPDATE_ADMIN_TOKEN }}
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
         run: |
-          for name in RELEASE_SIGNING_KEY POLICY_SIGNING_KEY ADMIN_TOKEN; do
-            if [ -z "${!name}" ]; then echo "::error::GitHub secret for $name is missing"; exit 1; fi
-            printf '%s' "${!name}" | $WRANGLER secret put "$name"
-          done
+          if [ -z "$SIGNING_KEY" ]; then echo "::error::GitHub secret SIGNING_KEY is missing"; exit 1; fi
+          printf '%s' "$SIGNING_KEY" | $WRANGLER secret put SIGNING_KEY
   rules:
     if: (github.event_name == 'schedule' && vars.UPDATE_ENDPOINT != '') || (github.event_name == 'workflow_dispatch' && inputs.action == 'rules')
     runs-on: ubuntu-24.04
@@ -63,9 +59,10 @@ jobs:
           echo "BYTES=$(stat -c %s rules.json)" >> "$GITHUB_ENV"
       - name: Publish
         env:
-          ADMIN_TOKEN: ${{ secrets.UPDATE_ADMIN_TOKEN }}
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
           ENDPOINT: ${{ vars.UPDATE_ENDPOINT }}
         run: |
+          ADMIN_TOKEN=$(node --no-warnings --input-type=module -e "const { adminToken } = await import('./server/src/signing.ts'); process.stdout.write(await adminToken(process.env.SIGNING_KEY))")
           key="rules/${SHA:0:16}/rules.json"
           $WRANGLER r2 object put "$BUCKET/$key" --file rules.json --content-type application/json --remote
           curl --fail-with-body -sS -X POST "${ENDPOINT%/}/admin/rules" \

@@ -8,6 +8,6 @@
   // Re-sign the update index (24 h validity) and renew the policy when it nears expiry.
   "triggers": { "crons": ["17 */6 * * *"] },
   "observability": { "enabled": true }
-  // Secrets (wrangler secret put): RELEASE_SIGNING_KEY, POLICY_SIGNING_KEY, ADMIN_TOKEN.
+  // Secret (wrangler secret put): SIGNING_KEY, the PKCS#8 private key. The /admin token is derived from it.
   // Optional var PUBLIC_ORIGIN when serving through a custom domain, e.g. "https://updates.example.net".
 }

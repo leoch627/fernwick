@@ -39,7 +39,6 @@ export function validateBuild(input: unknown): BuildConfig {
       const host = httpsUrl(raw).hostname;
       assert(!/(^|\.)(example\.(com|org|net)|localhost|invalid|test)$/.test(host) && !host.endsWith('.example') && !host.endsWith('.invalid'), 'CONFIGURATION_REQUIRED');
     }
-    const policy = new Set(Object.values(config.policyKeys)); assert(Object.values(config.updateKeys).every(k => !policy.has(k)), 'CONFIGURATION_REQUIRED');
   }
   return config;
 }

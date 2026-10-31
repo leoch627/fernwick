@@ -54,6 +54,9 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
       - uses: actions/download-artifact@v4
         with:
           pattern: installers-*
@@ -94,17 +97,18 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          ADMIN_TOKEN: ${{ secrets.UPDATE_ADMIN_TOKEN }}
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
           ENDPOINT: ${{ vars.UPDATE_ENDPOINT }}
           BUCKET: ${{ vars.R2_BUCKET || 'v2board-client-files' }}
         run: |
-          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$ADMIN_TOKEN" ] || [ -z "$ENDPOINT" ]; then
-            echo "::warning::Update endpoint not configured (CLOUDFLARE_API_TOKEN, UPDATE_ADMIN_TOKEN, vars.UPDATE_ENDPOINT); skipped."
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$SIGNING_KEY" ] || [ -z "$ENDPOINT" ]; then
+            echo "::warning::Update endpoint not configured (secrets CLOUDFLARE_API_TOKEN, SIGNING_KEY, vars.UPDATE_ENDPOINT); skipped."
             exit 0
           fi
           for f in release/*.exe release/*.dmg release/*.zip release/*.deb; do
             npx --yes wrangler@4.151.1 r2 object put "$BUCKET/releases/$VERSION/$(basename "$f")" --file "$f" --remote
           done
           node tools/release-assets.mjs payload "$VERSION" > payload.json
+          ADMIN_TOKEN=$(node --no-warnings --input-type=module -e "const { adminToken } = await import('./server/src/signing.ts'); process.stdout.write(await adminToken(process.env.SIGNING_KEY))")
           curl --fail-with-body -sS -X POST "${ENDPOINT%/}/admin/release" \
             -H "Authorization: Bearer $ADMIN_TOKEN" -H 'Content-Type: application/json' --data-binary @payload.json

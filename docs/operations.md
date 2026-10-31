@@ -22,19 +22,18 @@ Ed25519 签名覆盖用途前缀、换行和原始 UTF-8 JSON bytes：
 
 信封字段为 `keyId`、无 padding base64url `payload`、`signature`。签名不对 JSON 重新序列化。拒绝重复 key、不安全整数、未知字段、错误环境/渠道、过期、降序号、同序号不同字节以及包外来源。
 
-在受控发布环境生成独立的策略和更新密钥，目录放在仓库之外，私钥权限 0600：
+一把 Ed25519 密钥同时签策略和发布索引（签名带用途前缀，两者不能互相冒充）。正常发布由 `server/` 自动签名，下面的命令只用于手工签名排查。密钥目录放在仓库之外，私钥权限 0600：
 
 ```sh
-npm run policy -- generate-key /secure/policy-key
-npm run policy -- generate-key /secure/release-key
+npm run policy -- generate-key /secure/signing
 ```
 
 客户端仅写入公钥。不要将签名私钥、平台证书或真实凭据提交仓库、测试夹具、安装包或普通日志。
 
 ```sh
-STARRAIL_SIGNING_KEY_ID=policy-key-1 npm run policy -- sign policy payload.json /secure/policy-key/private.pem envelope.json
+STARRAIL_SIGNING_KEY_ID=key-1 npm run policy -- sign policy payload.json /secure/signing/private.pem envelope.json
 npm run policy -- verify policy envelope.json config/your-build.json
-STARRAIL_SIGNING_KEY_ID=release-key-1 npm run policy -- sign release index.json /secure/release-key/private.pem signed-index.json
+STARRAIL_SIGNING_KEY_ID=key-1 npm run policy -- sign release index.json /secure/signing/private.pem signed-index.json
 npm run policy -- verify release signed-index.json config/your-build.json
 ```
 
