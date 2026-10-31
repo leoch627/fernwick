@@ -23,4 +23,4 @@ async function main() {
   await mkdir('dist/rules', { recursive: true }); await copyFile('resources/rules/baseline.json', 'dist/rules/baseline.json');
   console.log(`Built ${config.name} (${config.environment}); platform support is governed by support-matrix.json.`);
 }
-void main().catch(() => { console.error('Build failed. Check configuration, dependencies and required assets.'); process.exitCode = 1; });
+void main().catch(error => { console.error(`Build failed: ${error instanceof Error ? error.message : String(error)}`); process.exitCode = 1; });
