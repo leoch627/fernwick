@@ -1,0 +1,32 @@
+{
+  "date": "2026-10-31",
+  "request": "Implement functionality; do not run tests",
+  "typescript": "compiled",
+  "electronRenderer": "built",
+  "goVersion": "1.27.3",
+  "nativeBuildId": "03490dee10a832ce5bd266d58b8cf516c6c172a92a6c1df1770028cf82684f23",
+  "nativeTargets": [
+    "linux-x64",
+    "win32-x64",
+    "darwin-x64",
+    "darwin-arm64"
+  ],
+  "packages": [
+    {
+      "file": "release/linux/StarRail Network Dev-0.1.0-linux-amd64.deb",
+      "bytes": 117863764,
+      "sha256": "9955782aee330c5c82f5c3458608048220997651b7f6afdaab78c8cf81b67680",
+      "runtimeTested": false,
+      "productionSigned": false
+    },
+    {
+      "file": "release/windows/StarRail Network Dev-0.1.0-win-x64.exe",
+      "bytes": 136477959,
+      "sha256": "d6408f99d55af161fc4d6533dc54d23f7da963eb20e98bffd5b1c72aa5cda8ee",
+      "runtimeTested": false,
+      "productionSigned": false
+    }
+  ],
+  "runtimeTestsThisRevision": "not run at user request",
+  "networkRecovery": "Monotonic transaction deadline, reserved guard removal budget and cleanup-only retries implemented; runtime tests deferred"
+}

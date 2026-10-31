@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "directDomains": {
+      "maxItems": 200000,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 253
+      }
+    },
+    "directFullDomains": {
+      "maxItems": 200000,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 253
+      }
+    },
+    "proxyDomains": {
+      "maxItems": 100000,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 253
+      }
+    },
+    "blockedDomains": {
+      "maxItems": 100000,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 253
+      }
+    },
+    "directIPs": {
+      "maxItems": 100000,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 64
+      }
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "directDomains",
+    "proxyDomains",
+    "blockedDomains",
+    "directIPs"
+  ],
+  "additionalProperties": false
+}

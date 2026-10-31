@@ -1,0 +1,30 @@
+import { _electron as electron } from 'playwright-core';
+import { mkdir, readFile } from 'node:fs/promises';
+import assert from 'node:assert/strict';
+import { resolve, dirname, join } from 'node:path';
+import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+await mkdir('work/packaged-profile', { recursive: true });
+const executablePath = resolve(process.argv[2] ?? 'release/linux-unpacked/starrail-network-dev');
+const resourceRoot = join(dirname(executablePath), 'resources');
+const coreLock = JSON.parse(await readFile(join(resourceRoot, 'core-lock.json'), 'utf8'));
+const pinned = coreLock.assets.find(a => a.target === 'linux-x64');
+const corePath = join(resourceRoot, 'native/linux-x64', pinned.executable);
+assert.equal(createHash('sha256').update(await readFile(corePath)).digest('hex'), pinned.executableSha256);
+assert.equal(createHash('sha256').update(await readFile(join(resourceRoot, 'native/linux-x64/LICENSE'))).digest('hex'), pinned.licenseSha256);
+assert(execFileSync(corePath, ['version'], { env: { LANG: 'C' }, timeout: 3000 }).toString().includes(coreLock.version));
+const ruleManifest = JSON.parse(await readFile(join(resourceRoot, 'rules/manifest.json'), 'utf8'));
+for (const [file, digest] of Object.entries(ruleManifest.files)) assert.equal(createHash('sha256').update(await readFile(join(resourceRoot, 'rules', file))).digest('hex'), digest);
+assert((await readFile(join(resourceRoot, 'rules/import-rules.py'), 'utf8')).includes('SPDX-License-Identifier: GPL-3.0-only'));
+const application = await electron.launch({ executablePath, args: ['--demo', '--no-sandbox', '--ozone-platform=headless'], env: { ...process.env, TZ: 'Asia/Tokyo', STARRAIL_DEV_UI: '1', XDG_CONFIG_HOME: `${process.cwd()}/work/packaged-profile`, XDG_CACHE_HOME: `${process.cwd()}/work/packaged-cache` } });
+try {
+  const page = await application.firstWindow();
+  await page.getByRole('heading', { name: '欢迎来到 StarRail' }).waitFor();
+  const result = await page.evaluate(() => window.starrail.command({ type: 'state' }));
+  assert.equal(result.state.demo, false); assert.equal(result.state.loggedIn, false);
+  assert.equal(result.state.rules, '使用内置大陆分流规则'); assert.equal(result.state.download.status, 'idle');
+  assert.equal(page.url().startsWith('file://'), true);
+  assert.equal(await page.evaluate(() => typeof window.require), 'undefined');
+  await page.screenshot({ path: 'work/packaged-login.png' });
+  console.log('Packaged Electron smoke passed: core/version/license hashes, bundled rules/source/license hashes, local ASAR renderer, IPC, no Node in renderer, demo/dev-URL overrides refused. No live login or TUN test performed.');
+} finally { await application.close(); }

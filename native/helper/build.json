@@ -1,0 +1,49 @@
+{
+  "productId": "starrail-network-test",
+  "environment": "test",
+  "channel": "test",
+  "version": "0.1.0",
+  "coreVersion": "26.10.29",
+  "coreHashes": {
+    "linux-x64": "e783b9d2b46ed1ab3617c59b04dfbce38c999322d018c6e060f18d88bf6158aa",
+    "darwin-x64": "634d016f75de7ab736cf9003fc2964153cff3f3bde5b8a6c7b76f99f39989937",
+    "darwin-arm64": "2d4bfa91aae5f90dee691cb5eb794316510c7f6006973eb46e60d7978bb789aa",
+    "win32-x64": "07a332b714a3c0eee047a22a9c0ea749b64df33e4e1ff6d28a8c7f9ef943ce10"
+  },
+  "controlOrigins": [
+    "https://api.starrail.work",
+    "https://host.leiterup.de"
+  ],
+  "controlHosts": [
+    "api.starrail.work",
+    "host.leiterup.de"
+  ],
+  "healthTargets": [
+    {
+      "url": "https://cp.cloudflare.com/generate_204",
+      "status": 204,
+      "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "failureDomain": "cloudflare"
+    },
+    {
+      "url": "https://www.gstatic.com/generate_204",
+      "status": 204,
+      "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "failureDomain": "google"
+    }
+  ],
+  "updateKeys": {},
+  "trustedUpdateOrigins": [],
+  "appExecutableName": "starrail-network-dev",
+  "appExecutableNames": {
+    "linux-x64": "starrail-network-dev",
+    "win32-x64": "StarRail Network Dev.exe",
+    "darwin-x64": "StarRail Network Dev",
+    "darwin-arm64": "StarRail Network Dev"
+  },
+  "nativeHashes": {
+    "wintun.dll": "e5da8447dc2c320edc0fc52fa01885c103de8c118481f683643cacc3220dafce",
+    "LICENSE-Wintun": "183adac21e7d96c508c8fd34d394b7b6708bc81564ad1bad61ab66143a008cd2"
+  },
+  "buildId": "03490dee10a832ce5bd266d58b8cf516c6c172a92a6c1df1770028cf82684f23"
+}

@@ -1,0 +1,312 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "number",
+      "const": 2
+    },
+    "productId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "appId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "environment": {
+      "type": "string",
+      "enum": [
+        "test",
+        "production"
+      ]
+    },
+    "channel": {
+      "type": "string",
+      "enum": [
+        "test",
+        "stable"
+      ]
+    },
+    "tenantId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "adapterId": {
+      "type": "string",
+      "const": "v2board-explicit-v1"
+    },
+    "deploymentVerified": {
+      "type": "boolean"
+    },
+    "subscriptionFormatId": {
+      "type": "string",
+      "const": "v2ray-uri-base64-v1"
+    },
+    "apiEndpoints": {
+      "maxItems": 8,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "baseUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "priority": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "id",
+          "baseUrl",
+          "priority"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "trustedSubscriptionOrigins": {
+      "maxItems": 16,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uri"
+      }
+    },
+    "trustedWebOrigins": {
+      "maxItems": 16,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uri"
+      }
+    },
+    "trustedResourceOrigins": {
+      "maxItems": 16,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uri"
+      }
+    },
+    "policyUrls": {
+      "maxItems": 8,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uri"
+      }
+    },
+    "updateFeedUrls": {
+      "maxItems": 8,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uri"
+      }
+    },
+    "trustedUpdateOrigins": {
+      "maxItems": 16,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uri"
+      }
+    },
+    "links": {
+      "type": "object",
+      "properties": {
+        "website": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uri"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "renew": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uri"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "help": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uri"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "website",
+        "renew",
+        "help"
+      ],
+      "additionalProperties": false
+    },
+    "policyKeys": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "maxLength": 2048
+      }
+    },
+    "updateKeys": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "maxLength": 2048
+      }
+    },
+    "protocolCapabilities": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "vless-tls",
+          "vless-reality",
+          "vmess-ws-tls",
+          "trojan-tls",
+          "shadowsocks-aead"
+        ]
+      }
+    },
+    "nodeCapabilitiesConfirmed": {
+      "type": "boolean"
+    },
+    "allowUnverifiedNodeTrials": {
+      "default": false,
+      "type": "boolean"
+    },
+    "healthTargets": {
+      "default": [],
+      "maxItems": 3,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "status": {
+            "type": "integer",
+            "minimum": 200,
+            "maximum": 299
+          },
+          "bodySha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "failureDomain": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "required": [
+          "url",
+          "status",
+          "bodySha256",
+          "failureDomain"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "hardLimits": {
+      "type": "object",
+      "properties": {
+        "startupNetworkBudgetSec": {
+          "type": "number",
+          "const": 20
+        },
+        "networkTransactionSec": {
+          "type": "number",
+          "const": 15
+        },
+        "maxSnapshotAgeSec": {
+          "type": "number",
+          "const": 86400
+        },
+        "subscriptionDecodedMaxBytes": {
+          "type": "number",
+          "const": 10485760
+        },
+        "subscriptionMaxNodes": {
+          "type": "number",
+          "const": 5000
+        }
+      },
+      "required": [
+        "startupNetworkBudgetSec",
+        "networkTransactionSec",
+        "maxSnapshotAgeSec",
+        "subscriptionDecodedMaxBytes",
+        "subscriptionMaxNodes"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "productId",
+    "appId",
+    "name",
+    "environment",
+    "channel",
+    "tenantId",
+    "adapterId",
+    "deploymentVerified",
+    "subscriptionFormatId",
+    "apiEndpoints",
+    "trustedSubscriptionOrigins",
+    "trustedWebOrigins",
+    "trustedResourceOrigins",
+    "policyUrls",
+    "updateFeedUrls",
+    "trustedUpdateOrigins",
+    "links",
+    "policyKeys",
+    "updateKeys",
+    "protocolCapabilities",
+    "nodeCapabilitiesConfirmed",
+    "allowUnverifiedNodeTrials",
+    "healthTargets",
+    "hardLimits"
+  ],
+  "additionalProperties": false
+}

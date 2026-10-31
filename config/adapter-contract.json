@@ -1,0 +1,25 @@
+{
+  "verified": true,
+  "deployment": "StarRail Network — 仓库合同已核对，线上部署仍待验收",
+  "branchCommit": "cfabf395644b68c318751439e8510093cd3aaeb2",
+  "loginPath": "/api/v1/passport/auth/login",
+  "accountPath": "/api/v1/user/info",
+  "descriptorPath": "/api/v1/user/getSubscribe",
+  "authPrefix": "",
+  "expiryUnit": "seconds",
+  "activePlanAuthorizesService": true,
+  "nullExpiryIsUnlimited": true,
+  "zeroQuotaIsUnlimited": false,
+  "fields": {
+    "accountId": "email",
+    "email": "email",
+    "banned": "banned",
+    "planId": "plan_id",
+    "expires": "expired_at",
+    "quota": "transfer_enable",
+    "upload": "u",
+    "download": "d",
+    "subscriptionUrl": "subscribe_url"
+  },
+  "logoutPath": "/api/v1/user/removeActiveSession"
+}

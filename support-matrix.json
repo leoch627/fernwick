@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "appVersion": "0.1.0",
+  "targets": [
+    {
+      "id": "win32-x64",
+      "os": "Windows 11",
+      "formats": [
+        "nsis"
+      ],
+      "status": "pending-user-test",
+      "evidence": [],
+      "missing": [
+        "user runtime acceptance: TUN/DNS/UDP/IPv6",
+        "user installation/update/recovery/uninstall acceptance",
+        "production signing and distribution configuration",
+        "soak testing deferred by user"
+      ],
+      "implementation": "implemented",
+      "nativeBuild": "compiled",
+      "installerBuild": "built-development-package"
+    },
+    {
+      "id": "darwin-arm64",
+      "os": "macOS 14+ (actual version TBD)",
+      "formats": [
+        "dmg",
+        "zip"
+      ],
+      "status": "pending-user-test",
+      "evidence": [],
+      "missing": [
+        "user runtime acceptance: TUN/DNS/UDP/IPv6",
+        "user installation/update/recovery/uninstall acceptance",
+        "production signing and distribution configuration",
+        "soak testing deferred by user"
+      ],
+      "implementation": "implemented",
+      "nativeBuild": "compiled",
+      "installerBuild": "requires-macos-build-host"
+    },
+    {
+      "id": "darwin-x64",
+      "os": "macOS 14+ (actual version TBD)",
+      "formats": [
+        "dmg",
+        "zip"
+      ],
+      "status": "pending-user-test",
+      "evidence": [],
+      "missing": [
+        "user runtime acceptance: TUN/DNS/UDP/IPv6",
+        "user installation/update/recovery/uninstall acceptance",
+        "production signing and distribution configuration",
+        "soak testing deferred by user"
+      ],
+      "implementation": "implemented",
+      "nativeBuild": "compiled",
+      "installerBuild": "requires-macos-build-host"
+    },
+    {
+      "id": "linux-x64",
+      "os": "Ubuntu 24.04 LTS GNOME",
+      "formats": [
+        "deb"
+      ],
+      "status": "pending-user-test",
+      "evidence": [],
+      "missing": [
+        "user runtime acceptance: TUN/DNS/UDP/IPv6",
+        "user installation/update/recovery/uninstall acceptance",
+        "production signing and distribution configuration",
+        "soak testing deferred by user"
+      ],
+      "implementation": "implemented",
+      "nativeBuild": "compiled",
+      "installerBuild": "built-development-package"
+    }
+  ]
+}

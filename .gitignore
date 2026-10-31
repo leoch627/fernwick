@@ -1,0 +1,14 @@
+node_modules/
+dist/
+release/
+work/
+coverage/
+__pycache__/
+*.log
+*.pem
+*.p12
+*.pfx
+*.key
+.env*
+!.env.example
+resources/native/

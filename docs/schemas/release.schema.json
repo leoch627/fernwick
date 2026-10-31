@@ -1,0 +1,166 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "productId": {
+      "type": "string"
+    },
+    "environment": {
+      "type": "string",
+      "enum": [
+        "test",
+        "production"
+      ]
+    },
+    "channel": {
+      "type": "string",
+      "enum": [
+        "test",
+        "stable"
+      ]
+    },
+    "issuedAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+    },
+    "expiresAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+    },
+    "releaseSequence": {
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991
+    },
+    "artifacts": {
+      "maxItems": 32,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9._-]{1,160}$"
+          },
+          "version": {
+            "type": "string"
+          },
+          "platform": {
+            "type": "string",
+            "enum": [
+              "win32",
+              "darwin",
+              "linux"
+            ]
+          },
+          "arch": {
+            "type": "string",
+            "enum": [
+              "x64",
+              "arm64"
+            ]
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "nsis",
+              "dmg",
+              "zip",
+              "deb"
+            ]
+          },
+          "minimumOS": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "bytes": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 2147483648
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "unpackedBytes": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "backupBytes": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "coreVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "coreSha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "helperProtocol": {
+            "type": "number",
+            "const": 1
+          },
+          "signatureIdentity": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "platform",
+          "arch",
+          "format",
+          "minimumOS",
+          "url",
+          "bytes",
+          "sha256",
+          "unpackedBytes",
+          "backupBytes",
+          "coreVersion",
+          "coreSha256",
+          "helperProtocol",
+          "signatureIdentity"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "withdrawnIds": {
+      "maxItems": 1024,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 160
+      }
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "productId",
+    "environment",
+    "channel",
+    "issuedAt",
+    "expiresAt",
+    "releaseSequence",
+    "artifacts",
+    "withdrawnIds"
+  ],
+  "additionalProperties": false
+}
