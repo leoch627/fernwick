@@ -263,8 +263,11 @@ func writeJournal(j *Journal) error {
 	return atomicJSON(filepath.Join(stateRoot(), "network.json"), j)
 }
 func loadJournal() (*Journal, error) {
+	return readJournal(filepath.Join(stateRoot(), "network.json"))
+}
+func readJournal(path string) (*Journal, error) {
 	var j Journal
-	e := readJSON(filepath.Join(stateRoot(), "network.json"), &j)
+	e := readJSON(path, &j)
 	if os.IsNotExist(e) {
 		return nil, nil
 	}
