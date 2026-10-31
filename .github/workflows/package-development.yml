@@ -1,5 +1,7 @@
 name: Build development installers (no runtime tests)
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+  workflow_call:
 permissions:
   contents: read
 jobs:
@@ -21,6 +23,9 @@ jobs:
             target: darwin-x64
             package: --mac dmg zip --x64
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -31,16 +36,21 @@ jobs:
         with:
           go-version: '1.27.3'
           cache-dependency-path: native/helper/go.sum
+      # Hosted Windows images have no python3 on PATH; setup-python provides `python` everywhere.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
       - run: npm ci
-      - run: python3 tools/fetch-core.py ${{ matrix.target }}
-      - run: python3 tools/build-native.py --target ${{ matrix.target }}
+      - run: python tools/fetch-core.py ${{ matrix.target }}
+      - run: python tools/build-native.py --target ${{ matrix.target }}
       - run: npm run build
-      - run: npx electron-builder --config electron-builder.cjs ${{ matrix.package }}
+      - run: npx electron-builder --config electron-builder.cjs ${{ matrix.package }} --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
       - uses: actions/upload-artifact@v4
         with:
           name: starrail-development-${{ matrix.target }}
+          if-no-files-found: error
           path: |
             release/*.exe
             release/*.dmg

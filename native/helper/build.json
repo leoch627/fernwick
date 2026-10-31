@@ -3,12 +3,12 @@
   "environment": "test",
   "channel": "test",
   "version": "0.1.0",
-  "coreVersion": "26.10.29",
+  "coreVersion": "26.10.31",
   "coreHashes": {
-    "linux-x64": "e783b9d2b46ed1ab3617c59b04dfbce38c999322d018c6e060f18d88bf6158aa",
-    "darwin-x64": "634d016f75de7ab736cf9003fc2964153cff3f3bde5b8a6c7b76f99f39989937",
-    "darwin-arm64": "2d4bfa91aae5f90dee691cb5eb794316510c7f6006973eb46e60d7978bb789aa",
-    "win32-x64": "07a332b714a3c0eee047a22a9c0ea749b64df33e4e1ff6d28a8c7f9ef943ce10"
+    "linux-x64": "cc4b84d3069569f297a61f04b914f2bb37e9d202fd7b84cb50def1fc30fd40e1",
+    "darwin-x64": "2793e1aee9ec202df2a4e65dde7149f2dd3e092b0a595b594be1fb942a6e8db0",
+    "darwin-arm64": "9ddc3b0d912a8539285918e4fead4b60bbc449acdb639450ba068bc7efb983b7",
+    "win32-x64": "d5b558191cccb1e92a5772b68b8cab67717b26f634b0f15153215f65ae982a7e"
   },
   "controlOrigins": [
     "https://api.starrail.work",
@@ -45,5 +45,5 @@
     "wintun.dll": "e5da8447dc2c320edc0fc52fa01885c103de8c118481f683643cacc3220dafce",
     "LICENSE-Wintun": "183adac21e7d96c508c8fd34d394b7b6708bc81564ad1bad61ab66143a008cd2"
   },
-  "buildId": "03490dee10a832ce5bd266d58b8cf516c6c172a92a6c1df1770028cf82684f23"
+  "buildId": "c2b0b80cd1c515c47291fecb6fc252d4933239c11acbbdf69158391969a429b3"
 }

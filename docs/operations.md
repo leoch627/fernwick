@@ -68,4 +68,4 @@ Windows 可在 PowerShell 中先设置 `$env:STARRAIL_SIGNING_KEY_ID`。命令�
 
 ## 第三方许可
 
-运行 `npm ci` 后锁文件确定依赖版本。Electron MIT、React MIT、Zod MIT、semver ISC，开发构建工具各有自己的许可。Xray-core 26.10.29 为 MPL-2.0，开发包包含对应目标未经修改的上游二进制；来源、归档及可执行文件 SHA-256 固定在 resources/core-lock.json，许可和对应源码链接随包分发。大陆规则数据及独立转换脚本单独以 GPL-3.0 分发，原始数据、许可证、修改日期和可复现脚本随源码与二进制包附带。真实发布前仍须补齐 helper、平台组件及实际依赖库存的告知与来源。见 `THIRD_PARTY_NOTICES.md`。
+运行 `npm ci` 后锁文件确定依赖版本。Electron MIT、React MIT、Zod MIT、semver ISC，开发构建工具各有自己的许可。Xray-core 26.10.31 为 MPL-2.0，开发包包含对应目标未经修改的上游二进制；来源、归档及可执行文件 SHA-256 固定在 resources/core-lock.json，许可和对应源码链接随包分发。大陆规则数据及独立转换脚本单独以 GPL-3.0 分发，原始数据、许可证、修改日期和可复现脚本随源码与二进制包附带。真实发布前仍须补齐 helper、平台组件及实际依赖库存的告知与来源。见 `THIRD_PARTY_NOTICES.md`。

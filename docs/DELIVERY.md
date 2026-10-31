@@ -6,7 +6,7 @@
 
 - 登录、套餐/到期/流量展示、主备 API、订阅同步、缓存授权、节点选择、规则/全局、通知、设置、系统浏览器续费及本地诊断。
 - Windows 服务、macOS launchd 服务、Linux systemd 服务；连接与修复按钮调用实际原生实现。Unix socket/Windows named pipe 校验进程身份；客户端先验证安装时生成的 Ed25519 服务身份，再发送秘密。Electron 的 RunAsNode、Node options、调试入口通过 fuses 关闭。
-- 固定 Xray 26.10.29；四目标 helper；Windows Wintun DLL 与许可证来自同一固定哈希的官方 Xray 归档。默认 hellochrome_120 提供 X25519 初始 key share，订阅显式有效指纹优先。
+- 固定 Xray 26.10.31；四目标 helper；Windows Wintun DLL 与许可证来自同一固定哈希的官方 Xray 归档。默认 hellochrome_120 提供 X25519 初始 key share，订阅显式有效指纹优先。
 - 服务内部编译受限配置，通过 stdin 启动核心。Linux 使用 nftables、策略路由和 resolved；macOS 使用 PF anchor、utun 路由及比较后恢复 DNS；Windows 由 Xray 持有适配器路由/DNS/WFP，服务管理临时防火墙保护。
 - 准备、保护、启动、TCP/UDP/DNS/IPv6 证明、提交和清理；用户/进程所有权、心跳、核心监督、进程出生标识、恢复日志、服务重启恢复、物理接口绑定、控制 API 的物理 HTTPS 通道。路由/DNS 变化轮询触发受控恢复。
 - 隔离节点探测使用父进程绑定且限时的工作进程；正式连接仍需实际数据路径证明，不模拟连接成功。
