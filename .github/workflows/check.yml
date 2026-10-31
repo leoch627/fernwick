@@ -20,9 +20,16 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.3'
+          cache-dependency-path: desktop/go.sum
       - run: npm ci
       - run: npm run check
+      - run: npm run test:packaging
       - run: npm run schemas
+      - name: Go migration fixtures match the TypeScript reference
+        run: npm run fixtures:wails:check
       - name: Schemas match runtime validators
         run: git diff --exit-code docs/schemas
       - run: python3 tools/fetch-core.py linux-x64
@@ -33,6 +40,39 @@ jobs:
         with:
           name: development-build-not-a-release
           path: dist
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.3'
+          cache-dependency-path: desktop/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Linux WebView dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+      - name: Build embedded frontend and configuration
+        working-directory: .
+        run: npm ci && npm run build
+      - name: gofmt
+        run: test -z "$(gofmt -l .)"
+      - run: go vet -tags gtk3 ./...
+      - name: go vet (windows)
+        run: GOOS=windows GOARCH=amd64 go vet -tags gtk3 ./...
+      - run: go test -tags gtk3 -race ./...
+      - name: Production executable
+        run: mkdir -p ../work && go build -tags production,gtk3 -trimpath -o ../work/desktop-ci .
   native-helper:
     strategy:
       fail-fast: false

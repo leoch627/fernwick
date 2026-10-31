@@ -1,11 +1,11 @@
 # StarRail Network 开发版交付
 
-本轮按“先做功能，不跑测试”的要求完成功能接入和编译打包。新增代码尚未经过运行测试、真实账号联调或平台安装验收；此前的 129 项测试结果属于上一版，不能作为本版通过证明。
+当前桌面入口为 Wails v3 + Go，界面继续使用 React/Vite。迁移进度与本轮验证记录见 `wails-migration.md` 和 `verification.md`；此前 Electron 版本的测试记录不能作为 Wails 实机验收证明。
 
 ## 功能实现
 
 - 登录、套餐/到期/流量展示、主备 API、订阅同步、缓存授权、节点选择、规则/全局、通知、设置、系统浏览器续费及本地诊断。
-- Windows 服务、macOS launchd 服务、Linux systemd 服务；连接与修复按钮调用实际原生实现。Unix socket/Windows named pipe 校验进程身份；客户端先验证安装时生成的 Ed25519 服务身份，再发送秘密。Electron 的 RunAsNode、Node options、调试入口通过 fuses 关闭。
+- Windows 服务、macOS launchd 服务、Linux systemd 服务；连接与修复按钮调用实际原生实现。Unix socket/Windows named pipe 校验进程身份；客户端先验证安装时生成的 Ed25519 服务身份，再发送秘密。界面只接收脱敏视图，并通过受限 Command 桥接发出操作；生产前端编入 Go 可执行文件，helper 固定校验应用哈希。
 - 固定 Xray 26.10.31；四目标 helper；Windows Wintun DLL 与许可证来自同一固定哈希的官方 Xray 归档。默认 hellochrome_120 提供 X25519 初始 key share，订阅显式有效指纹优先。
 - 服务内部编译受限配置，通过 stdin 启动核心。Linux 使用 nftables、策略路由和 resolved；macOS 使用 PF anchor、utun 路由及比较后恢复 DNS；Windows 由 Xray 持有适配器路由/DNS/WFP，服务管理临时防火墙保护。
 - 准备、保护、启动、TCP/UDP/DNS/IPv6 证明、提交和清理；用户/进程所有权、心跳、核心监督、进程出生标识、恢复日志、服务重启恢复、物理接口绑定、控制 API 的物理 HTTPS 通道。路由/DNS 变化轮询触发受控恢复。
@@ -21,13 +21,13 @@
 
 ## 编译与交付
 
-Go 服务已编译为 Linux x64、Windows x64、macOS x64/arm64，TypeScript 与 Electron/React 资源完成编译。实际安装包及校验值以 work/delivery/交付说明.md 和 SHA256SUMS.txt 为准。Windows NSIS、macOS DMG/ZIP、Linux DEB 构建流程已提供，macOS DMG 需由 macOS 构建机生成。
+Go helper 已编译为 Linux x64、Windows x64、macOS x64/arm64，React 资源已编入桌面主程序。本轮在 macOS arm64 构建机生成了两个 macOS 架构的 DMG/ZIP 和 Windows x64 NSIS，并通过签名完整性及资源哈希检查。产物位于 `release/`，通过 `node tools/release-assets.mjs manifest <target>` 生成大小、哈希和核心版本记录。Linux DEB 构建由 Ubuntu 24.04 CI 执行，本机未生成 Linux 桌面程序。
 
-本轮不执行单元测试、UI 冒烟、安装、真实网络接管或升级演练。支持矩阵记录为待用户测试，不把编译成功写成平台验收通过。
+本轮已运行前端、Go 核心及打包相关检查，具体结果以 `verification.md` 为准。真实账号、TUN 接管、目标系统安装升级和故障恢复仍须逐平台验收。
 
 ## 待接入资料
 
-真实账号、节点和目标系统由用户自行测试。当前云环境对面板域名的 CONNECT 请求被出口策略拒绝，不等同面板返回登录失败。
+真实账号、节点和目标系统由用户自行测试。此前云环境对面板域名的 CONNECT 请求被出口策略拒绝，这一历史结果不代表当前面板状态。
 
 运营策略/规则发布源、更新发布源、公钥、代码签名和公证身份尚未提供，配置保持为空。代码已接入相应流程，不生成假的发布服务或把临时私钥当作正式信任根。配置见 operations.md 和 native-service.md。
 

@@ -27,7 +27,7 @@ def main():
         if path.exists() and sha(path) != expected: raise ValueError('Native core has changed outside the pinned signing pipeline')
         core_hashes[asset['target']] = expected
     origins = sorted(set([item['baseUrl'].rstrip('/') for item in config['apiEndpoints']] + config['trustedSubscriptionOrigins'] + config['trustedResourceOrigins'] + [__import__('urllib.parse', fromlist=['urlsplit']).urlsplit(u)._replace(path='', query='', fragment='').geturl() for u in config['policyUrls'] + config['updateFeedUrls']]))
-    # Must match electron-builder.cjs: productName for Windows/macOS, productId for the Linux executable.
+    # Must match tools/package.py: productName for Windows/macOS, productId for the Linux executable.
     product = config['name'] + (' Dev' if config['environment'] == 'test' else '')
     names = {'linux-x64': config['productId'], 'win32-x64': product + '.exe', 'darwin-x64': product, 'darwin-arm64': product}
     version = json.loads((ROOT / 'package.json').read_text(encoding='utf-8'))['version']

@@ -14,7 +14,7 @@ STARRAIL_BUILD_CONFIG=work/build-config.json npm run build && npm run release:ch
 
 ## 策略与发布索引
 
-运行时、测试、工具使用同一 Zod Schema。`npm run schemas` 生成可供编辑器使用的 JSON Schema；字段之间的关系仍要由完整运行时校验器检查。
+前端和构建工具使用 Zod Schema；Go 桌面后端使用对应的严格校验器，并通过固定 TypeScript 夹具检查兼容性。`npm run schemas` 生成可供编辑器使用的 JSON Schema；字段之间的关系仍要由完整运行时校验器检查。
 
 Ed25519 签名覆盖用途前缀、换行和原始 UTF-8 JSON bytes：
 
@@ -62,8 +62,8 @@ npm run sign -- verify release signed-index.json config/your-build.json
 6. 策略至少每日巡检，剩余不足 48 小时以新版本续签；更新索引至少每 12 小时新序号续签，默认有效 24 小时。
 7. 由运营方设置任务责任人、失败告警、密钥访问控制和更新记录。
 
-本工程没有部署对象存储/CDN，没有上线这些巡检任务，也未接入真实安装器。不要把提供签名工具理解成远程发布已经完成。普通更新不得因下载完成就自动安装；安装前须重新验证当前有效索引、撤回状态和网络清理成功。
+本工程没有部署对象存储/CDN，没有上线这些巡检任务，正式发布基础设施仍需运营方接入。不要把提供签名工具理解成远程发布已经完成。普通更新不得因下载完成就自动安装；安装前须重新验证当前有效索引、撤回状态和网络清理成功。
 
 ## 第三方许可
 
-运行 `npm ci` 后锁文件确定依赖版本。Electron MIT、React MIT、Zod MIT、semver ISC，开发构建工具各有自己的许可。Xray-core 26.10.31 为 MPL-2.0，开发包包含对应目标未经修改的上游二进制；来源、归档及可执行文件 SHA-256 固定在 resources/core-lock.json，许可和对应源码链接随包分发。大陆规则数据及独立转换脚本单独以 GPL-3.0 分发，原始数据、许可证、修改日期和可复现脚本随源码与二进制包附带。真实发布前仍须补齐 helper、平台组件及实际依赖库存的告知与来源。见 `THIRD_PARTY_NOTICES.md`。
+运行 `npm ci` 后锁文件确定依赖版本。Wails、Wails runtime、React、Zod 为 MIT，semver 为 ISC；开发构建工具各有自己的许可。桌面包使用系统 WebView，不再随包分发 Electron/Chromium。Xray-core 26.10.31 为 MPL-2.0，开发包包含对应目标未经修改的上游二进制；来源、归档及可执行文件 SHA-256 固定在 resources/core-lock.json，许可和对应源码链接随包分发。大陆规则数据及独立转换脚本单独以 GPL-3.0 分发，原始数据、许可证、修改日期和可复现脚本随源码与二进制包附带。真实发布前仍须补齐 helper、平台组件及实际依赖库存的告知与来源。见 `THIRD_PARTY_NOTICES.md`。

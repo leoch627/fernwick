@@ -14,12 +14,12 @@ try {
   await mkdir('work', { recursive: true });
   await page.screenshot({ path: 'work/preview-desktop.png', fullPage: true });
   await page.getByRole('button', { name: '连接网络', exact: true }).click();
-  await page.getByRole('alert').filter({ hasText: '网络组件尚未安装' }).waitFor();
+  await page.getByRole('alert').filter({ hasText: '网络组件不可用' }).waitFor();
   assert.equal(await page.getByText('连接已就绪', { exact: true }).count(), 0);
   await page.getByRole('button', { name: '节点列表' }).click();
   await page.getByRole('heading', { name: '选择你的线路' }).waitFor();
   await page.getByRole('button', { name: '测试前 10 项' }).click();
-  await page.getByRole('alert').filter({ hasText: '网络组件尚未安装' }).waitFor();
+  await page.getByRole('alert').filter({ hasText: '网络组件不可用' }).waitFor();
   assert.equal(await page.getByText(/^[0-9]+ ms$/).count(), 0);
   await page.getByRole('textbox', { name: '搜索节点' }).fill('新加坡');
   await page.getByRole('button', { name: /新加坡 · 狮城 01/ }).click();
@@ -71,7 +71,7 @@ try {
   await updates.evaluate(() => window.__testDownload('ready'));
   await updates.screenshot({ path: 'work/preview-update.png', fullPage: true });
   await updates.getByRole('button', { name: '重启并安装', exact: true }).click();
-  await updates.getByRole('alert').filter({ hasText: '网络组件尚未安装' }).waitFor();
+  await updates.getByRole('alert').filter({ hasText: '网络组件不可用' }).waitFor();
   await updates.getByRole('button', { name: '取消下载', exact: true }).click();
   await updates.getByRole('button', { name: '下载更新', exact: true }).waitFor();
   assert.deepEqual((await updates.evaluate(() => window.__updateCommands)).filter(value => value !== 'state'), ['download-update', 'pause-update', 'download-update', 'download-update', 'install-update', 'cancel-update']);

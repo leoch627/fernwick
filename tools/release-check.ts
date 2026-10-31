@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { validateBuild } from '../src/domain/trust';
 import { strictJson } from '../src/domain/json';
-// Runs before packaging a production build. Per-target core/helper hashes are checked in afterPack.
+// Runs before packaging a production build. tools/package.py checks per-target core/helper hashes.
 // Checks dist/build-config.json by default: the configuration that is actually packaged, not a file
 // that may or may not have been passed to npm run build.
 void (async () => {

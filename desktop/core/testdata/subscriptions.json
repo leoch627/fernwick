@@ -1,0 +1,4719 @@
+{
+  "generatedBy": "tools/wails-compat-fixtures.ts (TypeScript reference implementation)",
+  "auth": {
+    "port": 49152,
+    "user": "random-session",
+    "password": "random-session-password"
+  },
+  "rules": {
+    "schemaVersion": 1,
+    "directDomains": [
+      "example.cn"
+    ],
+    "directFullDomains": [
+      "exact.invalid"
+    ],
+    "proxyDomains": [
+      "force.example.cn"
+    ],
+    "blockedDomains": [
+      "blocked.invalid"
+    ],
+    "directIPs": [
+      "192.0.2.0/24",
+      "2001:db8::/32"
+    ]
+  },
+  "routing": {
+    "rule": {
+      "domainStrategy": "AsIs",
+      "rules": [
+        {
+          "type": "field",
+          "inboundTag": [
+            "health"
+          ],
+          "outboundTag": "proxy"
+        },
+        {
+          "type": "field",
+          "port": "53",
+          "network": "tcp,udp",
+          "outboundTag": "dns-out"
+        },
+        {
+          "type": "field",
+          "domain": [
+            "domain:blocked.invalid"
+          ],
+          "outboundTag": "block"
+        },
+        {
+          "type": "field",
+          "ip": [
+            "127.0.0.0/8",
+            "10.0.0.0/8",
+            "172.16.0.0/12",
+            "192.168.0.0/16",
+            "169.254.0.0/16",
+            "::1/128",
+            "fc00::/7",
+            "fe80::/10"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "type": "field",
+          "domain": [
+            "domain:force.example.cn"
+          ],
+          "outboundTag": "proxy"
+        },
+        {
+          "type": "field",
+          "domain": [
+            "domain:example.cn"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "type": "field",
+          "domain": [
+            "full:exact.invalid"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "type": "field",
+          "ip": [
+            "192.0.2.0/24",
+            "2001:db8::/32"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "type": "field",
+          "network": "tcp,udp",
+          "outboundTag": "proxy"
+        }
+      ]
+    },
+    "global": {
+      "domainStrategy": "AsIs",
+      "rules": [
+        {
+          "type": "field",
+          "inboundTag": [
+            "health"
+          ],
+          "outboundTag": "proxy"
+        },
+        {
+          "type": "field",
+          "port": "53",
+          "network": "tcp,udp",
+          "outboundTag": "dns-out"
+        },
+        {
+          "type": "field",
+          "domain": [
+            "domain:blocked.invalid"
+          ],
+          "outboundTag": "block"
+        },
+        {
+          "type": "field",
+          "ip": [
+            "127.0.0.0/8",
+            "10.0.0.0/8",
+            "172.16.0.0/12",
+            "192.168.0.0/16",
+            "169.254.0.0/16",
+            "::1/128",
+            "fc00::/7",
+            "fe80::/10"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "type": "field",
+          "network": "tcp,udp",
+          "outboundTag": "proxy"
+        }
+      ]
+    }
+  },
+  "fixtures": [
+    {
+      "name": "vless-tls-default",
+      "raw": "vless://00000000-0000-4000-8000-000000000001@node.example.invalid:443?security=tls&type=tcp&sni=node.example.invalid#Tokyo",
+      "options": {
+        "source": "test-fixture",
+        "capabilities": [
+          "vless-tls",
+          "vless-reality",
+          "vmess-ws-tls",
+          "trojan-tls",
+          "shadowsocks-aead"
+        ],
+        "confirmedTcpUdp": true
+      },
+      "parsed": {
+        "nodes": [
+          {
+            "id": "e1c5d557cfafe8566cd29fb417581ead30899a6814f875dbf19e676545f23e09",
+            "name": "Tokyo",
+            "group": "全部节点",
+            "region": null,
+            "order": 0,
+            "protocol": "vless",
+            "host": "node.example.invalid",
+            "port": 443,
+            "credential": "00000000-0000-4000-8000-000000000001",
+            "transport": "tcp",
+            "security": "tls",
+            "compatible": true,
+            "incompatibility": null,
+            "tcp": true,
+            "udp": true,
+            "ipv6": "unknown",
+            "connectionFingerprint": "e1c5d557cfafe8566cd29fb417581ead30899a6814f875dbf19e676545f23e09",
+            "source": "test-fixture",
+            "sni": "node.example.invalid",
+            "flow": "",
+            "fingerprint": "hellochrome_120"
+          }
+        ],
+        "quarantined": [],
+        "authoritativeEmpty": false
+      },
+      "outbounds": [
+        {
+          "tag": "proxy",
+          "protocol": "vless",
+          "settings": {
+            "vnext": [
+              {
+                "address": "node.example.invalid",
+                "port": 443,
+                "users": [
+                  {
+                    "id": "00000000-0000-4000-8000-000000000001",
+                    "encryption": "none",
+                    "flow": ""
+                  }
+                ]
+              }
+            ]
+          },
+          "streamSettings": {
+            "network": "tcp",
+            "security": "tls",
+            "tlsSettings": {
+              "serverName": "node.example.invalid",
+              "allowInsecure": false,
+              "fingerprint": "hellochrome_120"
+            }
+          }
+        }
+      ],
+      "probes": [
+        {
+          "log": {
+            "loglevel": "none",
+            "access": "none",
+            "error": "none"
+          },
+          "inbounds": [
+            {
+              "tag": "health",
+              "listen": "127.0.0.1",
+              "port": 49152,
+              "protocol": "socks",
+              "settings": {
+                "auth": "password",
+                "accounts": [
+                  {
+                    "user": "random-session",
+                    "pass": "random-session-password"
+                  }
+                ],
+                "udp": false
+              }
+            }
+          ],
+          "outbounds": [
+            {
+              "tag": "proxy",
+              "protocol": "vless",
+              "settings": {
+                "vnext": [
+                  {
+                    "address": "node.example.invalid",
+                    "port": 443,
+                    "users": [
+                      {
+                        "id": "00000000-0000-4000-8000-000000000001",
+                        "encryption": "none",
+                        "flow": ""
+                      }
+                    ]
+                  }
+                ]
+              },
+              "streamSettings": {
+                "network": "tcp",
+                "security": "tls",
+                "tlsSettings": {
+                  "serverName": "node.example.invalid",
+                  "allowInsecure": false,
+                  "fingerprint": "hellochrome_120"
+                }
+              }
+            }
+          ],
+          "routing": {
+            "domainStrategy": "AsIs",
+            "rules": [
+              {
+                "type": "field",
+                "inboundTag": [
+                  "health"
+                ],
+                "outboundTag": "proxy"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "vless-tls-explicit",
+      "raw": "vless://00000000-0000-4000-8000-000000000001@node.example.invalid:443?security=tls&type=tcp&sni=node.example.invalid&fp=firefox#Tokyo",
+      "options": {
+        "source": "test-fixture",
+        "capabilities": [
+          "vless-tls",
+          "vless-reality",
+          "vmess-ws-tls",
+          "trojan-tls",
+          "shadowsocks-aead"
+        ],
+        "confirmedTcpUdp": true
+      },
+      "parsed": {
+        "nodes": [
+          {
+            "id": "f00d7f70343f28e81e1cb144a6ca8b1b2531c44bdad860c41e7609d1f1a9da55",
+            "name": "Tokyo",
+            "group": "全部节点",
+            "region": null,
+            "order": 0,
+            "protocol": "vless",
+            "host": "node.example.invalid",
+            "port": 443,
+            "credential": "00000000-0000-4000-8000-000000000001",
+            "transport": "tcp",
+            "security": "tls",
+            "compatible": true,
+            "incompatibility": null,
+            "tcp": true,
+            "udp": true,
+            "ipv6": "unknown",
+            "connectionFingerprint": "f00d7f70343f28e81e1cb144a6ca8b1b2531c44bdad860c41e7609d1f1a9da55",
+            "source": "test-fixture",
+            "sni": "node.example.invalid",
+            "flow": "",
+            "fingerprint": "firefox"
+          }
+        ],
+        "quarantined": [],
+        "authoritativeEmpty": false
+      },
+      "outbounds": [
+        {
+          "tag": "proxy",
+          "protocol": "vless",
+          "settings": {
+            "vnext": [
+              {
+                "address": "node.example.invalid",
+                "port": 443,
+                "users": [
+                  {
+                    "id": "00000000-0000-4000-8000-000000000001",
+                    "encryption": "none",
+                    "flow": ""
+                  }
+                ]
+              }
+            ]
+          },
+          "streamSettings": {
+            "network": "tcp",
+            "security": "tls",
+            "tlsSettings": {
+              "serverName": "node.example.invalid",
+              "allowInsecure": false,
+              "fingerprint": "firefox"
+            }
+          }
+        }
+      ],
+      "probes": [
+        {
+          "log": {
+            "loglevel": "none",
+            "access": "none",
+            "error": "none"
+          },
+          "inbounds": [
+            {
+              "tag": "health",
+              "listen": "127.0.0.1",
+              "port": 49152,
+              "protocol": "socks",
+              "settings": {
+                "auth": "password",
+                "accounts": [
+                  {
+                    "user": "random-session",
+                    "pass": "random-session-password"
+                  }
+                ],
+                "udp": false
+              }
+            }
+          ],
+          "outbounds": [
+            {
+              "tag": "proxy",
+              "protocol": "vless",
+              "settings": {
+                "vnext": [
+                  {
+                    "address": "node.example.invalid",
+                    "port": 443,
+                    "users": [
+                      {
+                        "id": "00000000-0000-4000-8000-000000000001",
+                        "encryption": "none",
+                        "flow": ""
+                      }
+                    ]
+                  }
+                ]
+              },
+              "streamSettings": {
+                "network": "tcp",
+                "security": "tls",
+                "tlsSettings": {
+                  "serverName": "node.example.invalid",
+                  "allowInsecure": false,
+                  "fingerprint": "firefox"
+                }
+              }
+            }
+          ],
+          "routing": {
+            "domainStrategy": "AsIs",
+            "rules": [
+              {
+                "type": "field",
+                "inboundTag": [
+                  "health"
+                ],
+                "outboundTag": "proxy"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "vless-reality-default",
+      "raw": "vless://00000000-0000-4000-8000-000000000001@node.example.invalid:443?security=reality&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&sid=1234&flow=xtls-rprx-vision&type=tcp&sni=node.example.invalid#Tokyo",
+      "options": {
+        "source": "test-fixture",
+        "capabilities": [
+          "vless-tls",
+          "vless-reality",
+          "vmess-ws-tls",
+          "trojan-tls",
+          "shadowsocks-aead"
+        ],
+        "confirmedTcpUdp": true
+      },
+      "parsed": {
+        "nodes": [
+          {
+            "id": "4df37ca3227b793d7448f004adeddd90812afe9f3440b49b6872fe1e71f9ad2b",
+            "name": "Tokyo",
+            "group": "全部节点",
+            "region": null,
+            "order": 0,
+            "protocol": "vless",
+            "host": "node.example.invalid",
+            "port": 443,
+            "credential": "00000000-0000-4000-8000-000000000001",
+            "transport": "tcp",
+            "security": "reality",
+            "compatible": true,
+            "incompatibility": null,
+            "tcp": true,
+            "udp": true,
+            "ipv6": "unknown",
+            "connectionFingerprint": "4df37ca3227b793d7448f004adeddd90812afe9f3440b49b6872fe1e71f9ad2b",
+            "source": "test-fixture",
+            "sni": "node.example.invalid",
+            "flow": "xtls-rprx-vision",
+            "publicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "shortId": "1234",
+            "fingerprint": "hellochrome_120"
+          }
+        ],
+        "quarantined": [],
+        "authoritativeEmpty": false
+      },
+      "outbounds": [
+        {
+          "tag": "proxy",
+          "protocol": "vless",
+          "settings": {
+            "vnext": [
+              {
+                "address": "node.example.invalid",
+                "port": 443,
+                "users": [
+                  {
+                    "id": "00000000-0000-4000-8000-000000000001",
+                    "encryption": "none",
+                    "flow": "xtls-rprx-vision"
+                  }
+                ]
+              }
+            ]
+          },
+          "streamSettings": {
+            "network": "tcp",
+            "security": "reality",
+            "realitySettings": {
+              "serverName": "node.example.invalid",
+              "fingerprint": "hellochrome_120",
+              "publicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+              "shortId": "1234"
+            }
+          }
+        }
+      ],
+      "probes": [
+        {
+          "log": {
+            "loglevel": "none",
+            "access": "none",
+            "error": "none"
+          },
+          "inbounds": [
+            {
+              "tag": "health",
+              "listen": "127.0.0.1",
+              "port": 49152,
+              "protocol": "socks",
+              "settings": {
+                "auth": "password",
+                "accounts": [
+                  {
+                    "user": "random-session",
+                    "pass": "random-session-password"
+                  }
+                ],
+                "udp": false
+              }
+            }
+          ],
+          "outbounds": [
+            {
+              "tag": "proxy",
+              "protocol": "vless",
+              "settings": {
+                "vnext": [
+                  {
+                    "address": "node.example.invalid",
+                    "port": 443,
+                    "users": [
+                      {
+                        "id": "00000000-0000-4000-8000-000000000001",
+                        "encryption": "none",
+                        "flow": "xtls-rprx-vision"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "streamSettings": {
+                "network": "tcp",
+                "security": "reality",
+                "realitySettings": {
+                  "serverName": "node.example.invalid",
+                  "fingerprint": "hellochrome_120",
+                  "publicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                  "shortId": "1234"
+                }
+              }
+            }
+          ],
+          "routing": {
+            "domainStrategy": "AsIs",
+            "rules": [
+              {
+                "type": "field",
+                "inboundTag": [
+                  "health"
+                ],
+                "outboundTag": "proxy"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "vless-reality-explicit",
+      "raw": "vless://00000000-0000-4000-8000-000000000001@node.example.invalid:443?security=reality&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&sid=&fp=chrome&type=tcp&sni=node.example.invalid#Tokyo",
+      "options": {
+        "source": "test-fixture",
+        "capabilities": [
+          "vless-tls",
+          "vless-reality",
+          "vmess-ws-tls",
+          "trojan-tls",
+          "shadowsocks-aead"
+        ],
+        "confirmedTcpUdp": true
+      },
+      "parsed": {
+        "nodes": [
+          {
+            "id": "779ce6eae4e3aba1b51feafe2b266ef668534e79e02cdaa4b082d20f8649ec9b",
+            "name": "Tokyo",
+            "group": "全部节点",
+            "region": null,
+            "order": 0,
+            "protocol": "vless",
+            "host": "node.example.invalid",
+            "port": 443,
+            "credential": "00000000-0000-4000-8000-000000000001",
+            "transport": "tcp",
+            "security": "reality",
+            "compatible": true,
+            "incompatibility": null,
+            "tcp": true,
+            "udp": true,
+            "ipv6": "unknown",
+            "connectionFingerprint": "779ce6eae4e3aba1b51feafe2b266ef668534e79e02cdaa4b082d20f8649ec9b",
+            "source": "test-fixture",
+            "sni": "node.example.invalid",
+            "flow": "",
+            "fingerprint": "chrome",
+            "publicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "shortId": ""
+          }
+        ],
+        "quarantined": [],
+        "authoritativeEmpty": false
+      },
+      "outbounds": [
+        {
+          "tag": "proxy",
+          "protocol": "vless",
+          "settings": {
+            "vnext": [
+              {
+                "address": "node.example.invalid",
+                "port": 443,
+                "users": [
+                  {
+                    "id": "00000000-0000-4000-8000-000000000001",
+                    "encryption": "none",
+                    "flow": ""
+                  }
+                ]
+              }
+            ]
+          },
+          "streamSettings": {
+            "network": "tcp",
+            "security": "reality",
+            "realitySettings": {
+              "serverName": "node.example.invalid",
+              "fingerprint": "chrome",
+              "publicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+              "shortId": ""
+            }
+          }
+        }
+      ],
+      "probes": [
+        {
+          "log": {
+            "loglevel": "none",
+            "access": "none",
+            "error": "none"
+          },
+          "inbounds": [
+            {
+              "tag": "health",
+              "listen": "127.0.0.1",
+              "port": 49152,
+              "protocol": "socks",
+              "settings": {
+                "auth": "password",
+                "accounts": [
+                  {
+                    "user": "random-session",
+                    "pass": "random-session-password"
+                  }
+                ],
+                "udp": false
+              }
+            }
+          ],
+          "outbounds": [
+            {
+              "tag": "proxy",
+              "protocol": "vless",
+              "settings": {
+                "vnext": [
+                  {
+                    "address": "node.example.invalid",
+                    "port": 443,
+                    "users": [
+                      {
+                        "id": "00000000-0000-4000-8000-000000000001",
+                        "encryption": "none",
+                        "flow": ""
+                      }
+                    ]
+                  }
+                ]
+              },
+              "streamSettings": {
+                "network": "tcp",
+                "security": "reality",
+                "realitySettings": {
+                  "serverName": "node.example.invalid",
+                  "fingerprint": "chrome",
+                  "publicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                  "shortId": ""
+                }
+              }
+            }
+          ],
+          "routing": {
+            "domainStrategy": "AsIs",
+            "rules": [
+              {
+                "type": "field",
+                "inboundTag": [
+                  "health"
+                ],
+                "outboundTag": "proxy"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "vless-ipv6",
+      "raw": "vless://00000000-0000-4000-8000-000000000001@[2001:0db8:0:0:0:0:0:1]:443?security=tls&type=tcp&sni=node.example.invalid#Tokyo",
+      "options": {
+        "source": "test-fixture",
+        "capabilities": [
+          "vless-tls",
+          "vless-reality",
+          "vmess-ws-tls",
+          "trojan-tls",
+          "shadowsocks-aead"
+        ],
+        "confirmedTcpUdp": true
+      },
+      "parsed": {
+        "nodes": [
+          {
+            "id": "dc2b1f5e67918eb6098ac161f03c6c32901602b04ebe18815c53b283cbb420f7",
+            "name": "Tokyo",
+            "group": "全部节点",
+            "region": null,
+            "order": 0,
+            "protocol": "vless",
+            "host": "2001:db8::1",
+            "port": 443,
+            "credential": "00000000-0000-4000-8000-000000000001",
+            "transport": "tcp",
+            "security": "tls",
+            "compatible": true,
+            "incompatibility": null,
+            "tcp": true,
+            "udp": true,
+            "ipv6": "unknown",
+            "connectionFingerprint": "dc2b1f5e67918eb6098ac161f03c6c32901602b04ebe18815c53b283cbb420f7",
+            "source": "test-fixture",
+            "sni": "node.example.invalid",
+            "flow": "",
+            "fingerprint": "hellochrome_120"
+          }
+        ],
+        "quarantined": [],
+        "authoritativeEmpty": false
+      },
+      "outbounds": [
+        {
+          "tag": "proxy",
+          "protocol": "vless",
+          "settings": {
+            "vnext": [
+              {
+                "address": "2001:db8::1",
+                "port": 443,
+                "users": [
+                  {
+                    "id": "00000000-0000-4000-8000-000000000001",
+                    "encryption": "none",
+                    "flow": ""
+                  }
+                ]
+              }
+            ]
+          },
+          "streamSettings": {
+            "network": "tcp",
+            "security": "tls",
+            "tlsSettings": {
+              "serverName": "node.example.invalid",
+              "allowInsecure": false,
+              "fingerprint": "hellochrome_120"
+            }
+          }
+        }
+      ],
+      "probes": [
+        {
+          "log": {
+            "loglevel": "none",
+            "access": "none",
+            "error": "none"
+          },
+          "inbounds": [
+            {
+              "tag": "health",
+              "listen": "127.0.0.1",
+              "port": 49152,
+              "protocol": "socks",
+              "settings": {
+                "auth": "password",
+                "accounts": [
+                  {
+                    "user": "random-session",
+                    "pass": "random-session-password"
+                  }
+                ],
+                "udp": false
+              }
+            }
+          ],
+          "outbounds": [
+            {
+              "tag": "proxy",
+              "protocol": "vless",
+              "settings": {
+                "vnext": [
+                  {
+                    "address": "2001:db8::1",
+                    "port": 443,
+                    "users": [
+                      {
+                        "id": "00000000-0000-4000-8000-000000000001",
+                        "encryption": "none",
+                        "flow": ""
+                      }
+                    ]
+                  }
+                ]
+              },
+              "streamSettings": {
+                "network": "tcp",
+                "security": "tls",
+                "tlsSettings": {
+                  "serverName": "node.example.invalid",
+                  "allowInsecure": false,
+                  "fingerprint": "hellochrome_120"
+                }
+              }
+            }
+          ],
+          "routing": {
+            "domainStrategy": "AsIs",
+            "rules": [
+              {
+                "type": "field",
+                "inboundTag": [
+                  "health"
+                ],
+                "outboundTag": "proxy"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "vless-ipv4-mapped-ipv6",
+      "raw": "vless://00000000-0000-4000-8000-000000000001@[::ffff:192.0.2.1]:443?security=tls&type=tcp&sni=node.example.invalid#Tokyo",
+      "options": {
+        "source": "test-fixture",
+        "capabilities": [
+          "vless-tls",
+          "vless-reality",
+          "vmess-ws-tls",
+          "trojan-tls",
+          "shadowsocks-aead"
+        ],
+        "confirmedTcpUdp": true
+      },
+      "parsed": {
+        "nodes": [
+          {
+            "id": "8b7d193195d589b47593cd1d0aa937215b8ca76a6d2b383dfa0bdc404d0a70cd",
+            "name": "Tokyo",
+            "group": "全部节点",
+            "region": null,
+            "order": 0,
+            "protocol": "vless",
+            "host": "::ffff:c000:201",
+            "port": 443,
+            "credential": "00000000-0000-4000-8000-000000000001",
+            "transport": "tcp",
+            "security": "tls",
+            "compatible": true,
+            "incompatibility": null,
+            "tcp": true,
+            "udp": true,
+            "ipv6": "unknown",
+            "connectionFingerprint": "8b7d193195d589b47593cd1d0aa937215b8ca76a6d2b383dfa0bdc404d0a70cd",
+            "source": "test-fixture",
+            "sni": "node.example.invalid",
+            "flow": "",
+            "fingerprint": "hellochrome_120"
+          }
+        ],
+        "quarantined": [],
+        "authoritativeEmpty": false
+      },
+      "outbounds": [
+        {
+          "tag": "proxy",
+          "protocol": "vless",
+          "settings": {
+            "vnext": [
+              {
+                "address": "::ffff:c000:201",
+                "port": 443,
+                "users": [
+                  {
+                    "id": "00000000-0000-4000-8000-000000000001",
+                    "encryption": "none",
+                    "flow": ""
+                  }
+                ]
+              }
+            ]
+          },
+          "streamSettings": {
+            "network": "tcp",
+            "security": "tls",
+            "tlsSettings": {
+              "serverName": "node.example.invalid",
+              "allowInsecure": false,
+              "fingerprint": "hellochrome_120"
+            }
+          }
+        }
+      ],
+      "probes": [
+        {
+          "log": {
+            "loglevel": "none",
+            "access": "none",
+            "error": "none"
+          },
+          "inbounds": [
+            {
+              "tag": "health",
+              "listen": "127.0.0.1",
+              "port": 49152,
+              "protocol": "socks",
+              "settings": {
+                "auth": "password",
+                "accounts": [
+                  {
+                    "user": "random-session",
+                    "pass": "random-session-password"
+                  }
+                ],
+                "udp": false
+              }
+            }
+          ],
+          "outbounds": [
+            {
+              "tag": "proxy",
+              "protocol": "vless",
+              "settings": {
+                "vnext": [
+                  {
+                    "address": "::ffff:c000:201",
+                    "port": 443,
+                    "users": [
+                      {
+                        "id": "00000000-0000-4000-8000-000000000001",
+                        "encryption": "none",
+                        "flow": ""
+                      }
+                    ]
+                  }
+                ]
+              },
+              "streamSettings": {
+                "network": "tcp",
+                "security": "tls",
+                "tlsSettings": {
+                  "serverName": "node.example.invalid",
+                  "allowInsecure": false,
+                  "fingerprint": "hellochrome_120"
+                }
+              }
+            }
+          ],
+          "routing": {
+            "domainStrategy": "AsIs",
+            "rules": [
+              {
+                "type": "field",
+                "inboundTag": [
+                  "health"
+                ],
+                "outboundTag": "proxy"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "vless-numeric-custom-scheme-host",
+      "raw": "vless://00000000-0000-4000-8000-000000000001@127.000.000.001:443?security=tls&type=tcp&sni=node.example.invalid#Tokyo",
+      "options": {
+        "source": "test-fixture",
+        "capabilities": [
+          "vless-tls",
+          "vless-reality",
+          "vmess-ws-tls",
+          "trojan-tls",
+          "shadowsocks-aead"
+        ],
+        "confirmedTcpUdp": true
+      },
+      "parsed": {
+        "nodes": [
+          {
+            "id": "5f5200d920aa43d036fd99986a3bed457d8f88079ec865ef71ac5079f49e5303",
+            "name": "Tokyo",
+            "group": "全部节点",
+            "region": null,
+            "order": 0,
+            "protocol": "vless",
+            "host": "127.000.000.001",
+            "port": 443,
+            "credential": "00000000-0000-4000-8000-000000000001",
+            "transport": "tcp",
+            "security": "tls",
+            "compatible": true,
+            "incompatibility": null,
+            "tcp": true,
+            "udp": true,
+            "ipv6": "unknown",
+            "connectionFingerprint": "5f5200d920aa43d036fd99986a3bed457d8f88079ec865ef71ac5079f49e5303",
+            "source": "test-fixture",
+            "sni": "node.example.invalid",
+            "flow": "",
+            "fingerprint": "hellochrome_120"
+          }
+        ],
+        "quarantined": [],
+        "authoritativeEmpty": false
+      },
+      "outbounds": [
+        {
+          "tag": "proxy",
+          "protocol": "vless",
+          "settings": {
+            "vnext": [
+              {
+                "address": "127.000.000.001",
+                "port": 443,
+                "users": [
+                  {
+                    "id": "00000000-0000-4000-8000-000000000001",
+                    "encryption": "none",
+                    "flow": ""
+                  }
+                ]
+              }
+            ]
+          },
+          "streamSettings": {
+            "network": "tcp",
+            "security": "tls",
+            "tlsSettings": {
+              "serverName": "node.example.invalid",
+              "allowInsecure": false,
+              "fingerprint": "hellochrome_120"
+            }
+          }
+        }
+      ],
+      "probes": [
+        {
+          "log": {
+            "loglevel": "none",
+            "access": "none",
+            "error": "none"
+          },
+          "inbounds": [
+            {
+              "tag": "health",
+              "listen": "127.0.0.1",
+              "port": 49152,
+              "protocol": "socks",
+              "settings": {
+                "auth": "password",
+                "accounts": [
+                  {
+                    "user": "random-session",
+                    "pass": "random-session-password"
+                  }
+                ],
+                "udp": false
+              }
+            }
+          ],
+          "outbounds": [
+            {
+              "tag": "proxy",
+              "protocol": "vless",
+              "settings": {
+                "vnext": [
+                  {
+                    "address": "127.000.000.001",
+                    "port": 443,
+                    "users": [
+                      {
+                        "id": "00000000-0000-4000-8000-000000000001",
+                        "encryption": "none",
+                        "flow": ""
+                      }
+                    ]
+                  }
+                ]
+              },
+              "streamSettings": {
+                "network": "tcp",
+                "security": "tls",
+                "tlsSettings": {
+                  "serverName": "node.example.invalid",
+                  "allowInsecure": false,
+                  "fingerprint": "hellochrome_120"
+                }
+              }
+            }
+          ],
+          "routing": {
+            "domainStrategy": "AsIs",
+            "rules": [
+              {
+                "type": "field",
+                "inboundTag": [
+                  "health"
+                ],
+                "outboundTag": "proxy"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "vless-utf16-name",
+      "raw": "vless://00000000-0000-4000-8000-000000000001@node.example.invalid:443?security=tls&type=tcp&sni=node.example.invalid#Tokyo%20%F0%9F%9A%84%20%E6%9D%B1%E4%BA%AC",
+      "options": {
+        "source": "test-fixture",
+        "capabilities": [
+          "vless-tls",
+          "vless-reality",
+          "vmess-ws-tls",
+          "trojan-tls",
+          "shadowsocks-aead"
+        ],
+        "confirmedTcpUdp": true
+      },
+      "parsed": {
+        "nodes": [
+          {
+            "id": "e1c5d557cfafe8566cd29fb417581ead30899a6814f875dbf19e676545f23e09",
+            "name": "Tokyo 🚄 東京",
+            "group": "全部节点",
+            "region": null,
+            "order": 0,
+            "protocol": "vless",
+            "host": "node.example.invalid",
+            "port": 443,
+            "credential": "00000000-0000-4000-8000-000000000001",
+            "transport": "tcp",
+            "security": "tls",
+            "compatible": true,
+            "incompatibility": null,
+            "tcp": true,
+            "udp": true,
+            "ipv6": "unknown",
+            "connectionFingerprint": "e1c5d557cfafe8566cd29fb417581ead30899a6814f875dbf19e676545f23e09",
+            "source": "test-fixture",
+            "sni": "node.example.invalid",
+            "flow": "",
+            "fingerprint": "hellochrome_120"
+          }
+        ],
+        "quarantined": [],
+        "authoritativeEmpty": false
+      },
+      "outbounds": [
+        {
+          "tag": "proxy",
+          "protocol": "vless",
+          "settings": {
+            "vnext": [
+              {
+                "address": "node.example.invalid",
+                "port": 443,
+                "users": [
+                  {
+                    "id": "00000000-0000-4000-8000-000000000001",
+                    "encryption": "none",
+                    "flow": ""
+                  }
+                ]
+              }
+            ]
+          },
+          "streamSettings": {
+            "network": "tcp",
+            "security": "tls",
+            "tlsSettings": {
+              "serverName": "node.example.invalid",
+              "allowInsecure": false,
+              "fingerprint": "hellochrome_120"
+            }
+          }
+        }
+      ],
+      "probes": [
+        {
+          "log": {
+            "loglevel": "none",
+            "access": "none",
+            "error": "none"
+          },
+          "inbounds": [
+            {
+              "tag": "health",
+              "listen": "127.0.0.1",
+              "port": 49152,
+              "protocol": "socks",
+              "settings": {
+                "auth": "password",
+                "accounts": [
+                  {
+                    "user": "random-session",
+                    "pass": "random-session-password"
+                  }
+                ],
+                "udp": false
+              }
+            }
+          ],
+          "outbounds": [
+            {
+              "tag": "proxy",
+              "protocol": "vless",
+              "settings": {
+                "vnext": [
+                  {
+                    "address": "node.example.invalid",
+                    "port": 443,
+                    "users": [
+                      {
+                        "id": "00000000-0000-4000-8000-000000000001",
+                        "encryption": "none",
+                        "flow": ""
+                      }
+                    ]
+                  }
+                ]
+              },
+              "streamSettings": {
+                "network": "tcp",
+                "security": "tls",
+                "tlsSettings": {
+                  "serverName": "node.example.invalid",
+                  "allowInsecure": false,
+                  "fingerprint": "hellochrome_120"
+                }
+              }
+            }
+          ],
+          "routing": {
+            "domainStrategy": "AsIs",
+            "rules": [
+              {
+                "type": "field",
+                "inboundTag": [
+                  "health"
+                ],
+                "outboundTag": "proxy"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "vless-neutral-fields",
+      "raw": "vless://00000000-0000-4000-8000-000000000001@node.example.invalid:443?security=tls&type=tcp&sni=node.example.invalid&host=&path=&headerType=none&quicSecurity=none&serviceName=&insecure=0&pcs=#Tokyo",
+      "options": {
+        "source": "test-fixture",
+        "capabilities": [
+          "vless-tls",
+          "vless-reality",
+          "vmess-ws-tls",
+          "trojan-tls",
+          "shadowsocks-aead"
+        ],
+        "confirmedTcpUdp": true
+      },
+      "parsed": {
+        "nodes": [
+          {
+            "id": "e1c5d557cfafe8566cd29fb417581ead30899a6814f875dbf19e676545f23e09",
+            "name": "Tokyo",
+            "group": "全部节点",
+            "region": null,
+            "order": 0,
+            "protocol": "vless",
+            "host": "node.example.invalid",
+            "port": 443,
+            "credential": "00000000-0000-4000-8000-000000000001",
+            "transport": "tcp",
+            "security": "tls",
+            "compatible": true,
+            "incompatibility": null,
+            "tcp": true,
+            "udp": true,
+            "ipv6": "unknown",
+            "connectionFingerprint": "e1c5d557cfafe8566cd29fb417581ead30899a6814f875dbf19e676545f23e09",
+            "source": "test-fixture",
+            "sni": "node.example.invalid",
+            "flow": "",
+            "fingerprint": "hellochrome_120"
+          }
+        ],
+        "quarantined": [],
+        "authoritativeEmpty": false
+      },
+      "outbounds": [
+        {
+          "tag": "proxy",
+          "protocol": "vless",
+          "settings": {
+            "vnext": [
+              {
+                "address": "node.example.invalid",
+                "port": 443,
+                "users": [
+                  {
+                    "id": "00000000-0000-4000-8000-000000000001",
+                    "encryption": "none",
+                    "flow": ""
+                  }
+                ]
+              }
+            ]
+          },
+          "streamSettings": {
+            "network": "tcp",
+            "security": "tls",
+            "tlsSettings": {
+              "serverName": "node.example.invalid",
+              "allowInsecure": false,
+              "fingerprint": "hellochrome_120"
+            }
+          }
+        }
+      ],
+      "probes": [
+        {
+          "log": {
+            "loglevel": "none",
+            "access": "none",
+            "error": "none"
+          },
+          "inbounds": [
+            {
+              "tag": "health",
+              "listen": "127.0.0.1",
+              "port": 49152,
+              "protocol": "socks",
+              "settings": {
+                "auth": "password",
+                "accounts": [
+                  {
+                    "user": "random-session",
+                    "pass": "random-session-password"
+                  }
+                ],
+                "udp": false
+              }
+            }
+          ],
+          "outbounds": [
+            {
+              "tag": "proxy",
+              "protocol": "vless",
+              "settings": {
+                "vnext": [
+                  {
+                    "address": "node.example.invalid",
+                    "port": 443,
+                    "users": [
+                      {
+                        "id": "00000000-0000-4000-8000-000000000001",
+                        "encryption": "none",
+                        "flow": ""
+                      }
+                    ]
+                  }
+                ]
+              },
+              "streamSettings": {
+                "network": "tcp",
+                "security": "tls",
+                "tlsSettings": {
+                  "serverName": "node.example.invalid",
+                  "allowInsecure": false,
+                  "fingerprint": "hellochrome_120"
+                }
+              }
+            }
+          ],
+          "routing": {
+            "domainStrategy": "AsIs",
+            "rules": [
+              {
+                "type": "field",
+                "inboundTag": [
+                  "health"
+                ],
+                "outboundTag": "proxy"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "vless-bad-fingerprint",
+      "raw": "vless://00000000-0000-4000-8000-000000000001@node.example.invalid:443?security=tls&type=tcp&sni=node.example.invalid&fp=x25519#Tokyo",
+      "options": {
+        "source": "test-fixture",
+        "capabilities": [
+          "vless-tls",
+          "vless-reality",
+          "vmess-ws-tls",
+          "trojan-tls",
+          "shadowsocks-aead"
+        ],
+        "confirmedTcpUdp": true
+      },
+      "parsed": {
+        "nodes": [
+          {
+            "id": "c463429f5d25fc337279220492d0e936aeda2b711b0f54bbb538bb9799fc57d7",
+            "name": "Tokyo",
+            "group": "全部节点",
+            "region": null,
+            "order": 0,
+            "protocol": "vless",
+            "host": "node.example.invalid",
+            "port": 443,
+            "credential": "00000000-0000-4000-8000-000000000001",
+            "transport": "tcp",
+            "security": "tls",
+            "compatible": false,
+            "incompatibility": "未验证的 TLS 指纹",
+            "tcp": true,
+            "udp": true,
+            "ipv6": "unknown",
+            "connectionFingerprint": "c463429f5d25fc337279220492d0e936aeda2b711b0f54bbb538bb9799fc57d7",
+            "source": "test-fixture",
+            "sni": "node.example.invalid",
+            "flow": "",
+            "fingerprint": "x25519"
+          }
+        ],
+        "quarantined": [],
+        "authoritativeEmpty": false
+      },
+      "outbounds": [
+        null
+      ],
+      "probes": [
+        null
+      ]
+    },
+    {
+      "name": "vless-insecure",
+      "raw": "vless://00000000-0000-4000-8000-000000000001@node.example.invalid:443?security=tls&type=tcp&sni=node.example.invalid&insecure=1#Tokyo",
+      "options": {
+        "source": "test-fixture",
+        "capabilities": [
+          "vless-tls",
+          "vless-reality",
+          "vmess-ws-tls",
+          "trojan-tls",
+          "shadowsocks-aead"
+        ],
+        "confirmedTcpUdp": true
+      },
+      "parsed": {
+        "nodes": [
+          {
+            "id": "e1c5d557cfafe8566cd29fb417581ead30899a6814f875dbf19e676545f23e09",
+            "name": "Tokyo",
+            "group": "全部节点",
+            "region": null,
+            "order": 0,
+            "protocol": "vless",
+            "host": "node.example.invalid",
+            "port": 443,
+            "credential": "00000000-0000-4000-8000-000000000001",
+            "transport": "tcp",
+            "security": "tls",
+            "compatible": false,
+            "incompatibility": "不支持的安全或传输参数",
+            "tcp": true,
+            "udp": true,
+            "ipv6": "unknown",
+            "connectionFingerprint": "e1c5d557cfafe8566cd29fb417581ead30899a6814f875dbf19e676545f23e09",
+            "source": "test-fixture",
+            "sni": "node.example.invalid",
+            "flow": "",
+            "fingerprint": "hellochrome_120"
+          }
+        ],
+        "quarantined": [],
+        "authoritativeEmpty": false
+      },
+      "outbounds": [
+        null
+      ],
+      "probes": [
+        null
+      ]
+    },
+    {
+      "name": "trojan-default",
+      "raw": "trojan://secret@node.invalid:443?allowInsecure=0&peer=node.invalid&sni=node.invalid&pcs=&type=tcp#node",
+      "options": {
+        "source": "test-fixture",
+        "capabilities": [
+          "vless-tls",
+          "vless-reality",
+          "vmess-ws-tls",
+          "trojan-tls",
+          "shadowsocks-aead"
+        ],
+        "confirmedTcpUdp": true
+      },
+      "parsed": {
+        "nodes": [
+          {
+            "id": "d39824726d5e968994f770b472a5ad1917ad04d46157b2b5cd6be1c8155464b0",
+            "name": "node",
+            "group": "全部节点",
+            "region": null,
+            "order": 0,
+            "protocol": "trojan",
+            "host": "node.invalid",
+            "port": 443,
+            "credential": "secret",
+            "transport": "tcp",
+            "security": "tls",
+            "compatible": true,
+            "incompatibility": null,
+            "tcp": true,
+            "udp": true,
+            "ipv6": "unknown",
+            "connectionFingerprint": "d39824726d5e968994f770b472a5ad1917ad04d46157b2b5cd6be1c8155464b0",
+            "source": "test-fixture",
+            "sni": "node.invalid",
+            "flow": "",
+            "fingerprint": "hellochrome_120"
+          }
+        ],
+        "quarantined": [],
+        "authoritativeEmpty": false
+      },
+      "outbounds": [
+        {
+          "tag": "proxy",
+          "protocol": "trojan",
+          "settings": {
+            "servers": [
+              {
+                "address": "node.invalid",
+                "port": 443,
+                "password": "secret"
+              }
+            ]
+          },
+          "streamSettings": {
+            "network": "tcp",
+            "security": "tls",
+            "tlsSettings": {
+              "serverName": "node.invalid",
+              "allowInsecure": false,
+              "fingerprint": "hellochrome_120"
+            }
+          }
+        }
+      ],
+      "probes": [
+        {
+          "log": {
+            "loglevel": "none",
+            "access": "none",
+            "error": "none"
+          },
+          "inbounds": [
+            {
+              "tag": "health",
+              "listen": "127.0.0.1",
+              "port": 49152,
+              "protocol": "socks",
+              "settings": {
+                "auth": "password",
+                "accounts": [
+                  {
+                    "user": "random-session",
+                    "pass": "random-session-password"
+                  }
+                ],
+                "udp": false
+              }
+            }
+          ],
+          "outbounds": [
+            {
+              "tag": "proxy",
+              "protocol": "trojan",
+              "settings": {
+                "servers": [
+                  {
+                    "address": "node.invalid",
+                    "port": 443,
+                    "password": "secret"
+                  }
+                ]
+              },
+              "streamSettings": {
+                "network": "tcp",
+                "security": "tls",
+                "tlsSettings": {
+                  "serverName": "node.invalid",
+                  "allowInsecure": false,
+                  "fingerprint": "hellochrome_120"
+                }
+              }
+            }
+          ],
+          "routing": {
+            "domainStrategy": "AsIs",
+            "rules": [
+              {
+                "type": "field",
+                "inboundTag": [
+                  "health"
+                ],
+                "outboundTag": "proxy"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "trojan-escaping",
+      "raw": "trojan://quotes%22%20slash%5C%20%3C%3E%26%20%2F%20%E2%80%A8%E2%80%A9%20%F0%9F%9A%84@node.invalid:443#escaped",
+      "options": {
+        "source": "test-fixture",
+        "capabilities": [
+          "vless-tls",
+          "vless-reality",
+          "vmess-ws-tls",
+          "trojan-tls",
+          "shadowsocks-aead"
+        ],
+        "confirmedTcpUdp": true
+      },
+      "parsed": {
+        "nodes": [
+          {
+            "id": "77634bfa043a9f6c617f3cb23a37d68f5cc0ff7342d71ad6873ae59589fca90e",
+            "name": "escaped",
+            "group": "全部节点",
+            "region": null,
+            "order": 0,
+            "protocol": "trojan",
+            "host": "node.invalid",
+            "port": 443,
+            "credential": "quotes\" slash\\ <>& /    🚄",
+            "transport": "tcp",
+            "security": "tls",
+            "compatible": true,
+            "incompatibility": null,
+            "tcp": true,
+            "udp": true,
+            "ipv6": "unknown",
+            "connectionFingerprint": "77634bfa043a9f6c617f3cb23a37d68f5cc0ff7342d71ad6873ae59589fca90e",
+            "source": "test-fixture",
+            "sni": "node.invalid",
+            "flow": "",
+            "fingerprint": "hellochrome_120"
+          }
+        ],
+        "quarantined": [],
+        "authoritativeEmpty": false
+      },
+      "outbounds": [
+        {
+          "tag": "proxy",
+          "protocol": "trojan",
+          "settings": {
+            "servers": [
+              {
+                "address": "node.invalid",
+                "port": 443,
+                "password": "quotes\" slash\\ <>& /    🚄"
+              }
+            ]
+          },
+          "streamSettings": {
+            "network": "tcp",
+            "security": "tls",
+            "tlsSettings": {
+              "serverName": "node.invalid",
+              "allowInsecure": false,
+              "fingerprint": "hellochrome_120"
+            }
+          }
+        }
+      ],
+      "probes": [
+        {
+          "log": {
+            "loglevel": "none",
+            "access": "none",
+            "error": "none"
+          },
+          "inbounds": [
+            {
+              "tag": "health",
+              "listen": "127.0.0.1",
+              "port": 49152,
+              "protocol": "socks",
+              "settings": {
+                "auth": "password",
+                "accounts": [
+                  {
+                    "user": "random-session",
+                    "pass": "random-session-password"
+                  }
+                ],
+                "udp": false
+              }
+            }
+          ],
+          "outbounds": [
+            {
+              "tag": "proxy",
+              "protocol": "trojan",
+              "settings": {
+                "servers": [
+                  {
+                    "address": "node.invalid",
+                    "port": 443,
+                    "password": "quotes\" slash\\ <>& /    🚄"
+                  }
+                ]
+              },
+              "streamSettings": {
+                "network": "tcp",
+                "security": "tls",
+                "tlsSettings": {
+                  "serverName": "node.invalid",
+                  "allowInsecure": false,
+                  "fingerprint": "hellochrome_120"
+                }
+              }
+            }
+          ],
+          "routing": {
+            "domainStrategy": "AsIs",
+            "rules": [
+              {
+                "type": "field",
+                "inboundTag": [
+                  "health"
+                ],
+                "outboundTag": "proxy"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "trojan-query-plus",
+      "raw": "trojan://secret@node.invalid:443?sni=hello+world#query",
+      "options": {
+        "source": "test-fixture",
+        "capabilities": [
+          "vless-tls",
+          "vless-reality",
+          "vmess-ws-tls",
+          "trojan-tls",
+          "shadowsocks-aead"
+        ],
+        "confirmedTcpUdp": true
+      },
+      "parsed": {
+        "nodes": [
+          {
+            "id": "0205032eb3961fabe2f3b1d9c2780f43af6feb1ea9a06973464ba14f144638c1",
+            "name": "query",
+            "group": "全部节点",
+            "region": null,
+            "order": 0,
+            "protocol": "trojan",
+            "host": "node.invalid",
+            "port": 443,
+            "credential": "secret",
+            "transport": "tcp",
+            "security": "tls",
+            "compatible": true,
+            "incompatibility": null,
+            "tcp": true,
+            "udp": true,
+            "ipv6": "unknown",
+            "connectionFingerprint": "0205032eb3961fabe2f3b1d9c2780f43af6feb1ea9a06973464ba14f144638c1",
+            "source": "test-fixture",
+            "sni": "hello world",
+            "flow": "",
+            "fingerprint": "hellochrome_120"
+          }
+        ],
+        "quarantined": [],
+        "authoritativeEmpty": false
+      },
+      "outbounds": [
+        {
+          "tag": "proxy",
+          "protocol": "trojan",
+          "settings": {
+            "servers": [
+              {
+                "address": "node.invalid",
+                "port": 443,
+                "password": "secret"
+              }
+            ]
+          },
+          "streamSettings": {
+            "network": "tcp",
+            "security": "tls",
+            "tlsSettings": {
+              "serverName": "hello world",
+              "allowInsecure": false,
+              "fingerprint": "hellochrome_120"
+            }
+          }
+        }
+      ],
+      "probes": [
+        {
+          "log": {
+            "loglevel": "none",
+            "access": "none",
+            "error": "none"
+          },
+          "inbounds": [
+            {
+              "tag": "health",
+              "listen": "127.0.0.1",
+              "port": 49152,
+              "protocol": "socks",
+              "settings": {
+                "auth": "password",
+                "accounts": [
+                  {
+                    "user": "random-session",
+                    "pass": "random-session-password"
+                  }
+                ],
+                "udp": false
+              }
+            }
+          ],
+          "outbounds": [
+            {
+              "tag": "proxy",
+              "protocol": "trojan",
+              "settings": {
+                "servers": [
+                  {
+                    "address": "node.invalid",
+                    "port": 443,
+                    "password": "secret"
+                  }
+                ]
+              },
+              "streamSettings": {
+                "network": "tcp",
+                "security": "tls",
+                "tlsSettings": {
+                  "serverName": "hello world",
+                  "allowInsecure": false,
+                  "fingerprint": "hellochrome_120"
+                }
+              }
+            }
+          ],
+          "routing": {
+            "domainStrategy": "AsIs",
+            "rules": [
+              {
+                "type": "field",
+                "inboundTag": [
+                  "health"
+                ],
+                "outboundTag": "proxy"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "trojan-query-invalid-bytes",
+      "raw": "trojan://secret@node.invalid:443?sni=%FF%FF#query",
+      "options": {
+        "source": "test-fixture",
+        "capabilities": [
+          "vless-tls",
+          "vless-reality",
+          "vmess-ws-tls",
+          "trojan-tls",
+          "shadowsocks-aead"
+        ],
+        "confirmedTcpUdp": true
+      },
+      "parsed": {
+        "nodes": [
+          {
+            "id": "4fa2e57572411d081ec2b3e795e103c4df56dfb9b60fbaccbb0f4750db871221",
+            "name": "query",
+            "group": "全部节点",
+            "region": null,
+            "order": 0,
+            "protocol": "trojan",
+            "host": "node.invalid",
+            "port": 443,
+            "credential": "secret",
+            "transport": "tcp",
+            "security": "tls",
+            "compatible": true,
+            "incompatibility": null,
+            "tcp": true,
+            "udp": true,
+            "ipv6": "unknown",
+            "connectionFingerprint": "4fa2e57572411d081ec2b3e795e103c4df56dfb9b60fbaccbb0f4750db871221",
+            "source": "test-fixture",
+            "sni": "��",
+            "flow": "",
+            "fingerprint": "hellochrome_120"
+          }
+        ],
+        "quarantined": [],
+        "authoritativeEmpty": false
+      },
+      "outbounds": [
+        {
+          "tag": "proxy",
+          "protocol": "trojan",
+          "settings": {
+            "servers": [
+              {
+                "address": "node.invalid",
+                "port": 443,
+                "password": "secret"
+              }
+            ]
+          },
+          "streamSettings": {
+            "network": "tcp",
+            "security": "tls",
+            "tlsSettings": {
+              "serverName": "��",
+              "allowInsecure": false,
+              "fingerprint": "hellochrome_120"
+            }
+          }
+        }
+      ],
+      "probes": [
+        {
+          "log": {
+            "loglevel": "none",
+            "access": "none",
+            "error": "none"
+          },
+          "inbounds": [
+            {
+              "tag": "health",
+              "listen": "127.0.0.1",
+              "port": 49152,
+              "protocol": "socks",
+              "settings": {
+                "auth": "password",
+                "accounts": [
+                  {
+                    "user": "random-session",
+                    "pass": "random-session-password"
+                  }
+                ],
+                "udp": false
+              }
+            }
+          ],
+          "outbounds": [
+            {
+              "tag": "proxy",
+              "protocol": "trojan",
+              "settings": {
+                "servers": [
+                  {
+                    "address": "node.invalid",
+                    "port": 443,
+                    "password": "secret"
+                  }
+                ]
+              },
+              "streamSettings": {
+                "network": "tcp",
+                "security": "tls",
+                "tlsSettings": {
+                  "serverName": "��",
+                  "allowInsecure": false,
+                  "fingerprint": "hellochrome_120"
+                }
+              }
+            }
+          ],
+          "routing": {
+            "domainStrategy": "AsIs",
+            "rules": [
+              {
+                "type": "field",
+                "inboundTag": [
+                  "health"
+                ],
+                "outboundTag": "proxy"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "trojan-query-truncated-utf8",
+      "raw": "trojan://secret@node.invalid:443?sni=%E1%80#query",
+      "options": {
+        "source": "test-fixture",
+        "capabilities": [
+          "vless-tls",
+          "vless-reality",
+          "vmess-ws-tls",
+          "trojan-tls",
+          "shadowsocks-aead"
+        ],
+        "confirmedTcpUdp": true
+      },
+      "parsed": {
+        "nodes": [
+          {
+            "id": "ebef1fc796b3a379cac2635acceaa67b29792e633d72adb756630fa0ffe680e2",
+            "name": "query",
+            "group": "全部节点",
+            "region": null,
+            "order": 0,
+            "protocol": "trojan",
+            "host": "node.invalid",
+            "port": 443,
+            "credential": "secret",
+            "transport": "tcp",
+            "security": "tls",
+            "compatible": true,
+            "incompatibility": null,
+            "tcp": true,
+            "udp": true,
+            "ipv6": "unknown",
+            "connectionFingerprint": "ebef1fc796b3a379cac2635acceaa67b29792e633d72adb756630fa0ffe680e2",
+            "source": "test-fixture",
+            "sni": "�",
+            "flow": "",
+            "fingerprint": "hellochrome_120"
+          }
+        ],
+        "quarantined": [],
+        "authoritativeEmpty": false
+      },
+      "outbounds": [
+        {
+          "tag": "proxy",
+          "protocol": "trojan",
+          "settings": {
+            "servers": [
+              {
+                "address": "node.invalid",
+                "port": 443,
+                "password": "secret"
+              }
+            ]
+          },
+          "streamSettings": {
+            "network": "tcp",
+            "security": "tls",
+            "tlsSettings": {
+              "serverName": "�",
+              "allowInsecure": false,
+              "fingerprint": "hellochrome_120"
+            }
+          }
+        }
+      ],
+      "probes": [
+        {
+          "log": {
+            "loglevel": "none",
+            "access": "none",
+            "error": "none"
+          },
+          "inbounds": [
+            {
+              "tag": "health",
+              "listen": "127.0.0.1",
+              "port": 49152,
+              "protocol": "socks",
+              "settings": {
+                "auth": "password",
+                "accounts": [
+                  {
+                    "user": "random-session",
+                    "pass": "random-session-password"
+                  }
+                ],
+                "udp": false
+              }
+            }
+          ],
+          "outbounds": [
+            {
+              "tag": "proxy",
+              "protocol": "trojan",
+              "settings": {
+                "servers": [
+                  {
+                    "address": "node.invalid",
+                    "port": 443,
+                    "password": "secret"
+                  }
+                ]
+              },
+              "streamSettings": {
+                "network": "tcp",
+                "security": "tls",
+                "tlsSettings": {
+                  "serverName": "�",
+                  "allowInsecure": false,
+                  "fingerprint": "hellochrome_120"
+                }
+              }
+            }
+          ],
+          "routing": {
+            "domainStrategy": "AsIs",
+            "rules": [
+              {
+                "type": "field",
+                "inboundTag": [
+                  "health"
+                ],
+                "outboundTag": "proxy"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "trojan-query-surrogate",
+      "raw": "trojan://secret@node.invalid:443?sni=%ED%A0%80#query",
+      "options": {
+        "source": "test-fixture",
+        "capabilities": [
+          "vless-tls",
+          "vless-reality",
+          "vmess-ws-tls",
+          "trojan-tls",
+          "shadowsocks-aead"
+        ],
+        "confirmedTcpUdp": true
+      },
+      "parsed": {
+        "nodes": [
+          {
+            "id": "370016b0808b4797a5f843a85b6334e0b2d7c6098dade5a1c3bf37e119a01e86",
+            "name": "query",
+            "group": "全部节点",
+            "region": null,
+            "order": 0,
+            "protocol": "trojan",
+            "host": "node.invalid",
+            "port": 443,
+            "credential": "secret",
+            "transport": "tcp",
+            "security": "tls",
+            "compatible": true,
+            "incompatibility": null,
+            "tcp": true,
+            "udp": true,
+            "ipv6": "unknown",
+            "connectionFingerprint": "370016b0808b4797a5f843a85b6334e0b2d7c6098dade5a1c3bf37e119a01e86",
+            "source": "test-fixture",
+            "sni": "���",
+            "flow": "",
+            "fingerprint": "hellochrome_120"
+          }
+        ],
+        "quarantined": [],
+        "authoritativeEmpty": false
+      },
+      "outbounds": [
+        {
+          "tag": "proxy",
+          "protocol": "trojan",
+          "settings": {
+            "servers": [
+              {
+                "address": "node.invalid",
+                "port": 443,
+                "password": "secret"
+              }
+            ]
+          },
+          "streamSettings": {
+            "network": "tcp",
+            "security": "tls",
+            "tlsSettings": {
+              "serverName": "���",
+              "allowInsecure": false,
+              "fingerprint": "hellochrome_120"
+            }
+          }
+        }
+      ],
+      "probes": [
+        {
+          "log": {
+            "loglevel": "none",
+            "access": "none",
+            "error": "none"
+          },
+          "inbounds": [
+            {
+              "tag": "health",
+              "listen": "127.0.0.1",
+              "port": 49152,
+              "protocol": "socks",
+              "settings": {
+                "auth": "password",
+                "accounts": [
+                  {
+                    "user": "random-session",
+                    "pass": "random-session-password"
+                  }
+                ],
+                "udp": false
+              }
+            }
+          ],
+          "outbounds": [
+            {
+              "tag": "proxy",
+              "protocol": "trojan",
+              "settings": {
+                "servers": [
+                  {
+                    "address": "node.invalid",
+                    "port": 443,
+                    "password": "secret"
+                  }
+                ]
+              },
+              "streamSettings": {
+                "network": "tcp",
+                "security": "tls",
+                "tlsSettings": {
+                  "serverName": "���",
+                  "allowInsecure": false,
+                  "fingerprint": "hellochrome_120"
+                }
+              }
+            }
+          ],
+          "routing": {
+            "domainStrategy": "AsIs",
+            "rules": [
+              {
+                "type": "field",
+                "inboundTag": [
+                  "health"
+                ],
+                "outboundTag": "proxy"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "vless-url-dot-path",
+      "raw": "vless://00000000-0000-4000-8000-000000000001@node.example.invalid:443/./?security=tls&type=tcp&sni=node.example.invalid#Tokyo",
+      "options": {
+        "source": "test-fixture",
+        "capabilities": [
+          "vless-tls",
+          "vless-reality",
+          "vmess-ws-tls",
+          "trojan-tls",
+          "shadowsocks-aead"
+        ],
+        "confirmedTcpUdp": true
+      },
+      "parsed": {
+        "nodes": [
+          {
+            "id": "e1c5d557cfafe8566cd29fb417581ead30899a6814f875dbf19e676545f23e09",
+            "name": "Tokyo",
+            "group": "全部节点",
+            "region": null,
+            "order": 0,
+            "protocol": "vless",
+            "host": "node.example.invalid",
+            "port": 443,
+            "credential": "00000000-0000-4000-8000-000000000001",
+            "transport": "tcp",
+            "security": "tls",
+            "compatible": true,
+            "incompatibility": null,
+            "tcp": true,
+            "udp": true,
+            "ipv6": "unknown",
+            "connectionFingerprint": "e1c5d557cfafe8566cd29fb417581ead30899a6814f875dbf19e676545f23e09",
+            "source": "test-fixture",
+            "sni": "node.example.invalid",
+            "flow": "",
+            "fingerprint": "hellochrome_120"
+          }
+        ],
+        "quarantined": [],
+        "authoritativeEmpty": false
+      },
+      "outbounds": [
+        {
+          "tag": "proxy",
+          "protocol": "vless",
+          "settings": {
+            "vnext": [
+              {
+                "address": "node.example.invalid",
+                "port": 443,
+                "users": [
+                  {
+                    "id": "00000000-0000-4000-8000-000000000001",
+                    "encryption": "none",
+                    "flow": ""
+                  }
+                ]
+              }
+            ]
+          },
+          "streamSettings": {
+            "network": "tcp",
+            "security": "tls",
+            "tlsSettings": {
+              "serverName": "node.example.invalid",
+              "allowInsecure": false,
+              "fingerprint": "hellochrome_120"
+            }
+          }
+        }
+      ],
+      "probes": [
+        {
+          "log": {
+            "loglevel": "none",
+            "access": "none",
+            "error": "none"
+          },
+          "inbounds": [
+            {
+              "tag": "health",
+              "listen": "127.0.0.1",
+              "port": 49152,
+              "protocol": "socks",
+              "settings": {
+                "auth": "password",
+                "accounts": [
+                  {
+                    "user": "random-session",
+                    "pass": "random-session-password"
+                  }
+                ],
+                "udp": false
+              }
+            }
+          ],
+          "outbounds": [
+            {
+              "tag": "proxy",
+              "protocol": "vless",
+              "settings": {
+                "vnext": [
+                  {
+                    "address": "node.example.invalid",
+                    "port": 443,
+                    "users": [
+                      {
+                        "id": "00000000-0000-4000-8000-000000000001",
+                        "encryption": "none",
+                        "flow": ""
+                      }
+                    ]
+                  }
+                ]
+              },
+              "streamSettings": {
+                "network": "tcp",
+                "security": "tls",
+                "tlsSettings": {
+                  "serverName": "node.example.invalid",
+                  "allowInsecure": false,
+                  "fingerprint": "hellochrome_120"
+                }
+              }
+            }
+          ],
+          "routing": {
+            "domainStrategy": "AsIs",
+            "rules": [
+              {
+                "type": "field",
+                "inboundTag": [
+                  "health"
+                ],
+                "outboundTag": "proxy"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "vless-url-parent-path",
+      "raw": "vless://00000000-0000-4000-8000-000000000001@node.example.invalid:443/x/%2e%2E?security=tls&type=tcp&sni=node.example.invalid#Tokyo",
+      "options": {
+        "source": "test-fixture",
+        "capabilities": [
+          "vless-tls",
+          "vless-reality",
+          "vmess-ws-tls",
+          "trojan-tls",
+          "shadowsocks-aead"
+        ],
+        "confirmedTcpUdp": true
+      },
+      "parsed": {
+        "nodes": [
+          {
+            "id": "e1c5d557cfafe8566cd29fb417581ead30899a6814f875dbf19e676545f23e09",
+            "name": "Tokyo",
+            "group": "全部节点",
+            "region": null,
+            "order": 0,
+            "protocol": "vless",
+            "host": "node.example.invalid",
+            "port": 443,
+            "credential": "00000000-0000-4000-8000-000000000001",
+            "transport": "tcp",
+            "security": "tls",
+            "compatible": true,
+            "incompatibility": null,
+            "tcp": true,
+            "udp": true,
+            "ipv6": "unknown",
+            "connectionFingerprint": "e1c5d557cfafe8566cd29fb417581ead30899a6814f875dbf19e676545f23e09",
+            "source": "test-fixture",
+            "sni": "node.example.invalid",
+            "flow": "",
+            "fingerprint": "hellochrome_120"
+          }
+        ],
+        "quarantined": [],
+        "authoritativeEmpty": false
+      },
+      "outbounds": [
+        {
+          "tag": "proxy",
+          "protocol": "vless",
+          "settings": {
+            "vnext": [
+              {
+                "address": "node.example.invalid",
+                "port": 443,
+                "users": [
+                  {
+                    "id": "00000000-0000-4000-8000-000000000001",
+                    "encryption": "none",
+                    "flow": ""
+                  }
+                ]
+              }
+            ]
+          },
+          "streamSettings": {
+            "network": "tcp",
+            "security": "tls",
+            "tlsSettings": {
+              "serverName": "node.example.invalid",
+              "allowInsecure": false,
+              "fingerprint": "hellochrome_120"
+            }
+          }
+        }
+      ],
+      "probes": [
+        {
+          "log": {
+            "loglevel": "none",
+            "access": "none",
+            "error": "none"
+          },
+          "inbounds": [
+            {
+              "tag": "health",
+              "listen": "127.0.0.1",
+              "port": 49152,
+              "protocol": "socks",
+              "settings": {
+                "auth": "password",
+                "accounts": [
+                  {
+                    "user": "random-session",
+                    "pass": "random-session-password"
+                  }
+                ],
+                "udp": false
+              }
+            }
+          ],
+          "outbounds": [
+            {
+              "tag": "proxy",
+              "protocol": "vless",
+              "settings": {
+                "vnext": [
+                  {
+                    "address": "node.example.invalid",
+                    "port": 443,
+                    "users": [
+                      {
+                        "id": "00000000-0000-4000-8000-000000000001",
+                        "encryption": "none",
+                        "flow": ""
+                      }
+                    ]
+                  }
+                ]
+              },
+              "streamSettings": {
+                "network": "tcp",
+                "security": "tls",
+                "tlsSettings": {
+                  "serverName": "node.example.invalid",
+                  "allowInsecure": false,
+                  "fingerprint": "hellochrome_120"
+                }
+              }
+            }
+          ],
+          "routing": {
+            "domainStrategy": "AsIs",
+            "rules": [
+              {
+                "type": "field",
+                "inboundTag": [
+                  "health"
+                ],
+                "outboundTag": "proxy"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "ss-base64",
+      "raw": "ss://YWVzLTEyOC1nY206c2VjcmV0@node.invalid:443#node",
+      "options": {
+        "source": "test-fixture",
+        "capabilities": [
+          "vless-tls",
+          "vless-reality",
+          "vmess-ws-tls",
+          "trojan-tls",
+          "shadowsocks-aead"
+        ],
+        "confirmedTcpUdp": true
+      },
+      "parsed": {
+        "nodes": [
+          {
+            "id": "52d21fd0a36ef7b42439be0ab58698776e9547ae80eac483cab75b3c8373224d",
+            "name": "node",
+            "group": "全部节点",
+            "region": null,
+            "order": 0,
+            "protocol": "shadowsocks",
+            "host": "node.invalid",
+            "port": 443,
+            "credential": "secret",
+            "transport": "tcp",
+            "security": "none",
+            "compatible": true,
+            "incompatibility": null,
+            "tcp": true,
+            "udp": true,
+            "ipv6": "unknown",
+            "connectionFingerprint": "52d21fd0a36ef7b42439be0ab58698776e9547ae80eac483cab75b3c8373224d",
+            "source": "test-fixture",
+            "method": "aes-128-gcm"
+          }
+        ],
+        "quarantined": [],
+        "authoritativeEmpty": false
+      },
+      "outbounds": [
+        {
+          "tag": "proxy",
+          "protocol": "shadowsocks",
+          "settings": {
+            "servers": [
+              {
+                "address": "node.invalid",
+                "port": 443,
+                "password": "secret",
+                "method": "aes-128-gcm"
+              }
+            ]
+          },
+          "streamSettings": {
+            "network": "tcp",
+            "security": "none"
+          }
+        }
+      ],
+      "probes": [
+        {
+          "log": {
+            "loglevel": "none",
+            "access": "none",
+            "error": "none"
+          },
+          "inbounds": [
+            {
+              "tag": "health",
+              "listen": "127.0.0.1",
+              "port": 49152,
+              "protocol": "socks",
+              "settings": {
+                "auth": "password",
+                "accounts": [
+                  {
+                    "user": "random-session",
+                    "pass": "random-session-password"
+                  }
+                ],
+                "udp": false
+              }
+            }
+          ],
+          "outbounds": [
+            {
+              "tag": "proxy",
+              "protocol": "shadowsocks",
+              "settings": {
+                "servers": [
+                  {
+                    "address": "node.invalid",
+                    "port": 443,
+                    "password": "secret",
+                    "method": "aes-128-gcm"
+                  }
+                ]
+              },
+              "streamSettings": {
+                "network": "tcp",
+                "security": "none"
+              }
+            }
+          ],
+          "routing": {
+            "domainStrategy": "AsIs",
+            "rules": [
+              {
+                "type": "field",
+                "inboundTag": [
+                  "health"
+                ],
+                "outboundTag": "proxy"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "ss-user-password",
+      "raw": "ss://aes-256-gcm:p%3Aa%40ss%22%5C%3C%3E%26%E2%80%A8%E2%80%A9@node.invalid:443#node",
+      "options": {
+        "source": "test-fixture",
+        "capabilities": [
+          "vless-tls",
+          "vless-reality",
+          "vmess-ws-tls",
+          "trojan-tls",
+          "shadowsocks-aead"
+        ],
+        "confirmedTcpUdp": true
+      },
+      "parsed": {
+        "nodes": [
+          {
+            "id": "22f585cdd0631bb76721f9a4bbac3904328dc45584d861d206909c8cbc3a8972",
+            "name": "node",
+            "group": "全部节点",
+            "region": null,
+            "order": 0,
+            "protocol": "shadowsocks",
+            "host": "node.invalid",
+            "port": 443,
+            "credential": "p:a@ss\"\\<>&  ",
+            "transport": "tcp",
+            "security": "none",
+            "compatible": true,
+            "incompatibility": null,
+            "tcp": true,
+            "udp": true,
+            "ipv6": "unknown",
+            "connectionFingerprint": "22f585cdd0631bb76721f9a4bbac3904328dc45584d861d206909c8cbc3a8972",
+            "source": "test-fixture",
+            "method": "aes-256-gcm"
+          }
+        ],
+        "quarantined": [],
+        "authoritativeEmpty": false
+      },
+      "outbounds": [
+        {
+          "tag": "proxy",
+          "protocol": "shadowsocks",
+          "settings": {
+            "servers": [
+              {
+                "address": "node.invalid",
+                "port": 443,
+                "password": "p:a@ss\"\\<>&  ",
+                "method": "aes-256-gcm"
+              }
+            ]
+          },
+          "streamSettings": {
+            "network": "tcp",
+            "security": "none"
+          }
+        }
+      ],
+      "probes": [
+        {
+          "log": {
+            "loglevel": "none",
+            "access": "none",
+            "error": "none"
+          },
+          "inbounds": [
+            {
+              "tag": "health",
+              "listen": "127.0.0.1",
+              "port": 49152,
+              "protocol": "socks",
+              "settings": {
+                "auth": "password",
+                "accounts": [
+                  {
+                    "user": "random-session",
+                    "pass": "random-session-password"
+                  }
+                ],
+                "udp": false
+              }
+            }
+          ],
+          "outbounds": [
+            {
+              "tag": "proxy",
+              "protocol": "shadowsocks",
+              "settings": {
+                "servers": [
+                  {
+                    "address": "node.invalid",
+                    "port": 443,
+                    "password": "p:a@ss\"\\<>&  ",
+                    "method": "aes-256-gcm"
+                  }
+                ]
+              },
+              "streamSettings": {
+                "network": "tcp",
+                "security": "none"
+              }
+            }
+          ],
+          "routing": {
+            "domainStrategy": "AsIs",
+            "rules": [
+              {
+                "type": "field",
+                "inboundTag": [
+                  "health"
+                ],
+                "outboundTag": "proxy"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "ss-unsupported-method",
+      "raw": "ss://cmM0OnNlY3JldA@node.invalid:443#node",
+      "options": {
+        "source": "test-fixture",
+        "capabilities": [
+          "vless-tls",
+          "vless-reality",
+          "vmess-ws-tls",
+          "trojan-tls",
+          "shadowsocks-aead"
+        ],
+        "confirmedTcpUdp": true
+      },
+      "parsed": {
+        "nodes": [
+          {
+            "id": "ec5a8f0d5bafe11b6484d2294fba15f49a7dd2f79ee86f61b7c7b6878748487e",
+            "name": "node",
+            "group": "全部节点",
+            "region": null,
+            "order": 0,
+            "protocol": "shadowsocks",
+            "host": "node.invalid",
+            "port": 443,
+            "credential": "secret",
+            "transport": "tcp",
+            "security": "none",
+            "compatible": false,
+            "incompatibility": "不支持的 Shadowsocks 加密方法",
+            "tcp": true,
+            "udp": true,
+            "ipv6": "unknown",
+            "connectionFingerprint": "ec5a8f0d5bafe11b6484d2294fba15f49a7dd2f79ee86f61b7c7b6878748487e",
+            "source": "test-fixture",
+            "method": "rc4"
+          }
+        ],
+        "quarantined": [],
+        "authoritativeEmpty": false
+      },
+      "outbounds": [
+        null
+      ],
+      "probes": [
+        null
+      ]
+    },
+    {
+      "name": "vmess-default",
+      "raw": "vmess://eyJ2IjoiMiIsInBzIjoibm9kZSIsImFkZCI6Im5vZGUuaW52YWxpZCIsInBvcnQiOiI0NDMiLCJpZCI6IjAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMSIsImFpZCI6IjAiLCJuZXQiOiJ3cyIsInR5cGUiOiJub25lIiwicGF0aCI6Ii8iLCJob3N0Ijoibm9kZS5pbnZhbGlkIiwidGxzIjoidGxzIiwic2N5IjoiYXV0byIsImFsbG93SW5zZWN1cmUiOjAsInBjcyI6IiJ9",
+      "options": {
+        "source": "test-fixture",
+        "capabilities": [
+          "vless-tls",
+          "vless-reality",
+          "vmess-ws-tls",
+          "trojan-tls",
+          "shadowsocks-aead"
+        ],
+        "confirmedTcpUdp": true
+      },
+      "parsed": {
+        "nodes": [
+          {
+            "id": "a695ab92663883eeab19803aa599b40ac687f8646f7ce873abd68d9dbaaf138f",
+            "name": "node",
+            "group": "全部节点",
+            "region": null,
+            "order": 0,
+            "protocol": "vmess",
+            "host": "node.invalid",
+            "port": 443,
+            "credential": "00000000-0000-4000-8000-000000000001",
+            "transport": "ws",
+            "security": "tls",
+            "compatible": true,
+            "incompatibility": null,
+            "tcp": true,
+            "udp": true,
+            "ipv6": "unknown",
+            "connectionFingerprint": "a695ab92663883eeab19803aa599b40ac687f8646f7ce873abd68d9dbaaf138f",
+            "source": "test-fixture",
+            "method": "auto",
+            "sni": "node.invalid",
+            "wsHost": "node.invalid",
+            "wsPath": "/",
+            "fingerprint": "hellochrome_120"
+          }
+        ],
+        "quarantined": [],
+        "authoritativeEmpty": false
+      },
+      "outbounds": [
+        {
+          "tag": "proxy",
+          "protocol": "vmess",
+          "settings": {
+            "vnext": [
+              {
+                "address": "node.invalid",
+                "port": 443,
+                "users": [
+                  {
+                    "id": "00000000-0000-4000-8000-000000000001",
+                    "alterId": 0,
+                    "security": "auto"
+                  }
+                ]
+              }
+            ]
+          },
+          "streamSettings": {
+            "network": "ws",
+            "security": "tls",
+            "tlsSettings": {
+              "serverName": "node.invalid",
+              "allowInsecure": false,
+              "fingerprint": "hellochrome_120"
+            },
+            "wsSettings": {
+              "path": "/",
+              "headers": {
+                "Host": "node.invalid"
+              }
+            }
+          }
+        }
+      ],
+      "probes": [
+        {
+          "log": {
+            "loglevel": "none",
+            "access": "none",
+            "error": "none"
+          },
+          "inbounds": [
+            {
+              "tag": "health",
+              "listen": "127.0.0.1",
+              "port": 49152,
+              "protocol": "socks",
+              "settings": {
+                "auth": "password",
+                "accounts": [
+                  {
+                    "user": "random-session",
+                    "pass": "random-session-password"
+                  }
+                ],
+                "udp": false
+              }
+            }
+          ],
+          "outbounds": [
+            {
+              "tag": "proxy",
+              "protocol": "vmess",
+              "settings": {
+                "vnext": [
+                  {
+                    "address": "node.invalid",
+                    "port": 443,
+                    "users": [
+                      {
+                        "id": "00000000-0000-4000-8000-000000000001",
+                        "alterId": 0,
+                        "security": "auto"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "streamSettings": {
+                "network": "ws",
+                "security": "tls",
+                "tlsSettings": {
+                  "serverName": "node.invalid",
+                  "allowInsecure": false,
+                  "fingerprint": "hellochrome_120"
+                },
+                "wsSettings": {
+                  "path": "/",
+                  "headers": {
+                    "Host": "node.invalid"
+                  }
+                }
+              }
+            }
+          ],
+          "routing": {
+            "domainStrategy": "AsIs",
+            "rules": [
+              {
+                "type": "field",
+                "inboundTag": [
+                  "health"
+                ],
+                "outboundTag": "proxy"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "vmess-explicit",
+      "raw": "vmess://eyJ2IjoiMiIsInBzIjoibm9kZSIsImFkZCI6Im5vZGUuaW52YWxpZCIsInBvcnQiOiI0NDMiLCJpZCI6IjAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMSIsImFpZCI6IjAiLCJuZXQiOiJ3cyIsInR5cGUiOiJub25lIiwicGF0aCI6Ii9wYXRoP3g9PD4mXCJcXOKAqOKAqfCfmoQiLCJob3N0Ijoibm9kZS5pbnZhbGlkIiwidGxzIjoidGxzIiwic2N5IjoiYXV0byIsImFsbG93SW5zZWN1cmUiOjAsInBjcyI6IiIsImZwIjoic2FmYXJpIn0=",
+      "options": {
+        "source": "test-fixture",
+        "capabilities": [
+          "vless-tls",
+          "vless-reality",
+          "vmess-ws-tls",
+          "trojan-tls",
+          "shadowsocks-aead"
+        ],
+        "confirmedTcpUdp": true
+      },
+      "parsed": {
+        "nodes": [
+          {
+            "id": "4091713c7c0077cf817fff1fb090afcba3d75ad9851c0dd8feef2d5cf9d998ed",
+            "name": "node",
+            "group": "全部节点",
+            "region": null,
+            "order": 0,
+            "protocol": "vmess",
+            "host": "node.invalid",
+            "port": 443,
+            "credential": "00000000-0000-4000-8000-000000000001",
+            "transport": "ws",
+            "security": "tls",
+            "compatible": true,
+            "incompatibility": null,
+            "tcp": true,
+            "udp": true,
+            "ipv6": "unknown",
+            "connectionFingerprint": "4091713c7c0077cf817fff1fb090afcba3d75ad9851c0dd8feef2d5cf9d998ed",
+            "source": "test-fixture",
+            "method": "auto",
+            "sni": "node.invalid",
+            "wsHost": "node.invalid",
+            "wsPath": "/path?x=<>&\"\\  🚄",
+            "fingerprint": "safari"
+          }
+        ],
+        "quarantined": [],
+        "authoritativeEmpty": false
+      },
+      "outbounds": [
+        {
+          "tag": "proxy",
+          "protocol": "vmess",
+          "settings": {
+            "vnext": [
+              {
+                "address": "node.invalid",
+                "port": 443,
+                "users": [
+                  {
+                    "id": "00000000-0000-4000-8000-000000000001",
+                    "alterId": 0,
+                    "security": "auto"
+                  }
+                ]
+              }
+            ]
+          },
+          "streamSettings": {
+            "network": "ws",
+            "security": "tls",
+            "tlsSettings": {
+              "serverName": "node.invalid",
+              "allowInsecure": false,
+              "fingerprint": "safari"
+            },
+            "wsSettings": {
+              "path": "/path?x=<>&\"\\  🚄",
+              "headers": {
+                "Host": "node.invalid"
+              }
+            }
+          }
+        }
+      ],
+      "probes": [
+        {
+          "log": {
+            "loglevel": "none",
+            "access": "none",
+            "error": "none"
+          },
+          "inbounds": [
+            {
+              "tag": "health",
+              "listen": "127.0.0.1",
+              "port": 49152,
+              "protocol": "socks",
+              "settings": {
+                "auth": "password",
+                "accounts": [
+                  {
+                    "user": "random-session",
+                    "pass": "random-session-password"
+                  }
+                ],
+                "udp": false
+              }
+            }
+          ],
+          "outbounds": [
+            {
+              "tag": "proxy",
+              "protocol": "vmess",
+              "settings": {
+                "vnext": [
+                  {
+                    "address": "node.invalid",
+                    "port": 443,
+                    "users": [
+                      {
+                        "id": "00000000-0000-4000-8000-000000000001",
+                        "alterId": 0,
+                        "security": "auto"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "streamSettings": {
+                "network": "ws",
+                "security": "tls",
+                "tlsSettings": {
+                  "serverName": "node.invalid",
+                  "allowInsecure": false,
+                  "fingerprint": "safari"
+                },
+                "wsSettings": {
+                  "path": "/path?x=<>&\"\\  🚄",
+                  "headers": {
+                    "Host": "node.invalid"
+                  }
+                }
+              }
+            }
+          ],
+          "routing": {
+            "domainStrategy": "AsIs",
+            "rules": [
+              {
+                "type": "field",
+                "inboundTag": [
+                  "health"
+                ],
+                "outboundTag": "proxy"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "vmess-surrogate",
+      "raw": "vmess://eyJ2IjoiMiIsInBzIjoibm9kZSIsImFkZCI6Im5vZGUuaW52YWxpZCIsInBvcnQiOiI0NDMiLCJpZCI6IjAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMSIsImFpZCI6IjAiLCJuZXQiOiJ3cyIsInR5cGUiOiJub25lIiwicGF0aCI6Ii91bnBhaXJlZC1cdWQ4MDAtYW5kLVx1ZGZmZi1wYWlyZWQt8J+ahCIsImhvc3QiOiJub2RlLmludmFsaWQiLCJ0bHMiOiJ0bHMiLCJzY3kiOiJhdXRvIiwiYWxsb3dJbnNlY3VyZSI6MCwicGNzIjoiIn0=",
+      "options": {
+        "source": "test-fixture",
+        "capabilities": [
+          "vless-tls",
+          "vless-reality",
+          "vmess-ws-tls",
+          "trojan-tls",
+          "shadowsocks-aead"
+        ],
+        "confirmedTcpUdp": true
+      },
+      "parsed": {
+        "nodes": [
+          {
+            "id": "c42492f3e2048ec55b69ccafb085f040027be4e4cd04e4f7f8d9bf1118a4af18",
+            "name": "node",
+            "group": "全部节点",
+            "region": null,
+            "order": 0,
+            "protocol": "vmess",
+            "host": "node.invalid",
+            "port": 443,
+            "credential": "00000000-0000-4000-8000-000000000001",
+            "transport": "ws",
+            "security": "tls",
+            "compatible": true,
+            "incompatibility": null,
+            "tcp": true,
+            "udp": true,
+            "ipv6": "unknown",
+            "connectionFingerprint": "c42492f3e2048ec55b69ccafb085f040027be4e4cd04e4f7f8d9bf1118a4af18",
+            "source": "test-fixture",
+            "method": "auto",
+            "sni": "node.invalid",
+            "wsHost": "node.invalid",
+            "wsPath": "/unpaired-\ud800-and-\udfff-paired-🚄",
+            "fingerprint": "hellochrome_120"
+          }
+        ],
+        "quarantined": [],
+        "authoritativeEmpty": false
+      },
+      "outbounds": [
+        {
+          "tag": "proxy",
+          "protocol": "vmess",
+          "settings": {
+            "vnext": [
+              {
+                "address": "node.invalid",
+                "port": 443,
+                "users": [
+                  {
+                    "id": "00000000-0000-4000-8000-000000000001",
+                    "alterId": 0,
+                    "security": "auto"
+                  }
+                ]
+              }
+            ]
+          },
+          "streamSettings": {
+            "network": "ws",
+            "security": "tls",
+            "tlsSettings": {
+              "serverName": "node.invalid",
+              "allowInsecure": false,
+              "fingerprint": "hellochrome_120"
+            },
+            "wsSettings": {
+              "path": "/unpaired-\ud800-and-\udfff-paired-🚄",
+              "headers": {
+                "Host": "node.invalid"
+              }
+            }
+          }
+        }
+      ],
+      "probes": [
+        {
+          "log": {
+            "loglevel": "none",
+            "access": "none",
+            "error": "none"
+          },
+          "inbounds": [
+            {
+              "tag": "health",
+              "listen": "127.0.0.1",
+              "port": 49152,
+              "protocol": "socks",
+              "settings": {
+                "auth": "password",
+                "accounts": [
+                  {
+                    "user": "random-session",
+                    "pass": "random-session-password"
+                  }
+                ],
+                "udp": false
+              }
+            }
+          ],
+          "outbounds": [
+            {
+              "tag": "proxy",
+              "protocol": "vmess",
+              "settings": {
+                "vnext": [
+                  {
+                    "address": "node.invalid",
+                    "port": 443,
+                    "users": [
+                      {
+                        "id": "00000000-0000-4000-8000-000000000001",
+                        "alterId": 0,
+                        "security": "auto"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "streamSettings": {
+                "network": "ws",
+                "security": "tls",
+                "tlsSettings": {
+                  "serverName": "node.invalid",
+                  "allowInsecure": false,
+                  "fingerprint": "hellochrome_120"
+                },
+                "wsSettings": {
+                  "path": "/unpaired-\ud800-and-\udfff-paired-🚄",
+                  "headers": {
+                    "Host": "node.invalid"
+                  }
+                }
+              }
+            }
+          ],
+          "routing": {
+            "domainStrategy": "AsIs",
+            "rules": [
+              {
+                "type": "field",
+                "inboundTag": [
+                  "health"
+                ],
+                "outboundTag": "proxy"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "vmess-number-port",
+      "raw": "vmess://eyJ2IjoiMiIsInBzIjoibm9kZSIsImFkZCI6Im5vZGUuaW52YWxpZCIsInBvcnQiOjQ0MywiaWQiOiIwMDAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJhaWQiOjAsIm5ldCI6IndzIiwidHlwZSI6Im5vbmUiLCJwYXRoIjoiLyIsImhvc3QiOiJub2RlLmludmFsaWQiLCJ0bHMiOiJ0bHMiLCJzY3kiOiJhZXMtMTI4LWdjbSIsImFsbG93SW5zZWN1cmUiOjAsInBjcyI6IiJ9",
+      "options": {
+        "source": "test-fixture",
+        "capabilities": [
+          "vless-tls",
+          "vless-reality",
+          "vmess-ws-tls",
+          "trojan-tls",
+          "shadowsocks-aead"
+        ],
+        "confirmedTcpUdp": true
+      },
+      "parsed": {
+        "nodes": [
+          {
+            "id": "9bc90b45fc6eb7fdf021d9313ec9f3470e79824c8481ad8c5b5804b9cc000dd6",
+            "name": "node",
+            "group": "全部节点",
+            "region": null,
+            "order": 0,
+            "protocol": "vmess",
+            "host": "node.invalid",
+            "port": 443,
+            "credential": "00000000-0000-4000-8000-000000000001",
+            "transport": "ws",
+            "security": "tls",
+            "compatible": true,
+            "incompatibility": null,
+            "tcp": true,
+            "udp": true,
+            "ipv6": "unknown",
+            "connectionFingerprint": "9bc90b45fc6eb7fdf021d9313ec9f3470e79824c8481ad8c5b5804b9cc000dd6",
+            "source": "test-fixture",
+            "method": "aes-128-gcm",
+            "sni": "node.invalid",
+            "wsHost": "node.invalid",
+            "wsPath": "/",
+            "fingerprint": "hellochrome_120"
+          }
+        ],
+        "quarantined": [],
+        "authoritativeEmpty": false
+      },
+      "outbounds": [
+        {
+          "tag": "proxy",
+          "protocol": "vmess",
+          "settings": {
+            "vnext": [
+              {
+                "address": "node.invalid",
+                "port": 443,
+                "users": [
+                  {
+                    "id": "00000000-0000-4000-8000-000000000001",
+                    "alterId": 0,
+                    "security": "aes-128-gcm"
+                  }
+                ]
+              }
+            ]
+          },
+          "streamSettings": {
+            "network": "ws",
+            "security": "tls",
+            "tlsSettings": {
+              "serverName": "node.invalid",
+              "allowInsecure": false,
+              "fingerprint": "hellochrome_120"
+            },
+            "wsSettings": {
+              "path": "/",
+              "headers": {
+                "Host": "node.invalid"
+              }
+            }
+          }
+        }
+      ],
+      "probes": [
+        {
+          "log": {
+            "loglevel": "none",
+            "access": "none",
+            "error": "none"
+          },
+          "inbounds": [
+            {
+              "tag": "health",
+              "listen": "127.0.0.1",
+              "port": 49152,
+              "protocol": "socks",
+              "settings": {
+                "auth": "password",
+                "accounts": [
+                  {
+                    "user": "random-session",
+                    "pass": "random-session-password"
+                  }
+                ],
+                "udp": false
+              }
+            }
+          ],
+          "outbounds": [
+            {
+              "tag": "proxy",
+              "protocol": "vmess",
+              "settings": {
+                "vnext": [
+                  {
+                    "address": "node.invalid",
+                    "port": 443,
+                    "users": [
+                      {
+                        "id": "00000000-0000-4000-8000-000000000001",
+                        "alterId": 0,
+                        "security": "aes-128-gcm"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "streamSettings": {
+                "network": "ws",
+                "security": "tls",
+                "tlsSettings": {
+                  "serverName": "node.invalid",
+                  "allowInsecure": false,
+                  "fingerprint": "hellochrome_120"
+                },
+                "wsSettings": {
+                  "path": "/",
+                  "headers": {
+                    "Host": "node.invalid"
+                  }
+                }
+              }
+            }
+          ],
+          "routing": {
+            "domainStrategy": "AsIs",
+            "rules": [
+              {
+                "type": "field",
+                "inboundTag": [
+                  "health"
+                ],
+                "outboundTag": "proxy"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "vmess-scoped-ipv6",
+      "raw": "vmess://eyJ2IjoiMiIsInBzIjoibm9kZSIsImFkZCI6ImZlODA6OjElZW4wIiwicG9ydCI6IjQ0MyIsImlkIjoiMDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAxIiwiYWlkIjoiMCIsIm5ldCI6IndzIiwidHlwZSI6Im5vbmUiLCJwYXRoIjoiLyIsImhvc3QiOiJub2RlLmludmFsaWQiLCJ0bHMiOiJ0bHMiLCJzY3kiOiJhdXRvIiwiYWxsb3dJbnNlY3VyZSI6MCwicGNzIjoiIn0=",
+      "options": {
+        "source": "test-fixture",
+        "capabilities": [
+          "vless-tls",
+          "vless-reality",
+          "vmess-ws-tls",
+          "trojan-tls",
+          "shadowsocks-aead"
+        ],
+        "confirmedTcpUdp": true
+      },
+      "parsed": {
+        "nodes": [
+          {
+            "id": "bf1f1d4af94ca7734ca310773147537186a8608e2b6bdd2819b4a239e706433a",
+            "name": "node",
+            "group": "全部节点",
+            "region": null,
+            "order": 0,
+            "protocol": "vmess",
+            "host": "fe80::1%en0",
+            "port": 443,
+            "credential": "00000000-0000-4000-8000-000000000001",
+            "transport": "ws",
+            "security": "tls",
+            "compatible": true,
+            "incompatibility": null,
+            "tcp": true,
+            "udp": true,
+            "ipv6": "unknown",
+            "connectionFingerprint": "bf1f1d4af94ca7734ca310773147537186a8608e2b6bdd2819b4a239e706433a",
+            "source": "test-fixture",
+            "method": "auto",
+            "sni": "node.invalid",
+            "wsHost": "node.invalid",
+            "wsPath": "/",
+            "fingerprint": "hellochrome_120"
+          }
+        ],
+        "quarantined": [],
+        "authoritativeEmpty": false
+      },
+      "outbounds": [
+        {
+          "tag": "proxy",
+          "protocol": "vmess",
+          "settings": {
+            "vnext": [
+              {
+                "address": "fe80::1%en0",
+                "port": 443,
+                "users": [
+                  {
+                    "id": "00000000-0000-4000-8000-000000000001",
+                    "alterId": 0,
+                    "security": "auto"
+                  }
+                ]
+              }
+            ]
+          },
+          "streamSettings": {
+            "network": "ws",
+            "security": "tls",
+            "tlsSettings": {
+              "serverName": "node.invalid",
+              "allowInsecure": false,
+              "fingerprint": "hellochrome_120"
+            },
+            "wsSettings": {
+              "path": "/",
+              "headers": {
+                "Host": "node.invalid"
+              }
+            }
+          }
+        }
+      ],
+      "probes": [
+        {
+          "log": {
+            "loglevel": "none",
+            "access": "none",
+            "error": "none"
+          },
+          "inbounds": [
+            {
+              "tag": "health",
+              "listen": "127.0.0.1",
+              "port": 49152,
+              "protocol": "socks",
+              "settings": {
+                "auth": "password",
+                "accounts": [
+                  {
+                    "user": "random-session",
+                    "pass": "random-session-password"
+                  }
+                ],
+                "udp": false
+              }
+            }
+          ],
+          "outbounds": [
+            {
+              "tag": "proxy",
+              "protocol": "vmess",
+              "settings": {
+                "vnext": [
+                  {
+                    "address": "fe80::1%en0",
+                    "port": 443,
+                    "users": [
+                      {
+                        "id": "00000000-0000-4000-8000-000000000001",
+                        "alterId": 0,
+                        "security": "auto"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "streamSettings": {
+                "network": "ws",
+                "security": "tls",
+                "tlsSettings": {
+                  "serverName": "node.invalid",
+                  "allowInsecure": false,
+                  "fingerprint": "hellochrome_120"
+                },
+                "wsSettings": {
+                  "path": "/",
+                  "headers": {
+                    "Host": "node.invalid"
+                  }
+                }
+              }
+            }
+          ],
+          "routing": {
+            "domainStrategy": "AsIs",
+            "rules": [
+              {
+                "type": "field",
+                "inboundTag": [
+                  "health"
+                ],
+                "outboundTag": "proxy"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "vmess-number-array-port",
+      "raw": "vmess://eyJ2IjoiMiIsInBzIjoibm9kZSIsImFkZCI6Im5vZGUuaW52YWxpZCIsInBvcnQiOls0NDNdLCJpZCI6IjAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMSIsImFpZCI6IjAiLCJuZXQiOiJ3cyIsInR5cGUiOiJub25lIiwicGF0aCI6Ii8iLCJob3N0Ijoibm9kZS5pbnZhbGlkIiwidGxzIjoidGxzIiwic2N5IjoiYXV0byIsImFsbG93SW5zZWN1cmUiOjAsInBjcyI6IiJ9",
+      "options": {
+        "source": "test-fixture",
+        "capabilities": [
+          "vless-tls",
+          "vless-reality",
+          "vmess-ws-tls",
+          "trojan-tls",
+          "shadowsocks-aead"
+        ],
+        "confirmedTcpUdp": true
+      },
+      "parsed": {
+        "nodes": [
+          {
+            "id": "a695ab92663883eeab19803aa599b40ac687f8646f7ce873abd68d9dbaaf138f",
+            "name": "node",
+            "group": "全部节点",
+            "region": null,
+            "order": 0,
+            "protocol": "vmess",
+            "host": "node.invalid",
+            "port": 443,
+            "credential": "00000000-0000-4000-8000-000000000001",
+            "transport": "ws",
+            "security": "tls",
+            "compatible": true,
+            "incompatibility": null,
+            "tcp": true,
+            "udp": true,
+            "ipv6": "unknown",
+            "connectionFingerprint": "a695ab92663883eeab19803aa599b40ac687f8646f7ce873abd68d9dbaaf138f",
+            "source": "test-fixture",
+            "method": "auto",
+            "sni": "node.invalid",
+            "wsHost": "node.invalid",
+            "wsPath": "/",
+            "fingerprint": "hellochrome_120"
+          }
+        ],
+        "quarantined": [],
+        "authoritativeEmpty": false
+      },
+      "outbounds": [
+        {
+          "tag": "proxy",
+          "protocol": "vmess",
+          "settings": {
+            "vnext": [
+              {
+                "address": "node.invalid",
+                "port": 443,
+                "users": [
+                  {
+                    "id": "00000000-0000-4000-8000-000000000001",
+                    "alterId": 0,
+                    "security": "auto"
+                  }
+                ]
+              }
+            ]
+          },
+          "streamSettings": {
+            "network": "ws",
+            "security": "tls",
+            "tlsSettings": {
+              "serverName": "node.invalid",
+              "allowInsecure": false,
+              "fingerprint": "hellochrome_120"
+            },
+            "wsSettings": {
+              "path": "/",
+              "headers": {
+                "Host": "node.invalid"
+              }
+            }
+          }
+        }
+      ],
+      "probes": [
+        {
+          "log": {
+            "loglevel": "none",
+            "access": "none",
+            "error": "none"
+          },
+          "inbounds": [
+            {
+              "tag": "health",
+              "listen": "127.0.0.1",
+              "port": 49152,
+              "protocol": "socks",
+              "settings": {
+                "auth": "password",
+                "accounts": [
+                  {
+                    "user": "random-session",
+                    "pass": "random-session-password"
+                  }
+                ],
+                "udp": false
+              }
+            }
+          ],
+          "outbounds": [
+            {
+              "tag": "proxy",
+              "protocol": "vmess",
+              "settings": {
+                "vnext": [
+                  {
+                    "address": "node.invalid",
+                    "port": 443,
+                    "users": [
+                      {
+                        "id": "00000000-0000-4000-8000-000000000001",
+                        "alterId": 0,
+                        "security": "auto"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "streamSettings": {
+                "network": "ws",
+                "security": "tls",
+                "tlsSettings": {
+                  "serverName": "node.invalid",
+                  "allowInsecure": false,
+                  "fingerprint": "hellochrome_120"
+                },
+                "wsSettings": {
+                  "path": "/",
+                  "headers": {
+                    "Host": "node.invalid"
+                  }
+                }
+              }
+            }
+          ],
+          "routing": {
+            "domainStrategy": "AsIs",
+            "rules": [
+              {
+                "type": "field",
+                "inboundTag": [
+                  "health"
+                ],
+                "outboundTag": "proxy"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "vmess-js-numeric-port",
+      "raw": "vmess://eyJ2IjoiMiIsInBzIjoibm9kZSIsImFkZCI6Im5vZGUuaW52YWxpZCIsInBvcnQiOiIweDFiYiIsImlkIjoiMDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAxIiwiYWlkIjowLCJuZXQiOiJ3cyIsInR5cGUiOiJub25lIiwicGF0aCI6Ii8iLCJob3N0Ijoibm9kZS5pbnZhbGlkIiwidGxzIjoidGxzIiwic2N5IjoiYXV0byIsImFsbG93SW5zZWN1cmUiOjAsInBjcyI6IiJ9",
+      "options": {
+        "source": "test-fixture",
+        "capabilities": [
+          "vless-tls",
+          "vless-reality",
+          "vmess-ws-tls",
+          "trojan-tls",
+          "shadowsocks-aead"
+        ],
+        "confirmedTcpUdp": true
+      },
+      "parsed": {
+        "nodes": [
+          {
+            "id": "a695ab92663883eeab19803aa599b40ac687f8646f7ce873abd68d9dbaaf138f",
+            "name": "node",
+            "group": "全部节点",
+            "region": null,
+            "order": 0,
+            "protocol": "vmess",
+            "host": "node.invalid",
+            "port": 443,
+            "credential": "00000000-0000-4000-8000-000000000001",
+            "transport": "ws",
+            "security": "tls",
+            "compatible": true,
+            "incompatibility": null,
+            "tcp": true,
+            "udp": true,
+            "ipv6": "unknown",
+            "connectionFingerprint": "a695ab92663883eeab19803aa599b40ac687f8646f7ce873abd68d9dbaaf138f",
+            "source": "test-fixture",
+            "method": "auto",
+            "sni": "node.invalid",
+            "wsHost": "node.invalid",
+            "wsPath": "/",
+            "fingerprint": "hellochrome_120"
+          }
+        ],
+        "quarantined": [],
+        "authoritativeEmpty": false
+      },
+      "outbounds": [
+        {
+          "tag": "proxy",
+          "protocol": "vmess",
+          "settings": {
+            "vnext": [
+              {
+                "address": "node.invalid",
+                "port": 443,
+                "users": [
+                  {
+                    "id": "00000000-0000-4000-8000-000000000001",
+                    "alterId": 0,
+                    "security": "auto"
+                  }
+                ]
+              }
+            ]
+          },
+          "streamSettings": {
+            "network": "ws",
+            "security": "tls",
+            "tlsSettings": {
+              "serverName": "node.invalid",
+              "allowInsecure": false,
+              "fingerprint": "hellochrome_120"
+            },
+            "wsSettings": {
+              "path": "/",
+              "headers": {
+                "Host": "node.invalid"
+              }
+            }
+          }
+        }
+      ],
+      "probes": [
+        {
+          "log": {
+            "loglevel": "none",
+            "access": "none",
+            "error": "none"
+          },
+          "inbounds": [
+            {
+              "tag": "health",
+              "listen": "127.0.0.1",
+              "port": 49152,
+              "protocol": "socks",
+              "settings": {
+                "auth": "password",
+                "accounts": [
+                  {
+                    "user": "random-session",
+                    "pass": "random-session-password"
+                  }
+                ],
+                "udp": false
+              }
+            }
+          ],
+          "outbounds": [
+            {
+              "tag": "proxy",
+              "protocol": "vmess",
+              "settings": {
+                "vnext": [
+                  {
+                    "address": "node.invalid",
+                    "port": 443,
+                    "users": [
+                      {
+                        "id": "00000000-0000-4000-8000-000000000001",
+                        "alterId": 0,
+                        "security": "auto"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "streamSettings": {
+                "network": "ws",
+                "security": "tls",
+                "tlsSettings": {
+                  "serverName": "node.invalid",
+                  "allowInsecure": false,
+                  "fingerprint": "hellochrome_120"
+                },
+                "wsSettings": {
+                  "path": "/",
+                  "headers": {
+                    "Host": "node.invalid"
+                  }
+                }
+              }
+            }
+          ],
+          "routing": {
+            "domainStrategy": "AsIs",
+            "rules": [
+              {
+                "type": "field",
+                "inboundTag": [
+                  "health"
+                ],
+                "outboundTag": "proxy"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "vmess-pinned-certificate",
+      "raw": "vmess://eyJ2IjoiMiIsInBzIjoibm9kZSIsImFkZCI6Im5vZGUuaW52YWxpZCIsInBvcnQiOiI0NDMiLCJpZCI6IjAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMSIsImFpZCI6IjAiLCJuZXQiOiJ3cyIsInR5cGUiOiJub25lIiwicGF0aCI6Ii8iLCJob3N0Ijoibm9kZS5pbnZhbGlkIiwidGxzIjoidGxzIiwic2N5IjoiYXV0byIsImFsbG93SW5zZWN1cmUiOjAsInBjcyI6ImNlcnRpZmljYXRlLXBpbiJ9",
+      "options": {
+        "source": "test-fixture",
+        "capabilities": [
+          "vless-tls",
+          "vless-reality",
+          "vmess-ws-tls",
+          "trojan-tls",
+          "shadowsocks-aead"
+        ],
+        "confirmedTcpUdp": true
+      },
+      "parsed": {
+        "nodes": [
+          {
+            "id": "a695ab92663883eeab19803aa599b40ac687f8646f7ce873abd68d9dbaaf138f",
+            "name": "node",
+            "group": "全部节点",
+            "region": null,
+            "order": 0,
+            "protocol": "vmess",
+            "host": "node.invalid",
+            "port": 443,
+            "credential": "00000000-0000-4000-8000-000000000001",
+            "transport": "ws",
+            "security": "tls",
+            "compatible": false,
+            "incompatibility": "仅支持 VMess AEAD / WebSocket / TLS 模板，禁止弱化 TLS 或忽略证书固定",
+            "tcp": true,
+            "udp": true,
+            "ipv6": "unknown",
+            "connectionFingerprint": "a695ab92663883eeab19803aa599b40ac687f8646f7ce873abd68d9dbaaf138f",
+            "source": "test-fixture",
+            "method": "auto",
+            "sni": "node.invalid",
+            "wsHost": "node.invalid",
+            "wsPath": "/",
+            "fingerprint": "hellochrome_120"
+          }
+        ],
+        "quarantined": [],
+        "authoritativeEmpty": false
+      },
+      "outbounds": [
+        null
+      ],
+      "probes": [
+        null
+      ]
+    },
+    {
+      "name": "unsupported",
+      "raw": "hysteria2://password@node.invalid:443#<>&\"\\  ",
+      "options": {
+        "source": "test-fixture",
+        "capabilities": [
+          "vless-tls",
+          "vless-reality",
+          "vmess-ws-tls",
+          "trojan-tls",
+          "shadowsocks-aead"
+        ],
+        "confirmedTcpUdp": true
+      },
+      "parsed": {
+        "nodes": [
+          {
+            "id": "f81cdc01fbf28370eff6ba21739e226273b2d5f40ff53b54a7c802ccd21a4834",
+            "name": "不兼容节点 1",
+            "group": "全部节点",
+            "region": null,
+            "order": 0,
+            "protocol": "unsupported",
+            "host": "",
+            "port": 0,
+            "credential": "",
+            "transport": "tcp",
+            "security": "none",
+            "compatible": false,
+            "incompatibility": "协议不在首版支持范围",
+            "tcp": true,
+            "udp": true,
+            "ipv6": "unknown",
+            "connectionFingerprint": "f81cdc01fbf28370eff6ba21739e226273b2d5f40ff53b54a7c802ccd21a4834",
+            "source": "test-fixture"
+          }
+        ],
+        "quarantined": [],
+        "authoritativeEmpty": false
+      },
+      "outbounds": [
+        null
+      ],
+      "probes": [
+        null
+      ]
+    },
+    {
+      "name": "base64-list",
+      "raw": "dmxlc3M6Ly8wMDAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDFAbm9kZS5leGFtcGxlLmludmFsaWQ6NDQzP3NlY3VyaXR5PXRscyZ0eXBlPXRjcCZzbmk9bm9kZS5leGFtcGxlLmludmFsaWQjVG9reW8Kdm1lc3M6Ly9leUoySWpvaU1pSXNJbkJ6SWpvaWJtOWtaU0lzSW1Ga1pDSTZJbTV2WkdVdWFXNTJZV3hwWkNJc0luQnZjblFpT2lJME5ETWlMQ0pwWkNJNklqQXdNREF3TURBd0xUQXdNREF0TkRBd01DMDRNREF3TFRBd01EQXdNREF3TURBd01TSXNJbUZwWkNJNklqQWlMQ0p1WlhRaU9pSjNjeUlzSW5SNWNHVWlPaUp1YjI1bElpd2ljR0YwYUNJNklpOGlMQ0pvYjNOMElqb2libTlrWlM1cGJuWmhiR2xrSWl3aWRHeHpJam9pZEd4eklpd2ljMk41SWpvaVlYVjBieUlzSW1Gc2JHOTNTVzV6WldOMWNtVWlPakFzSW5CamN5STZJaUo5",
+      "options": {
+        "source": "test-fixture",
+        "capabilities": [
+          "vless-tls",
+          "vless-reality",
+          "vmess-ws-tls",
+          "trojan-tls",
+          "shadowsocks-aead"
+        ],
+        "confirmedTcpUdp": true
+      },
+      "parsed": {
+        "nodes": [
+          {
+            "id": "e1c5d557cfafe8566cd29fb417581ead30899a6814f875dbf19e676545f23e09",
+            "name": "Tokyo",
+            "group": "全部节点",
+            "region": null,
+            "order": 0,
+            "protocol": "vless",
+            "host": "node.example.invalid",
+            "port": 443,
+            "credential": "00000000-0000-4000-8000-000000000001",
+            "transport": "tcp",
+            "security": "tls",
+            "compatible": true,
+            "incompatibility": null,
+            "tcp": true,
+            "udp": true,
+            "ipv6": "unknown",
+            "connectionFingerprint": "e1c5d557cfafe8566cd29fb417581ead30899a6814f875dbf19e676545f23e09",
+            "source": "test-fixture",
+            "sni": "node.example.invalid",
+            "flow": "",
+            "fingerprint": "hellochrome_120"
+          },
+          {
+            "id": "a695ab92663883eeab19803aa599b40ac687f8646f7ce873abd68d9dbaaf138f",
+            "name": "node",
+            "group": "全部节点",
+            "region": null,
+            "order": 1,
+            "protocol": "vmess",
+            "host": "node.invalid",
+            "port": 443,
+            "credential": "00000000-0000-4000-8000-000000000001",
+            "transport": "ws",
+            "security": "tls",
+            "compatible": true,
+            "incompatibility": null,
+            "tcp": true,
+            "udp": true,
+            "ipv6": "unknown",
+            "connectionFingerprint": "a695ab92663883eeab19803aa599b40ac687f8646f7ce873abd68d9dbaaf138f",
+            "source": "test-fixture",
+            "method": "auto",
+            "sni": "node.invalid",
+            "wsHost": "node.invalid",
+            "wsPath": "/",
+            "fingerprint": "hellochrome_120"
+          }
+        ],
+        "quarantined": [],
+        "authoritativeEmpty": false
+      },
+      "outbounds": [
+        {
+          "tag": "proxy",
+          "protocol": "vless",
+          "settings": {
+            "vnext": [
+              {
+                "address": "node.example.invalid",
+                "port": 443,
+                "users": [
+                  {
+                    "id": "00000000-0000-4000-8000-000000000001",
+                    "encryption": "none",
+                    "flow": ""
+                  }
+                ]
+              }
+            ]
+          },
+          "streamSettings": {
+            "network": "tcp",
+            "security": "tls",
+            "tlsSettings": {
+              "serverName": "node.example.invalid",
+              "allowInsecure": false,
+              "fingerprint": "hellochrome_120"
+            }
+          }
+        },
+        {
+          "tag": "proxy",
+          "protocol": "vmess",
+          "settings": {
+            "vnext": [
+              {
+                "address": "node.invalid",
+                "port": 443,
+                "users": [
+                  {
+                    "id": "00000000-0000-4000-8000-000000000001",
+                    "alterId": 0,
+                    "security": "auto"
+                  }
+                ]
+              }
+            ]
+          },
+          "streamSettings": {
+            "network": "ws",
+            "security": "tls",
+            "tlsSettings": {
+              "serverName": "node.invalid",
+              "allowInsecure": false,
+              "fingerprint": "hellochrome_120"
+            },
+            "wsSettings": {
+              "path": "/",
+              "headers": {
+                "Host": "node.invalid"
+              }
+            }
+          }
+        }
+      ],
+      "probes": [
+        {
+          "log": {
+            "loglevel": "none",
+            "access": "none",
+            "error": "none"
+          },
+          "inbounds": [
+            {
+              "tag": "health",
+              "listen": "127.0.0.1",
+              "port": 49152,
+              "protocol": "socks",
+              "settings": {
+                "auth": "password",
+                "accounts": [
+                  {
+                    "user": "random-session",
+                    "pass": "random-session-password"
+                  }
+                ],
+                "udp": false
+              }
+            }
+          ],
+          "outbounds": [
+            {
+              "tag": "proxy",
+              "protocol": "vless",
+              "settings": {
+                "vnext": [
+                  {
+                    "address": "node.example.invalid",
+                    "port": 443,
+                    "users": [
+                      {
+                        "id": "00000000-0000-4000-8000-000000000001",
+                        "encryption": "none",
+                        "flow": ""
+                      }
+                    ]
+                  }
+                ]
+              },
+              "streamSettings": {
+                "network": "tcp",
+                "security": "tls",
+                "tlsSettings": {
+                  "serverName": "node.example.invalid",
+                  "allowInsecure": false,
+                  "fingerprint": "hellochrome_120"
+                }
+              }
+            }
+          ],
+          "routing": {
+            "domainStrategy": "AsIs",
+            "rules": [
+              {
+                "type": "field",
+                "inboundTag": [
+                  "health"
+                ],
+                "outboundTag": "proxy"
+              }
+            ]
+          }
+        },
+        {
+          "log": {
+            "loglevel": "none",
+            "access": "none",
+            "error": "none"
+          },
+          "inbounds": [
+            {
+              "tag": "health",
+              "listen": "127.0.0.1",
+              "port": 49152,
+              "protocol": "socks",
+              "settings": {
+                "auth": "password",
+                "accounts": [
+                  {
+                    "user": "random-session",
+                    "pass": "random-session-password"
+                  }
+                ],
+                "udp": false
+              }
+            }
+          ],
+          "outbounds": [
+            {
+              "tag": "proxy",
+              "protocol": "vmess",
+              "settings": {
+                "vnext": [
+                  {
+                    "address": "node.invalid",
+                    "port": 443,
+                    "users": [
+                      {
+                        "id": "00000000-0000-4000-8000-000000000001",
+                        "alterId": 0,
+                        "security": "auto"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "streamSettings": {
+                "network": "ws",
+                "security": "tls",
+                "tlsSettings": {
+                  "serverName": "node.invalid",
+                  "allowInsecure": false,
+                  "fingerprint": "hellochrome_120"
+                },
+                "wsSettings": {
+                  "path": "/",
+                  "headers": {
+                    "Host": "node.invalid"
+                  }
+                }
+              }
+            }
+          ],
+          "routing": {
+            "domainStrategy": "AsIs",
+            "rules": [
+              {
+                "type": "field",
+                "inboundTag": [
+                  "health"
+                ],
+                "outboundTag": "proxy"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "quarantine",
+      "raw": "vless://00000000-0000-4000-8000-000000000001@node.example.invalid:443?security=tls&type=tcp&sni=node.example.invalid#Tokyo\nvless://bad@node.invalid:443#bad",
+      "options": {
+        "source": "test-fixture",
+        "capabilities": [
+          "vless-tls",
+          "vless-reality",
+          "vmess-ws-tls",
+          "trojan-tls",
+          "shadowsocks-aead"
+        ],
+        "confirmedTcpUdp": true
+      },
+      "parsed": {
+        "nodes": [
+          {
+            "id": "e1c5d557cfafe8566cd29fb417581ead30899a6814f875dbf19e676545f23e09",
+            "name": "Tokyo",
+            "group": "全部节点",
+            "region": null,
+            "order": 0,
+            "protocol": "vless",
+            "host": "node.example.invalid",
+            "port": 443,
+            "credential": "00000000-0000-4000-8000-000000000001",
+            "transport": "tcp",
+            "security": "tls",
+            "compatible": true,
+            "incompatibility": null,
+            "tcp": true,
+            "udp": true,
+            "ipv6": "unknown",
+            "connectionFingerprint": "e1c5d557cfafe8566cd29fb417581ead30899a6814f875dbf19e676545f23e09",
+            "source": "test-fixture",
+            "sni": "node.example.invalid",
+            "flow": "",
+            "fingerprint": "hellochrome_120"
+          }
+        ],
+        "quarantined": [
+          {
+            "index": 1,
+            "reason": "节点字段不符合冻结格式"
+          }
+        ],
+        "authoritativeEmpty": false
+      },
+      "outbounds": [
+        {
+          "tag": "proxy",
+          "protocol": "vless",
+          "settings": {
+            "vnext": [
+              {
+                "address": "node.example.invalid",
+                "port": 443,
+                "users": [
+                  {
+                    "id": "00000000-0000-4000-8000-000000000001",
+                    "encryption": "none",
+                    "flow": ""
+                  }
+                ]
+              }
+            ]
+          },
+          "streamSettings": {
+            "network": "tcp",
+            "security": "tls",
+            "tlsSettings": {
+              "serverName": "node.example.invalid",
+              "allowInsecure": false,
+              "fingerprint": "hellochrome_120"
+            }
+          }
+        }
+      ],
+      "probes": [
+        {
+          "log": {
+            "loglevel": "none",
+            "access": "none",
+            "error": "none"
+          },
+          "inbounds": [
+            {
+              "tag": "health",
+              "listen": "127.0.0.1",
+              "port": 49152,
+              "protocol": "socks",
+              "settings": {
+                "auth": "password",
+                "accounts": [
+                  {
+                    "user": "random-session",
+                    "pass": "random-session-password"
+                  }
+                ],
+                "udp": false
+              }
+            }
+          ],
+          "outbounds": [
+            {
+              "tag": "proxy",
+              "protocol": "vless",
+              "settings": {
+                "vnext": [
+                  {
+                    "address": "node.example.invalid",
+                    "port": 443,
+                    "users": [
+                      {
+                        "id": "00000000-0000-4000-8000-000000000001",
+                        "encryption": "none",
+                        "flow": ""
+                      }
+                    ]
+                  }
+                ]
+              },
+              "streamSettings": {
+                "network": "tcp",
+                "security": "tls",
+                "tlsSettings": {
+                  "serverName": "node.example.invalid",
+                  "allowInsecure": false,
+                  "fingerprint": "hellochrome_120"
+                }
+              }
+            }
+          ],
+          "routing": {
+            "domainStrategy": "AsIs",
+            "rules": [
+              {
+                "type": "field",
+                "inboundTag": [
+                  "health"
+                ],
+                "outboundTag": "proxy"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "deduplicate",
+      "raw": "vless://00000000-0000-4000-8000-000000000001@node.example.invalid:443?security=tls&type=tcp&sni=node.example.invalid#Tokyo\nvless://00000000-0000-4000-8000-000000000001@node.example.invalid:443?security=tls&type=tcp&sni=node.example.invalid#renamed",
+      "options": {
+        "source": "test-fixture",
+        "capabilities": [
+          "vless-tls",
+          "vless-reality",
+          "vmess-ws-tls",
+          "trojan-tls",
+          "shadowsocks-aead"
+        ],
+        "confirmedTcpUdp": true
+      },
+      "parsed": {
+        "nodes": [
+          {
+            "id": "e1c5d557cfafe8566cd29fb417581ead30899a6814f875dbf19e676545f23e09",
+            "name": "Tokyo",
+            "group": "全部节点",
+            "region": null,
+            "order": 0,
+            "protocol": "vless",
+            "host": "node.example.invalid",
+            "port": 443,
+            "credential": "00000000-0000-4000-8000-000000000001",
+            "transport": "tcp",
+            "security": "tls",
+            "compatible": true,
+            "incompatibility": null,
+            "tcp": true,
+            "udp": true,
+            "ipv6": "unknown",
+            "connectionFingerprint": "e1c5d557cfafe8566cd29fb417581ead30899a6814f875dbf19e676545f23e09",
+            "source": "test-fixture",
+            "sni": "node.example.invalid",
+            "flow": "",
+            "fingerprint": "hellochrome_120"
+          }
+        ],
+        "quarantined": [],
+        "authoritativeEmpty": false
+      },
+      "outbounds": [
+        {
+          "tag": "proxy",
+          "protocol": "vless",
+          "settings": {
+            "vnext": [
+              {
+                "address": "node.example.invalid",
+                "port": 443,
+                "users": [
+                  {
+                    "id": "00000000-0000-4000-8000-000000000001",
+                    "encryption": "none",
+                    "flow": ""
+                  }
+                ]
+              }
+            ]
+          },
+          "streamSettings": {
+            "network": "tcp",
+            "security": "tls",
+            "tlsSettings": {
+              "serverName": "node.example.invalid",
+              "allowInsecure": false,
+              "fingerprint": "hellochrome_120"
+            }
+          }
+        }
+      ],
+      "probes": [
+        {
+          "log": {
+            "loglevel": "none",
+            "access": "none",
+            "error": "none"
+          },
+          "inbounds": [
+            {
+              "tag": "health",
+              "listen": "127.0.0.1",
+              "port": 49152,
+              "protocol": "socks",
+              "settings": {
+                "auth": "password",
+                "accounts": [
+                  {
+                    "user": "random-session",
+                    "pass": "random-session-password"
+                  }
+                ],
+                "udp": false
+              }
+            }
+          ],
+          "outbounds": [
+            {
+              "tag": "proxy",
+              "protocol": "vless",
+              "settings": {
+                "vnext": [
+                  {
+                    "address": "node.example.invalid",
+                    "port": 443,
+                    "users": [
+                      {
+                        "id": "00000000-0000-4000-8000-000000000001",
+                        "encryption": "none",
+                        "flow": ""
+                      }
+                    ]
+                  }
+                ]
+              },
+              "streamSettings": {
+                "network": "tcp",
+                "security": "tls",
+                "tlsSettings": {
+                  "serverName": "node.example.invalid",
+                  "allowInsecure": false,
+                  "fingerprint": "hellochrome_120"
+                }
+              }
+            }
+          ],
+          "routing": {
+            "domainStrategy": "AsIs",
+            "rules": [
+              {
+                "type": "field",
+                "inboundTag": [
+                  "health"
+                ],
+                "outboundTag": "proxy"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "unconfirmed",
+      "raw": "vless://00000000-0000-4000-8000-000000000001@node.example.invalid:443?security=tls&type=tcp&sni=node.example.invalid#Tokyo",
+      "options": {
+        "source": "test-fixture",
+        "capabilities": [
+          "vless-tls",
+          "vless-reality",
+          "vmess-ws-tls",
+          "trojan-tls",
+          "shadowsocks-aead"
+        ],
+        "confirmedTcpUdp": false
+      },
+      "parsed": {
+        "nodes": [
+          {
+            "id": "e18ac5313d0743498e69419ab7cb497a58312570f7d36d36e5cff9f01e96a611",
+            "name": "Tokyo",
+            "group": "全部节点",
+            "region": null,
+            "order": 0,
+            "protocol": "vless",
+            "host": "node.example.invalid",
+            "port": 443,
+            "credential": "00000000-0000-4000-8000-000000000001",
+            "transport": "tcp",
+            "security": "tls",
+            "compatible": false,
+            "incompatibility": "尚未确认节点 TCP / UDP 能力",
+            "tcp": false,
+            "udp": false,
+            "ipv6": "unknown",
+            "connectionFingerprint": "e18ac5313d0743498e69419ab7cb497a58312570f7d36d36e5cff9f01e96a611",
+            "source": "test-fixture",
+            "sni": "node.example.invalid",
+            "flow": "",
+            "fingerprint": "hellochrome_120"
+          }
+        ],
+        "quarantined": [],
+        "authoritativeEmpty": false
+      },
+      "outbounds": [
+        null
+      ],
+      "probes": [
+        null
+      ]
+    }
+  ]
+}

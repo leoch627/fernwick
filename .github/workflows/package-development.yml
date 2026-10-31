@@ -31,16 +31,12 @@ jobs:
         include:
           - os: ubuntu-24.04
             target: linux-x64
-            package: --linux deb --x64
           - os: windows-2025
             target: win32-x64
-            package: --win nsis --x64
           - os: macos-15
             target: darwin-arm64
-            package: --mac dmg zip --arm64
           - os: macos-15-intel
             target: darwin-x64
-            package: --mac dmg zip --x64
     runs-on: ${{ matrix.os }}
     env:
       # Windows Python otherwise reads files with the ANSI code page.
@@ -57,11 +53,19 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.27.3'
-          cache-dependency-path: native/helper/go.sum
+          cache-dependency-path: |
+            native/helper/go.sum
+            desktop/go.sum
       # Hosted Windows images have no python3 on PATH; setup-python provides `python` everywhere.
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
+      - name: Linux build dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+      - name: Windows installer compiler
+        if: runner.os == 'Windows'
+        run: choco install nsis --no-progress -y
       # The embedded public key comes from the Worker's own private key, so the two cannot drift apart.
       # Runs before npm ci so no installed package shares a step with the secret.
       - name: Public key
@@ -93,9 +97,16 @@ jobs:
       - run: python tools/fetch-core.py ${{ matrix.target }}
       - run: python tools/build-native.py --target ${{ matrix.target }}
       - run: npm run build
-      - run: npx electron-builder --config electron-builder.cjs ${{ matrix.package }} --publish never
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - run: python tools/package.py --target ${{ matrix.target }} --skip-ui
+      - name: Verify packaged resources
+        run: |
+          case '${{ matrix.target }}' in
+            linux-x64) directory=linux-unpacked ;;
+            win32-x64) directory=win-unpacked ;;
+            darwin-arm64) directory=mac-arm64 ;;
+            darwin-x64) directory=mac ;;
+          esac
+          python tools/verify-package.py "release/$directory" --target '${{ matrix.target }}'
       - name: Name installers and record metadata
         run: node tools/release-assets.mjs manifest ${{ matrix.target }}
       - uses: actions/upload-artifact@v4

@@ -1,4 +1,27 @@
-# 本轮：仅编译，测试留给用户
+# Wails 迁移验证记录
+
+本轮在 macOS arm64 主机验证 Wails v3 + Go 桌面迁移，使用 Node.js 24 和 Go 1.27.3。下表只记录已执行项目；平台安装、真实账号和 TUN 不由编译或演示结果推定通过。
+
+| 验证 | 结果 | 实际范围 |
+| --- | --- | --- |
+| `npm run build` / 前端类型检查 | 通过 | React/Vite 资源、内嵌品牌配置和原生资源清单 |
+| `tests/wails-bridge.test.ts` | 4 项通过 | 原生环境识别、Command、状态订阅及提前取消订阅 |
+| `npm run test:ui` | 通过 | Chromium 浏览器预览；不等同系统 WebView 实机验证 |
+| `npm run test:core` | 通过 | 固定 Xray 核心加载、配置编译与真实加密 loopback 通信 |
+| `npm run test:download` | 通过 | Go 下载器本地 TLS、续传、证书与哈希拒绝场景 |
+| `npm run test:packaging` | 6 项通过 | 文件路径、资源哈希、helper 合同、安装脚本约束 |
+| macOS arm64 / x64 DMG 与 ZIP | 已生成 | 应用签名完整性、内置资源哈希、可执行文件架构；仅开发 ad-hoc 签名 |
+| Windows x64 NSIS | 已生成 | PE 图标/版本资源、NSIS 实际编译、打包资源哈希；未在 Windows 安装 |
+| macOS 原生演示 | 通过 | 打包应用的 `wails://localhost` 页面、演示账号与 4 个节点、节点/设置页面；连接按预期返回组件不可用，未接管网络 |
+| Linux 桌面与 DEB | CI 配置完成，本机未运行 | Ubuntu 24.04 + GTK3/WebKitGTK 4.1 原生构建 |
+
+2026-11-01 收尾复核：`desktop` 与 `native/helper` 的 `gofmt`、`go vet`（含 `GOOS=windows`）和 `go test -race ./...` 均通过；`tsc --noEmit` 与 vitest 154 项通过；`fixtures:wails:check`（85 个 schema 用例 + 35 个订阅兼容用例）和 `test:packaging` 6 项通过。另在原生窗口中实测：登录表单提交、退出登录、连接被拒绝（组件不可用）三个流程正常。登录表单提交本轮之前被注入脚本拦截，详见 `wails-migration.md`。旧 Electron 安装产物与下方历史测试不能作为当前 Wails 包的通过证明。尚未完成四平台安装升级、真实账号/TUN、系统睡眠唤醒、断电恢复与同场景内存对照。
+
+---
+
+## 历史：原生功能接入阶段
+
+# 当时仅编译，测试留给用户
 
 用户最新要求：先做功能，不运行测试。本轮没有执行 npm test、核心/下载/UI/Electron 冒烟、安装、TUN 接管或升级演练。
 

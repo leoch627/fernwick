@@ -32,19 +32,16 @@ func TestValidAppArguments(t *testing.T) {
 	}
 }
 
-// installApp points the installation at two temporary files and returns a matching peer.
+// The Wails executable embeds the complete frontend; there is no separate archive.
 func installApp(t *testing.T) (Peer, string) {
 	t.Helper()
 	dir := t.TempDir()
 	app := writeFile(t, dir, "starrail", "application")
-	archive := writeFile(t, dir, "app.asar", "archive")
 	appHash, _ := digestFile(app)
-	archiveHash, _ := digestFile(archive)
-	withInstalled(t, Installation{AppExecutable: app, AppArchive: archive, AppSHA256: appHash, ArchiveSHA256: archiveHash})
+	withInstalled(t, Installation{AppExecutable: app, AppSHA256: appHash})
 	previous := peerCache.app
-	previousArchive := peerCache.archive
-	t.Cleanup(func() { peerCache.app, peerCache.archive = previous, previousArchive })
-	peerCache.app, peerCache.archive = nil, nil
+	t.Cleanup(func() { peerCache.app = previous })
+	peerCache.app = nil
 	return Peer{PID: 4242, User: "501", Birth: "1", Executable: app, Arguments: app + "\x00"}, app
 }
 
@@ -80,8 +77,7 @@ func TestVerifyPeerRequiresProtectedFiles(t *testing.T) {
 func TestVerifyPeerCacheInvalidatedByTampering(t *testing.T) {
 	peer, app := installApp(t)
 	appInfo, _ := os.Stat(installed.AppExecutable)
-	archiveInfo, _ := os.Stat(installed.AppArchive)
-	peerCache.app, peerCache.archive = appInfo, archiveInfo
+	peerCache.app = appInfo
 	if e := verifyPeer(peer); e != nil {
 		t.Fatalf("cached peer rejected: %v", e)
 	}

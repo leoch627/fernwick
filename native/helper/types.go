@@ -147,9 +147,7 @@ type Installation struct {
 	ProductID     string `json:"productId"`
 	AppExecutable string `json:"appExecutable"`
 	AppRoot       string `json:"appRoot"`
-	AppArchive    string `json:"appArchive"`
 	AppSHA256     string `json:"appSha256"`
-	ArchiveSHA256 string `json:"archiveSha256"`
 	CorePath      string `json:"corePath"`
 	CoreSHA256    string `json:"coreSha256"`
 	HelperPath    string `json:"helperPath"`

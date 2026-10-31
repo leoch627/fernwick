@@ -1,10 +1,10 @@
 // Release bookkeeping for CI, no dependencies:
-//   node tools/release-assets.mjs manifest <target>   after electron-builder: rename installers, write release/manifest-<target>.json
+//   node tools/release-assets.mjs manifest <target>   after tools/package.py: write release/manifest-<target>.json
 //   node tools/release-assets.mjs payload <version>   in the publish job: print the Worker's /admin/release body
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { lstat, readdir, readFile, rename, writeFile, copyFile } from 'node:fs/promises';
+import { lstat, readdir, readFile, writeFile, copyFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 const TARGETS = {
@@ -56,21 +56,22 @@ async function manifest(target) {
   const config = JSON.parse(await readFile('dist/build-config.json', 'utf8'));
   const { version } = JSON.parse(await readFile('package.json', 'utf8'));
   const core = JSON.parse(await readFile('resources/core-lock.json', 'utf8'));
-  const asset = core.assets.find(a => a.target === target);
+  const native = JSON.parse(await readFile('resources/native-manifest.json', 'utf8'));
+  const corePin = native.components.find(c => c.target === target && c.type === 'core');
+  if (!corePin) throw new Error(`missing pinned core for ${target}`);
   const names = await readdir('release');
   const files = [];
   for (const [extension, format, suffix] of spec.files) {
-    const found = names.filter(n => n.endsWith(extension) && !n.endsWith('.blockmap'));
+    const file = `${config.productId}-${version}-${suffix}${extension}`;
+    const found = names.filter(n => n === file);
     if (found.length !== 1) throw new Error(`expected one ${extension} in release/, found ${found.length}`);
     // Spaces and non-ASCII product names make poor URLs; the stable product ID does not.
-    const file = `${config.productId}-${version}-${suffix}${extension}`;
-    await rename(join('release', found[0]), join('release', file));
     files.push({ file, platform: spec.platform, arch: spec.arch, format, bytes: (await lstat(join('release', file))).size, sha256: await sha256(join('release', file)) });
   }
   const unpacked = join('release', spec.unpacked);
   const unpackedBytes = await treeBytes(unpacked);
   const signatureIdentity = await signedBy(spec.platform, spec.platform === 'win32' ? join('release', files[0].file) : unpacked);
-  const entries = files.map(f => ({ ...f, unpackedBytes, minimumOS: spec.minimumOS, coreVersion: core.version, coreSha256: asset.executableSha256, signatureIdentity }));
+  const entries = files.map(f => ({ ...f, unpackedBytes, minimumOS: spec.minimumOS, coreVersion: core.version, coreSha256: corePin.sha256, signatureIdentity }));
   await writeFile(join('release', `manifest-${target}.json`), JSON.stringify(entries, null, 2) + '\n');
   await copyFile('dist/build-config.json', join('release', 'build-config.json'));
   for (const e of entries) console.log(`${e.file}  ${e.bytes} bytes  sha256:${e.sha256}`);

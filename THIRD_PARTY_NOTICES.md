@@ -4,22 +4,23 @@ This project has no declared open-source license for its original application co
 
 | Component | Purpose | Upstream license |
 | --- | --- | --- |
-| Electron | Desktop runtime | MIT; Chromium and other bundled components have additional notices |
+| Wails v3 / @wailsio/runtime | Desktop WebView runtime and frontend bridge | MIT; bundled license in licenses/Wails-MIT.txt |
+| zalando/go-keyring | Windows/Linux operating-system credential storage | MIT; bundled license in licenses/go-keyring-MIT.txt |
 | React / React DOM | Local user interface | MIT |
 | Zod | Shared validation and JSON Schema | MIT |
 | node-semver | Release version comparison | ISC |
 | TypeScript | Type checking | Apache-2.0 |
 | Vite / Vitest / esbuild / tsx | Development and build | MIT (see exact installed packages) |
-| electron-builder | Development packaging | MIT; transitive tooling licenses apply |
-| Playwright Core | UI and Electron tests | Apache-2.0 |
-| Go / golang.org/x/sys | Native helper toolchain and OS interfaces | BSD-3-Clause; bundled license in licenses/golang-x-sys-BSD.txt |
+| go-winres | Windows application icon, manifest and version resources at build time | MIT |
+| Playwright Core | Browser preview tests | Apache-2.0 |
+| Go / golang.org/x/sys | Desktop/helper toolchain and OS interfaces | BSD-3-Clause; bundled license in licenses/golang-x-sys-BSD.txt |
 | Microsoft go-winio v0.6.2 | Local Windows named-pipe transport | MIT; bundled license in licenses/go-winio-MIT.txt |
 | Wintun | Windows TUN driver, unmodified DLL from the pinned Xray release | Upstream LICENSE-Wintun bundled alongside wintun.dll |
 | wyx2685/v2board | Referenced API contract; server source not bundled | MIT according to the inspected repository LICENSE |
 | Xray-core | Xray-core 26.10.31, unmodified upstream executable; included for the package target | MPL-2.0; full text in resources/licenses/Xray-core-MPL-2.0.txt and native/<target>/LICENSE |
 | Loyalsoldier/clash-rules | Separately distributed mainland-direct domain/IP data, converted to the client's JSON schema | GPL-3.0; full text, original source data and conversion tool included under rules/ in the binary package |
 
-The lockfile is the dependency inventory for this development revision. Electron binary distributions contain their own LICENSE and Chromium license notice. Those files must remain in packaged distributions. Before a production release, generate an inventory of the actual installed/bundled versions, review their licenses, add actual helper notices, and supply corresponding source/modification notices where required.
+The npm lockfile and the desktop/helper go.mod and go.sum files record this revision’s dependencies. Desktop packages use the operating system WebView (WKWebView, WebView2 or WebKitGTK); they do not bundle Electron or Chromium. Before production distribution, inventory the exact linked and bundled dependencies and supply their license/source notices. Development-only tools are not bundled.
 
 The unmodified Xray-core executable is obtained from https://github.com/XTLS/Xray-core/releases/tag/v26.10.31. Corresponding source is available at https://github.com/XTLS/Xray-core/tree/v26.10.31 (source archive: https://github.com/XTLS/Xray-core/archive/refs/tags/v26.10.31.tar.gz). No Xray source modifications were made. Exact upstream archive and executable SHA-256 values are recorded in resources/core-lock.json. The bundled executable must retain its LICENSE and this source-availability notice. Upstream geosite/geoip datasets are deliberately not bundled; the compiler currently uses explicit local rule data.
 

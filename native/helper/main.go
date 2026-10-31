@@ -53,7 +53,6 @@ func installApplication(root string) error {
 		return failure("INVALID_INPUT")
 	}
 	app := expectedAppExecutable(root)
-	archive := filepath.Join(applicationResources(root), "app.asar")
 	source := filepath.Join(applicationResources(root), "native", targetID())
 	self, e := os.Executable()
 	if e != nil {
@@ -67,7 +66,7 @@ func installApplication(root string) error {
 			return e
 		}
 	}
-	for _, path := range []string{app, archive, self, filepath.Join(source, filepath.Base(coreExecutable()))} {
+	for _, path := range []string{app, self, filepath.Join(source, filepath.Base(coreExecutable()))} {
 		if e = protectedFile(path); e != nil {
 			return e
 		}
@@ -118,11 +117,7 @@ func installApplication(root string) error {
 	if e != nil {
 		return e
 	}
-	archiveHash, e := digestFile(archive)
-	if e != nil {
-		return e
-	}
-	installed = Installation{ProductID: build.ProductID, AppExecutable: app, AppRoot: root, AppArchive: archive, AppSHA256: appHash, ArchiveSHA256: archiveHash, CorePath: coreExecutable(), CoreSHA256: coreHash, HelperPath: helperExecutable(), BuildID: build.BuildID}
+	installed = Installation{ProductID: build.ProductID, AppExecutable: app, AppRoot: root, AppSHA256: appHash, CorePath: coreExecutable(), CoreSHA256: coreHash, HelperPath: helperExecutable(), BuildID: build.BuildID}
 	if e = atomicJSON(filepath.Join(stateRoot(), "installation.json"), installed); e != nil {
 		return e
 	}

@@ -211,7 +211,7 @@ func checkCore() error {
 
 var peerCache = struct {
 	sync.Mutex
-	app, archive os.FileInfo
+	app os.FileInfo
 }{}
 
 func verifyPeer(p Peer) error {
@@ -233,27 +233,20 @@ func verifyPeer(p Peer) error {
 	if e != nil {
 		return failure("PERMISSION_REQUIRED")
 	}
-	archiveInfo, e := os.Stat(installed.AppArchive)
-	if e != nil {
-		return failure("PERMISSION_REQUIRED")
-	}
 	unchanged := func(before, after os.FileInfo) bool {
 		return before != nil && os.SameFile(before, after) && before.Size() == after.Size() && before.ModTime() == after.ModTime() && before.Mode() == after.Mode()
 	}
-	if unchanged(peerCache.app, appInfo) && unchanged(peerCache.archive, archiveInfo) {
+	if unchanged(peerCache.app, appInfo) {
 		return nil
 	}
-	for path, hash := range map[string]string{installed.AppExecutable: installed.AppSHA256, installed.AppArchive: installed.ArchiveSHA256} {
-		if e := protectedFile(path); e != nil {
-			return e
-		}
-		value, e := digestFile(path)
-		if e != nil || value != hash {
-			return failure("PERMISSION_REQUIRED")
-		}
+	if e := protectedFile(installed.AppExecutable); e != nil {
+		return e
+	}
+	value, e := digestFile(installed.AppExecutable)
+	if e != nil || value != installed.AppSHA256 {
+		return failure("PERMISSION_REQUIRED")
 	}
 	peerCache.app = appInfo
-	peerCache.archive = archiveInfo
 	return nil
 }
 func writeJournal(j *Journal) error {

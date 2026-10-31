@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "verified": false,
-  "buildId": "e507425f991ea4f2740233a7698d5f85e581500ba80892eb17970f99086002b1",
+  "buildId": "27080bdb65d0b4bc822b412127fd56e691ef5284265df96e87495ba067e12c60",
   "core": "Xray-core",
   "coreVersion": "26.10.31",
   "helperProtocol": 1,
@@ -34,25 +34,25 @@
       "type": "helper",
       "target": "linux-x64",
       "file": "resources/native/linux-x64/helper",
-      "sha256": "77a2f9dbaafeba966f68aa86f4a67fbee309fca68b5b23bba1c833d4bb065826"
+      "sha256": "5fa5661854dff9da75b90ffe9fdfaecbec4ba08b03ce8f8d4b2a951c0347efff"
     },
     {
       "type": "helper",
       "target": "win32-x64",
       "file": "resources/native/win32-x64/helper.exe",
-      "sha256": "3c675fad7f6aff36715f5826dbe28b1d0af1ecc016e4bea819d297516a6eaced"
+      "sha256": "68cf2791ea40c4e095b14659ddea03d051ab8cf508026bf461a118b47d685f67"
     },
     {
       "type": "helper",
       "target": "darwin-x64",
       "file": "resources/native/darwin-x64/helper",
-      "sha256": "3bbb5b70653339b5a883d4057f3573a31d8eea052d726e64fc169eea983e9d9e"
+      "sha256": "56032688ca36fc0d8f6b6e96dfb83677ed1df47f5818241bc9c400b709aed9d5"
     },
     {
       "type": "helper",
       "target": "darwin-arm64",
       "file": "resources/native/darwin-arm64/helper",
-      "sha256": "e2ee1b355c37dbbf7a9efd8d307035c5828359ef6ffef56f696632f245d36ae1"
+      "sha256": "b669fada70edf68a5e38ef7440ac95233b985184fd9c9f91ace1c34735937405"
     }
   ],
   "reason": "Native functionality implemented and compiled. Runtime and platform acceptance tests are deferred at the user\u2019s request."

@@ -7,7 +7,6 @@
   "author": {
     "name": "Project maintainers"
   },
-  "main": "dist/main/main.cjs",
   "scripts": {
     "dev": "node --import tsx tools/develop.ts",
     "demo": "node --import tsx tools/develop.ts --demo",
@@ -16,28 +15,35 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:ui": "node tools/ui-smoke.mjs",
+    "test:desktop": "cd desktop && go test -tags gtk3 -race ./...",
+    "check:desktop": "cd desktop && go vet -tags gtk3 ./... && go test -tags gtk3 -race ./...",
+    "fixtures:wails": "node --import tsx tools/wails-schema-fixtures.ts && node --import tsx tools/wails-compat-fixtures.ts",
+    "fixtures:wails:check": "node --import tsx tools/wails-schema-fixtures.ts --check && node --import tsx tools/wails-compat-fixtures.ts --check",
     "build": "node --import tsx tools/build.ts",
     "check": "npm run typecheck && npm test && npm run build",
     "config:check": "node --import tsx tools/config-check.ts",
     "brand": "node --import tsx tools/brand.ts",
     "release:check": "node --import tsx tools/release-check.ts",
     "sign": "node --import tsx tools/sign.ts",
-    "package:test": "npm run build && electron-builder --config electron-builder.cjs --linux deb --x64",
-    "package:release": "npm run build && npm run release:check && electron-builder --config electron-builder.cjs",
+    "package:test": "python3 tools/package.py",
+    "package:release": "python3 tools/package.py",
     "schemas": "node --import tsx tools/export-schemas.ts",
-    "test:core": "node --import tsx tools/core-smoke.ts",
-    "test:download": "node --import tsx tools/download-smoke.ts",
+    "test:core": "node tools/go-smoke.mjs core",
+    "test:download": "node tools/go-smoke.mjs download",
     "rules:import": "python3 tools/import-rules.py",
     "core:fetch": "python3 tools/fetch-core.py",
     "native:build": "python3 tools/build-native.py",
-    "package:windows": "npm run build && node tools/package-windows.cjs",
-    "package:macos": "npm run build && electron-builder --config electron-builder.cjs --mac dmg zip --x64 --arm64"
+    "package:windows": "python3 tools/package.py --target win32-x64",
+    "package:macos": "python3 tools/package.py --target darwin-arm64 --target darwin-x64",
+    "package:linux": "python3 tools/package.py --target linux-x64",
+    "test:packaging": "python3 -m unittest discover -s tests -p \"packaging_test.py\""
   },
   "dependencies": {
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "semver": "7.7.3",
-    "zod": "4.6.7"
+    "zod": "4.6.7",
+    "@wailsio/runtime": "3.0.0"
   },
   "devDependencies": {
     "@types/node": "24.10.1",
@@ -45,14 +51,10 @@
     "@types/react-dom": "19.2.2",
     "@types/semver": "7.7.1",
     "@vitejs/plugin-react": "5.1.1",
-    "electron": "45.2.1",
-    "electron-builder": "26.18.0",
-    "esbuild": "0.28.2",
     "playwright-core": "1.56.1",
     "tsx": "4.20.6",
     "typescript": "5.9.3",
     "vite": "7.3.7",
-    "vitest": "5.0.5",
-    "@electron/fuses": "1.8.0"
+    "vitest": "5.0.5"
   }
 }

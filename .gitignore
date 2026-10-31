@@ -12,3 +12,6 @@ __pycache__/
 .env*
 !.env.example
 resources/native/
+desktop/frontend/dist/
+desktop/assets/
+desktop/*.syso

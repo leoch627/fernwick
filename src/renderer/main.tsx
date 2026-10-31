@@ -4,9 +4,10 @@ import type { AppView, ClientBridge } from '../shared/view';
 import type { Command, Preferences } from '../shared/schema';
 import { messages } from '../shared/errors';
 import { previewBridge } from './preview';
+import { isWails, wailsBridge } from './wails';
 import './style.css';
 declare global { interface Window { starrail?: ClientBridge; } }
-const bridge = window.starrail ?? previewBridge();
+const bridge = window.starrail ?? (isWails() ? wailsBridge() : previewBridge());
 function Icon({ name, size = 20 }: { name: string; size?: number }) {
   const paths: Record<string, ReactNode> = {
     power: <><path d="M12 3v9"/><path d="M6.1 5.8a9 9 0 1 0 11.8 0"/></>,
