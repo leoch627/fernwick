@@ -78,7 +78,9 @@ func TestCompileCoreRuleMode(t *testing.T) {
 	if tls["allowInsecure"] != false || tls["serverName"] != "node.example.com" || tls["fingerprint"] != "hellochrome_120" {
 		t.Errorf("tls settings = %v", tls)
 	}
-	if sock := proxy.StreamSettings["sockopt"].(map[string]any); sock["interface"] != "eth0" {
+	// Linux binds the proxy itself; on Windows and macOS the core binds every outbound
+	// to the default route's interface (TestCompileCoreCoreOwnedRouting).
+	if sock := proxy.StreamSettings["sockopt"].(map[string]any); !coreOwnsRoutes(runtime.GOOS) && sock["interface"] != "eth0" {
 		t.Errorf("proxy is not bound to the physical interface: %v", sock)
 	}
 
