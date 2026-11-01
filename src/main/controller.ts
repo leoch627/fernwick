@@ -119,7 +119,7 @@ export class ClientController {
       }),
       preferences: { ...this.preferences }, storage: this.deps.secure.mode, helperReady: this.network.ready, proxyPort: 0,
       policy: active ? `已验证策略 v${active.policyVersion}` : '使用内置设置', announcement: active?.ui.announcement?.text ?? null,
-      update: this.updateStatus, manualUpdate: this.manualUpdate, pendingRenewal: this.renewalUntil > this.clock.now(),
+      update: this.updateStatus, manualUpdate: this.manualUpdate, installing: false, pendingRenewal: this.renewalUntil > this.clock.now(),
       download: this.deps.download?.view ?? { status: 'idle', version: null, received: 0, total: 0, error: null },
       rules: this.deps.resources?.status ?? '内置规则待配置', showTrafficSummary: active?.ui.showTrafficSummary ?? true,
       links: { website: !!this.link('website'), renew: !!this.link('renew'), help: !!this.link('help') }, now: this.clock.now(),

@@ -74,6 +74,12 @@ func openDownload(path string) (*os.File, error) {
 	return os.NewFile(uintptr(h), path), nil
 }
 func validatePlatformUpdate(ctx context.Context, path string, a Artifact) error {
+	// An unsigned installer is trusted through the signed release index alone: its
+	// SHA-256 was checked against the index before this call. A signed one must also
+	// carry the certificate the index names.
+	if unsignedUpdate(a) {
+		return nil
+	}
 	_, e := powershell(ctx, `$s=Get-AuthenticodeSignature -LiteralPath $v.path; if($s.Status -ne 'Valid' -or $s.SignerCertificate.Subject -ne $v.identity){throw 'signature'}`, object{"path": path, "identity": a.SignatureIdentity})
 	if e != nil {
 		return failure("UPDATE_VERIFY_FAILED")

@@ -43,6 +43,18 @@ func (r Rules) WithoutTarget(target string) Rules {
 	return kept
 }
 
+// Names no rule list covers are resolved only through the proxy, never by a mainland
+// resolver: asking one would show it every foreign site the user visits (a DNS leak),
+// and a failed answer does not fall back to one. Google's resolver honours EDNS Client
+// Subnet, so a fixed mainland subnet (AliDNS's anycast /24, not the user's address)
+// still gets unlisted mainland sites their mainland CDN addresses, which then route
+// direct. Cloudflare ignores ECS and returned overseas nodes, sending such sites abroad.
+// native/helper/compiler.go uses the same pair for TUN mode.
+const (
+	UnlistedResolver     = "https://8.8.8.8/dns-query"
+	MainlandClientSubnet = "223.5.5.0"
+)
+
 // CompileSystemProxy builds the core configuration for system proxy mode. It never
 // creates a TUN inbound, and every inbound listens on loopback only.
 func CompileSystemProxy(c Candidate, ports ProxyPorts) (map[string]any, error) {
@@ -137,9 +149,16 @@ func CompileSystemProxy(c Candidate, ports ProxyPorts) (map[string]any, error) {
 	} else {
 		routes = append(routes, withTarget(map[string]any{"type": "field", "network": "tcp,udp"}, primary))
 	}
-	dns = append(dns, map[string]any{"address": "https://1.1.1.1/dns-query", "tag": "dns-proxy", "skipFallback": false, "finalQuery": true})
+	// Everything else is resolved through the proxy only (see UnlistedResolver).
+	if c.Mode == "rule" {
+		dns = append(dns, map[string]any{"address": UnlistedResolver, "tag": "dns-proxy", "clientIP": MainlandClientSubnet, "skipFallback": false, "finalQuery": true})
+	} else {
+		dns = append(dns, map[string]any{"address": "https://1.1.1.1/dns-query", "tag": "dns-proxy", "skipFallback": false, "finalQuery": true})
+	}
 	outbounds = append(outbounds,
-		map[string]any{"tag": "direct", "protocol": "freedom", "settings": map[string]any{"domainStrategy": "UseIP", "finalRules": []any{map[string]any{"action": "allow", "ip": lanCIDRs}}}},
+		// Prefer IPv4: "UseIP" picks a random A or AAAA answer, and on the many networks
+		// without working IPv6 every other direct connection failed or hung.
+		map[string]any{"tag": "direct", "protocol": "freedom", "settings": map[string]any{"domainStrategy": "UseIPv4v6", "finalRules": []any{map[string]any{"action": "allow", "ip": lanCIDRs}}}},
 		map[string]any{"tag": "dns-out", "protocol": "dns", "settings": map[string]any{"rules": []any{map[string]any{"action": "hijack", "qType": "1,28"}, map[string]any{"action": "return", "rCode": 5}}}},
 		map[string]any{"tag": "block", "protocol": "blackhole"},
 	)

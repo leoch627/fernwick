@@ -4,7 +4,7 @@
   "targets": [
     {
       "id": "win32-x64",
-      "os": "Windows 11",
+      "os": "Windows 10 1809+ / Windows 11",
       "formats": [
         "nsis"
       ],

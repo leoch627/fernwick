@@ -47,20 +47,6 @@ type shell struct {
 	notificationMu      sync.Mutex
 }
 
-type shellInstaller struct {
-	native *core.NativeDriver
-	quit   func()
-}
-
-func (i shellInstaller) Verified() bool { return i.native.Verified() }
-func (i shellInstaller) Install(ctx context.Context, artifact core.Artifact, path, envelope string) error {
-	if err := i.native.Install(ctx, artifact, path, envelope); err != nil {
-		return err
-	}
-	go i.quit()
-	return nil
-}
-
 func readAsset(name string, value any) error {
 	data, err := bundled.ReadFile("assets/" + name)
 	if err != nil {
@@ -128,7 +114,7 @@ func (s *shell) show() {
 	}
 	options := application.WebviewWindowOptions{
 		Title: s.name, Width: 420, Height: 700, MinWidth: 360, MinHeight: 600, URL: "/",
-		BackgroundColour: application.NewRGB(245, 247, 251),
+		BackgroundColour: s.backgroundColour(),
 		DevToolsEnabled:  !production, DefaultContextMenuDisabled: true,
 		Permissions: map[application.PermissionType]application.Permission{
 			application.PermissionMicrophone:    application.PermissionDeny,
@@ -179,6 +165,16 @@ func (s *shell) show() {
 	w.OnWindowEvent(events.Common.WindowFocus, func(*application.WindowEvent) {
 		go s.controller.Command(context.Background(), json.RawMessage(`{"type":"renewal-return"}`))
 	})
+}
+
+// backgroundColour is the window colour shown before the page paints: the 三月七 or 黑塔
+// background (src/renderer/tokens.css), so a dark system does not flash white.
+func (s *shell) backgroundColour() application.RGBA {
+	theme := s.controller.View().Preferences.Theme
+	if theme == "dark" || theme == "system" && s.app.Env.IsDarkMode() {
+		return application.NewRGB(16, 15, 28)
+	}
+	return application.NewRGB(247, 248, 253)
 }
 
 func (s *shell) shouldQuit() bool {
@@ -376,8 +372,14 @@ func run() error {
 	if saved, e := reminderStore.Load(); e == nil && saved != nil {
 		_ = reminders.Restore(*saved)
 	}
+	platform := runtime.GOOS
+	if platform == "windows" {
+		platform = "win32"
+	}
+	updater := &core.SelfUpdater{Service: native, Platform: platform, Packaged: production && !demo, AppRoot: root, Executable: executable,
+		Package: build.ProductID, UninstallKey: build.AppID, Work: filepath.Join(dataDir, "updates"), Quit: s.app.Quit}
 	deps := core.ControllerDeps{
-		Build: build, Version: strings.TrimSpace(string(version)), Panel: panel, Demo: demo, NetworkDriver: driver, Installer: shellInstaller{native, s.app.Quit}, HTTP: transport,
+		Build: build, Version: strings.TrimSpace(string(version)), Panel: panel, Demo: demo, NetworkDriver: driver, Installer: updater, HTTP: transport,
 		Secure:       core.NewSecureStore[core.Persisted](filepath.Join(dataDir, "session.v2.enc"), key),
 		Preferences:  core.NewJSONStore[core.Preferences](filepath.Join(dataDir, "preferences.json"), 16384),
 		PolicyStore:  core.NewJSONStore[core.PolicyRecord](filepath.Join(dataDir, "policy.json"), 1048576),
@@ -429,9 +431,6 @@ func run() error {
 			actual, ok := systemVersion()
 			return ok && core.OSVersionAtLeast(actual, minimum)
 		},
-		ConfirmInstall: func(version string) bool {
-			return ask(s.app, "安装更新", "将断开连接并安装版本 "+version+"。", []string{"安装", "取消"}, 1) == 0
-		},
 		Telemetry: telemetry,
 		SelfCheck: func(ctx context.Context, nodes []core.ProxyNode) []map[string]any {
 			return core.SelfCheck(ctx, build, nodes)
@@ -469,6 +468,15 @@ func run() error {
 					}
 				}
 				s.notificationMu.Unlock()
+			}
+			// Started by the updater: the network service may still be restarting after
+			// reinstalling itself. Give it a moment rather than asking to repair it.
+			if slices.Contains(os.Args[1:], "--updated") && !demo {
+				if _, err := os.Stat(filepath.Join(core.HelperRoot(build, root), "server-public.pem")); err == nil {
+					for deadline := time.Now().Add(15 * time.Second); !native.Verified() && time.Now().Before(deadline) && ctx.Err() == nil; time.Sleep(500 * time.Millisecond) {
+						_ = native.Initialize(ctx)
+					}
+				}
 			}
 			_ = s.controller.Start(ctx)
 			if demo {

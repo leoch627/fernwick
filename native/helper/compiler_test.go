@@ -114,8 +114,29 @@ func TestCompileCoreRuleMode(t *testing.T) {
 	}
 	// Blocked domains need no resolver; the others are resolved in section order.
 	servers := cfg.DNS.Servers
-	if len(servers) != 4 || servers[0]["tag"] != "dns-proxy" || servers[1]["tag"] != "dns-proxy" || servers[2]["tag"] != "dns-direct" || len(servers[2]["domains"].([]any)) != 3 || servers[3]["tag"] != "dns-proxy" || servers[3]["domains"] != nil {
+	if len(servers) != 4 || servers[0]["tag"] != "dns-proxy" || servers[1]["tag"] != "dns-proxy" || servers[2]["tag"] != "dns-direct" || len(servers[2]["domains"].([]any)) != 3 || servers[3]["domains"] != nil {
 		t.Errorf("dns servers = %v", servers)
+	}
+	assertNoDNSLeak(t, servers)
+	for _, raw := range cfg.Outbounds {
+		if raw.Tag == "direct" && raw.Settings["domainStrategy"] != "UseIPv4v6" {
+			t.Errorf("direct connections must prefer IPv4: %v", raw)
+		}
+	}
+}
+
+// assertNoDNSLeak: the mainland resolver only ever sees names a direct list names; every
+// other name goes through the proxy, with a mainland ECS subnet, and is final.
+func assertNoDNSLeak(t *testing.T, servers []map[string]any) {
+	t.Helper()
+	for _, s := range servers {
+		if s["tag"] == "dns-direct" && (s["domains"] == nil || s["skipFallback"] != true || s["finalQuery"] != true) {
+			t.Errorf("mainland resolver answers unlisted names: %v", s)
+		}
+	}
+	last := servers[len(servers)-1]
+	if last["tag"] != "dns-proxy" || last["address"] != "https://8.8.8.8/dns-query" || last["clientIP"] != "223.5.5.0" || last["finalQuery"] != true {
+		t.Errorf("unlisted names must resolve through the proxy with a mainland subnet: %v", last)
 	}
 }
 

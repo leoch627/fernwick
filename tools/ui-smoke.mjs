@@ -30,6 +30,14 @@ try {
   await page.getByText('预览', { exact: true }).waitFor();
   await page.screenshot({ path: 'work/preview-home.png', fullPage: true });
 
+  // A new version is recommended on the home screen; one click downloads and installs it.
+  const update = page.getByRole('region', { name: '推荐更新' });
+  await update.getByText('新版本 0.3.0').waitFor();
+  await update.getByRole('button', { name: '立即更新' }).click();
+  await update.getByText('正在安装，完成后会自动重新打开').waitFor();
+  assert.equal(await update.getByRole('button', { name: '立即更新' }).count(), 0);
+  await page.screenshot({ path: 'work/preview-update.png' });
+
   // A refused connection explains itself under the button and offers the next step.
   await page.getByRole('button', { name: '连接', exact: true }).click();
   await page.getByRole('status').filter({ hasText: '网络组件需要修复' }).waitFor();
@@ -58,6 +66,13 @@ try {
 
   // Settings: global mode is a switch, and without an endpoint a report falls back to a file.
   await page.getByRole('button', { name: '设置' }).click();
+  assert.equal(await page.getByRole('switch', { name: '自动检查更新' }).count(), 0); // update checks are not optional
+  // Appearance follows the system; 亮色 (三月七) and 暗色 (黑塔) force one palette.
+  assert.equal(await page.getByRole('radio', { name: '跟随系统' }).getAttribute('aria-checked'), 'true');
+  await page.getByRole('radio', { name: '暗色' }).click();
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'dark');
+  await page.getByRole('radio', { name: '跟随系统' }).click();
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'system');
   await page.getByRole('switch', { name: '全局代理' }).click();
   assert.equal(await page.getByRole('switch', { name: '全局代理' }).getAttribute('aria-checked'), 'true');
   await page.getByRole('button', { name: /上报问题/ }).click();
@@ -65,6 +80,7 @@ try {
   await page.getByRole('button', { name: '返回' }).click();
 
   await page.emulateMedia({ colorScheme: 'dark' });
+  await page.waitForTimeout(400); // let colour transitions finish before the screenshot
   await page.screenshot({ path: 'work/preview-dark.png', fullPage: true });
   await page.setViewportSize({ width: 360, height: 640 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
@@ -98,7 +114,8 @@ try {
   assert.equal(await other.getByRole('note').locator('img').count(), 0);
   await other.getByText('剩余 2 天').waitFor();
   assert.match(await other.getByRole('region', { name: '套餐' }).getAttribute('class'), /warn/);
-  await other.getByRole('button', { name: '新版本已下载 · 点击重启更新' }).click();
+  await other.getByRole('region', { name: '推荐更新' }).getByText('已下载，更新时会短暂断开连接').waitFor();
+  await other.getByRole('region', { name: '推荐更新' }).getByRole('button', { name: '立即更新' }).click();
   await other.getByRole('button', { name: '设置' }).click();
   await other.getByRole('button', { name: /上报问题/ }).click();
   await other.getByRole('textbox', { name: '问题描述' }).fill('连不上');
@@ -122,6 +139,19 @@ try {
   assert.deepEqual((await proxied.evaluate(() => window.__commands)).filter(value => value !== 'state'), ['preferences', 'connect']);
   await proxied.close();
 
+  // Windows shows the name in its own title bar, so the page does not repeat it. The update cannot be dismissed.
+  const windows = await browser.newPage({ viewport: { width: 420, height: 700 }, userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0' });
+  windows.on('pageerror', error => failures.push(error.message));
+  await windows.addInitScript(fakeBridge, fixture);
+  await windows.goto('http://127.0.0.1:5173/');
+  await windows.getByRole('button', { name: '设置' }).waitFor();
+  assert.equal(await windows.locator('header.topbar').getByText(fixture.brand).count(), 0);
+  await windows.getByRole('region', { name: '推荐更新' }).getByRole('button', { name: '立即更新' }).waitFor();
+  assert.equal(await windows.getByRole('button', { name: '稍后提醒' }).count(), 0);
+  await windows.screenshot({ path: 'work/preview-windows.png' });
+  await windows.close();
+  assert.equal(await page.locator('header.topbar').getByText(fixture.brand).count(), 1);
+
   assert.deepEqual(failures, []);
-  console.log('UI smoke passed: connection refusal with next step, grouped node selection, tunnel and ad blocking switches, system proxy port and fallback, settings switches, report fallback, dark and narrow layouts, login, text-only announcements, renewal warning, one-click update and report code; no page errors.');
+  console.log('UI smoke passed: connection refusal with next step, grouped node selection, tunnel and ad blocking switches, system proxy port and fallback, settings switches, report fallback, dark and narrow layouts, login, text-only announcements, renewal warning, home update card with one-click update, Windows title bar, 三月七/黑塔 appearance, and report code; no page errors.');
 } finally { await browser.close(); await server.close(); }

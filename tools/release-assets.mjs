@@ -9,7 +9,8 @@ import { join } from 'node:path';
 
 const TARGETS = {
   'linux-x64': { platform: 'linux', arch: 'x64', minimumOS: '24.04', files: [['.deb', 'deb', 'linux-amd64']], unpacked: 'linux-unpacked' },
-  'win32-x64': { platform: 'win32', arch: 'x64', minimumOS: '10.0.22000', files: [['.exe', 'nsis', 'windows-x64']], unpacked: 'win-unpacked' },
+  // Windows 10 1809 (build 17763) and later, Windows 11 included; matches packaging/windows/installer.nsi.
+  'win32-x64': { platform: 'win32', arch: 'x64', minimumOS: '10.0.17763', files: [['.exe', 'nsis', 'windows-x64']], unpacked: 'win-unpacked' },
   'darwin-arm64': { platform: 'darwin', arch: 'arm64', minimumOS: '14.0', files: [['.dmg', 'dmg', 'macos-arm64'], ['.zip', 'zip', 'macos-arm64']], unpacked: 'mac-arm64' },
   'darwin-x64': { platform: 'darwin', arch: 'x64', minimumOS: '14.0', files: [['.dmg', 'dmg', 'macos-x64'], ['.zip', 'zip', 'macos-x64']], unpacked: 'mac' },
 };
@@ -28,7 +29,8 @@ async function treeBytes(path) {
 /**
  * The identity the native helper will demand of this update, read from the signed output itself so it
  * cannot disagree with the certificate used. Mirrors update_windows.go / update_darwin.go; anything
- * those would reject is 'unsigned', which makes the client open the download page instead.
+ * those would reject is 'unsigned': the helper then trusts the signed release index and its SHA-256 alone,
+ * as it does on Linux, and the client still updates in place.
  */
 async function signedBy(platform, path) {
   if (platform === 'win32') {

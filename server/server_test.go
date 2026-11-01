@@ -97,7 +97,7 @@ var installer = func() []byte {
 func digest(b []byte) string { h := sha256.Sum256(b); return hex.EncodeToString(h[:]) }
 
 func file(key, platform, arch, format string) PublishedFile {
-	minimum := map[string]string{"linux": "24.04", "win32": "10.0.22000", "darwin": "14.0"}[platform]
+	minimum := map[string]string{"linux": "24.04", "win32": "10.0.17763", "darwin": "14.0"}[platform]
 	return PublishedFile{Key: key, Platform: platform, Arch: arch, Format: format, Bytes: int64(len(installer)), SHA256: digest(installer), UnpackedBytes: 10000, MinimumOS: minimum, CoreVersion: "26.10.31", CoreSHA256: strings.Repeat("c", 64), SignatureIdentity: "unsigned"}
 }
 

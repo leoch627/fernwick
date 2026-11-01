@@ -46,8 +46,14 @@ func validatePlatformUpdate(ctx context.Context, path string, a Artifact) error 
 	if _, e := os.Stat(app); e != nil {
 		return failure("UPDATE_VERIFY_FAILED")
 	}
+	// Ad-hoc signed bundles verify too; this catches a damaged extraction before the swap.
 	if e := longRun(ctx, "/usr/bin/codesign", "", "--verify", "--deep", "--strict", app); e != nil {
 		return failure("UPDATE_VERIFY_FAILED")
+	}
+	// Unsigned (ad-hoc) builds are trusted through the signed release index, which pinned
+	// the archive's SHA-256; there is no Team ID or notarization to check.
+	if unsignedUpdate(a) {
+		return nil
 	}
 	out, e := combined(ctx, "/usr/bin/codesign", "-dv", "--verbose=4", app)
 	if e != nil || !strings.Contains(string(out), "TeamIdentifier="+a.SignatureIdentity+"\n") {

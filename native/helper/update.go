@@ -198,6 +198,11 @@ func verifiedRelease(raw, id string) (Artifact, Watermark, error) {
 	}
 	return a, watermark, nil
 }
+
+// unsignedUpdate reports an artifact published without a platform code signature
+// (tools/release-assets.mjs writes "unsigned"). Its integrity rests on the release
+// index signature and the SHA-256 pinned there, as on Linux.
+func unsignedUpdate(a Artifact) bool { return a.SignatureIdentity == "unsigned" }
 func stageUpdate(p Peer, r Request) error {
 	a, watermark, e := verifiedRelease(r.ReleaseEnvelope, r.ArtifactID)
 	if e != nil {

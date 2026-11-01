@@ -191,18 +191,46 @@ def package_macos(config, version, target, binary, stage, manifest):
     archive = ROOT / 'release' / (stem + '.zip')
     archive.unlink(missing_ok=True)
     run(['/usr/bin/ditto', '-c', '-k', '--sequesterRsrc', '--keepParent', app, archive])
-    dmg_source = ROOT / 'work/packaging' / ('dmg-' + target)
-    if dmg_source.exists():
-        shutil.rmtree(dmg_source)
-    dmg_source.mkdir(parents=True)
-    (dmg_source / (product + '.app')).symlink_to(app)
-    (dmg_source / 'Applications').symlink_to('/Applications')
-    # hdiutil does not dereference application symlinks: stage a real copy.
-    (dmg_source / (product + '.app')).unlink()
-    shutil.copytree(app, dmg_source / (product + '.app'), symlinks=True)
     dmg = ROOT / 'release' / (stem + '.dmg')
     dmg.unlink(missing_ok=True)
-    run(['/usr/bin/hdiutil', 'create', '-volname', product, '-srcfolder', dmg_source, '-ov', '-format', 'UDZO', dmg])
+    build_dmg(product, app, resources / 'icon.icns', target, dmg)
+
+
+# The DMG window: packaging/macos/dmg-background.html draws the drop targets at these points.
+DMG_WINDOW = (660, 420)
+DMG_ICONS = {'app': (170, 190), 'Applications': (490, 190)}
+
+
+def build_dmg(product, app, icns, target, dmg):
+    """A designed DMG (background, icon layout, volume icon) via dmgbuild, which writes
+    Finder's view settings directly, so it needs no Finder scripting on the build host."""
+    try:
+        import dmgbuild
+    except ImportError:
+        dmgbuild = None
+    if dmgbuild is None:
+        print('dmgbuild is not installed (pip install dmgbuild==1.6.7): building a plain DMG.', flush=True)
+        dmg_source = ROOT / 'work/packaging' / ('dmg-' + target)
+        if dmg_source.exists():
+            shutil.rmtree(dmg_source)
+        dmg_source.mkdir(parents=True)
+        (dmg_source / 'Applications').symlink_to('/Applications')
+        # hdiutil does not dereference application symlinks: stage a real copy.
+        shutil.copytree(app, dmg_source / app.name, symlinks=True)
+        run(['/usr/bin/hdiutil', 'create', '-volname', product, '-srcfolder', dmg_source, '-ov', '-format', 'UDZO', dmg])
+        return
+    background = ROOT / 'packaging/macos/dmg-background.png'
+    settings = {
+        'format': 'UDZO', 'files': [str(app)], 'symlinks': {'Applications': '/Applications'},
+        'icon': str(icns), 'background': str(background),  # dmgbuild adds the @2x image for Retina
+        'window_rect': ((200, 120), DMG_WINDOW), 'default_view': 'icon-view',
+        'show_status_bar': False, 'show_tab_view': False, 'show_toolbar': False, 'show_pathbar': False, 'show_sidebar': False,
+        'show_icon_preview': False, 'arrange_by': None, 'label_pos': 'bottom', 'icon_size': 112, 'text_size': 13,
+        'icon_locations': {app.name: DMG_ICONS['app'], 'Applications': DMG_ICONS['Applications']},
+        'hide_extensions': [app.name],
+    }
+    print(f'+ dmgbuild {dmg.name}', flush=True)
+    dmgbuild.build_dmg(str(dmg), product, settings=settings)
 
 
 def nsis_literal(value):
@@ -221,7 +249,8 @@ def package_windows(config, version, target, binary, stage, manifest):
         script = script.replace('@' + name + '@', nsis_literal(value))
     definition = ROOT / 'work/packaging/installer.nsi'
     definition.parent.mkdir(parents=True, exist_ok=True)
-    definition.write_text(script, encoding='utf-8')
+    # A byte order mark tells makensis the script (Chinese text, product name) is UTF-8.
+    definition.write_text(script, encoding='utf-8-sig')
     makensis = shutil.which('makensis')
     if not makensis and os.name == 'nt':
         for base in [os.environ.get('ProgramFiles(x86)', ''), os.environ.get('ProgramFiles', '')]:
@@ -231,7 +260,8 @@ def package_windows(config, version, target, binary, stage, manifest):
                 break
     if not makensis:
         raise ValueError('makensis is required (Windows: choco install nsis; Linux: apt install nsis; macOS: brew install nsis)')
-    run([makensis, '-V2', definition])
+    # makensis on Linux/macOS crashes on non-ASCII file names unless the locale is UTF-8.
+    run([makensis, '-V2', definition], env=None if os.name == 'nt' else {**os.environ, 'LC_ALL': 'C.UTF-8'})
     verify_resources(stage / 'resources', target, manifest)
 
 

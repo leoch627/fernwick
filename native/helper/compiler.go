@@ -6,6 +6,14 @@ type object = map[string]any
 
 var lan = []string{"127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16", "::1/128", "fc00::/7", "fe80::/10"}
 
+// Unlisted names resolve through the proxy only, with a fixed mainland ECS subnet so
+// mainland CDNs still answer with mainland addresses; never a mainland resolver, which
+// would see every foreign site visited. Mirrors desktop/core/proxyconfig.go.
+const (
+	unlistedResolver     = "https://8.8.8.8/dns-query"
+	mainlandClientSubnet = "223.5.5.0"
+)
+
 func tunName() string {
 	if runtime.GOOS == "darwin" {
 		return "utun50"
@@ -143,7 +151,13 @@ func compileCore(c Candidate, j Journal) []byte {
 		}
 	}
 	routes = append(routes, route(object{"type": "field", "network": "tcp,udp"}, primary))
-	dns = append(dns, object{"address": "https://1.1.1.1/dns-query", "tag": "dns-proxy", "skipFallback": false, "finalQuery": true})
+	// Every other name, including each app's own lookups captured by the TUN, is resolved
+	// through the proxy only; a failure never falls back to a mainland resolver.
+	if c.Mode == "rule" {
+		dns = append(dns, object{"address": unlistedResolver, "tag": "dns-proxy", "clientIP": mainlandClientSubnet, "skipFallback": false, "finalQuery": true})
+	} else {
+		dns = append(dns, object{"address": "https://1.1.1.1/dns-query", "tag": "dns-proxy", "skipFallback": false, "finalQuery": true})
+	}
 	tun := object{"name": j.Tun, "desc": ruleTag() + " TUN", "mtu": 1500, "gateway": []string{"172.19.0.1/30", "fdfe:dcba:9876::1/126"}, "autoSystemRoutingTable": []string{}, "autoOutboundsInterface": j.Interface.Name, "autoSystemDnsToGateway": false}
 	// Windows Xray owns its adapter's routes, DNS and dynamic WFP filters. Other platforms use helper-owned routing/DNS.
 	if runtime.GOOS == "windows" {
@@ -151,7 +165,7 @@ func compileCore(c Candidate, j Journal) []byte {
 		tun["dns"] = []string{tunDNS()}
 		tun["autoSystemWfpBlockLeak"] = []string{"dns", "misconfigtun"}
 	}
-	outbounds = append(outbounds, object{"tag": "direct", "protocol": "freedom", "settings": object{"domainStrategy": "UseIP", "finalRules": []object{{"action": "allow", "ip": lan}}}, "streamSettings": object{"sockopt": sock}}, object{"tag": "dns-out", "protocol": "dns", "settings": object{"rules": []object{{"action": "hijack", "qType": "1,28"}, {"action": "return", "rCode": 5}}}}, object{"tag": "block", "protocol": "blackhole"})
+	outbounds = append(outbounds, object{"tag": "direct", "protocol": "freedom", "settings": object{"domainStrategy": "UseIPv4v6", "finalRules": []object{{"action": "allow", "ip": lan}}}, "streamSettings": object{"sockopt": sock}}, object{"tag": "dns-out", "protocol": "dns", "settings": object{"rules": []object{{"action": "hijack", "qType": "1,28"}, {"action": "return", "rCode": 5}}}}, object{"tag": "block", "protocol": "blackhole"})
 	routing := object{"domainStrategy": "AsIs", "rules": routes}
 	config := object{"log": object{"loglevel": "none", "access": "none", "error": "none"}, "inbounds": []object{{"tag": "tun", "protocol": "tun", "settings": tun, "sniffing": object{"enabled": true, "destOverride": []string{"http", "tls", "quic"}, "routeOnly": true}}}, "outbounds": outbounds, "dns": object{"tag": "dns-proxy", "queryStrategy": "UseIP", "disableFallbackIfMatch": true, "useSystemHosts": false, "servers": dns}, "routing": routing}
 	if len(balancers) > 0 {

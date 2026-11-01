@@ -55,7 +55,8 @@ func downloadPage(brand *Brand, release *ReleaseState) string {
 	if unsigned {
 		notes = `<div class="notes"><strong>第一次打开时系统会拦一下，按下面做一次就好</strong>
 <p><b>Windows</b>：出现“Windows 已保护你的电脑”时，点“更多信息”，再点“仍要运行”。</p>
-<p><b>macOS</b>：把应用拖进“应用程序”，双击打开。提示“无法验证开发者”或“已损坏”时，打开“系统设置 → 隐私与安全性”，在页面最下方点“仍要打开”，输入开机密码确认。</p>
+<p><b>macOS</b>：把应用拖进“应用程序”，双击打开。提示“无法验证开发者”或“已损坏”时，打开“系统设置 → 隐私与安全性”，在页面最下方点“仍要打开”，输入开机密码确认。用过 TUN 模式的旧版本无法直接覆盖（提示项目被“锁定”）：先把旧版拖到废纸篓（输入开机密码），再拖入新版。</p>
+<p>装好以后，新版本会显示在客户端首页，点“立即更新”即可，不用再来这里下载。</p>
 <p><b>Linux</b>：在终端运行 <code>sudo apt install ./下载的文件.deb</code>。</p></div>`
 	}
 	return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">

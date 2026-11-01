@@ -77,7 +77,7 @@ jobs:
 
           | 系统 | 文件 |
           | --- | --- |
-          | Windows 11 x64 | \`*-windows-x64.exe\` |
+          | Windows 10 / 11 x64 | \`*-windows-x64.exe\` |
           | macOS 14+ Apple 芯片 | \`*-macos-arm64.dmg\` |
           | macOS 14+ Intel | \`*-macos-x64.dmg\` |
           | Ubuntu 24.04 x64 | \`*-linux-amd64.deb\` |
