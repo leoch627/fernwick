@@ -36,7 +36,7 @@ func TestControllerProbeBatchBoundsConcurrencyAndCooldown(t *testing.T) {
 		ids = append(ids, node.ID)
 	}
 	result := commandForTest(h.controller, map[string]any{"type": "probe-nodes", "nodeIds": ids})
-	if !result.OK || peak.Load() != 4 || calls.Load() != 10 {
+	if !result.OK || peak.Load() != 6 || calls.Load() != 10 {
 		t.Fatalf("probe limits peak%d calls%d result%+v", peak.Load(), calls.Load(), result)
 	}
 	healthy := 0
@@ -62,9 +62,9 @@ func TestControllerProbeRejectsOversizeUnknownAndDemoWithoutExecutor(t *testing.
 		return ProbeResult{Healthy: true}, nil
 	}
 	h := probeController(t, probe, false)
-	ids := []string{}
-	for _, node := range h.controller.View().Nodes {
-		ids = append(ids, node.ID)
+	ids := make([]string, 65)
+	for i := range ids {
+		ids[i] = "node"
 	}
 	if result := commandForTest(h.controller, map[string]any{"type": "probe-nodes", "nodeIds": ids}); result.Error != "INVALID_INPUT" {
 		t.Fatal(result)

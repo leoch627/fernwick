@@ -474,7 +474,7 @@ func decodeCommand(value any) (Command, error) {
 		if err := decodeValue(value, reflect.ValueOf(&shape).Elem(), false); err != nil {
 			return Command{}, err
 		}
-		if !inRange(len(shape.NodeIDs), 1, 10) {
+		if !inRange(len(shape.NodeIDs), 1, 64) {
 			return Command{}, NewAppError("INVALID_INPUT")
 		}
 		for _, id := range shape.NodeIDs {
@@ -495,6 +495,18 @@ func decodeCommand(value any) (Command, error) {
 			return Command{}, NewAppError("INVALID_INPUT")
 		}
 		command.Link = shape.Link
+	case "report":
+		var shape struct {
+			Type string `json:"type"`
+			Note string `json:"note"`
+		}
+		if err := decodeValue(value, reflect.ValueOf(&shape).Elem(), false); err != nil {
+			return Command{}, err
+		}
+		if !boundedText(shape.Note, 0, 500) {
+			return Command{}, NewAppError("INVALID_INPUT")
+		}
+		command.Note = shape.Note
 	case "state", "sync", "connect", "disconnect", "logout", "repair", "check-update", "download-update", "pause-update", "cancel-update", "install-update", "diagnostics", "renewal-return":
 		if len(object) != 1 {
 			return Command{}, NewAppError("INVALID_INPUT")

@@ -391,7 +391,12 @@ func (d *ArtifactDownload) transfer(ctx context.Context, artifact Artifact) erro
 		if err != nil {
 			return err
 		}
-		response, err := d.transport.Open(ctx, raw, offset, etag)
+		var response DownloadResponse
+		for _, location := range MirrorURLs(raw, d.build.TrustedUpdateOrigins) {
+			if response, err = d.transport.Open(ctx, location, offset, etag); err == nil || ctx.Err() != nil {
+				break
+			}
+		}
 		if err != nil {
 			return err
 		}

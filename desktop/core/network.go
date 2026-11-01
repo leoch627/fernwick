@@ -58,6 +58,10 @@ type NetworkStatus struct {
 	DesiredConnected bool
 	Generation       uint64
 	LastError        *ErrorCode
+	// Stage is the last connection step started (prepare, protect, start, probe,
+	// commit) and Proof the last data-path check, for troubleshooting reports.
+	Stage string
+	Proof *NetworkProof
 }
 type networkFuture struct {
 	done chan struct{}
@@ -202,6 +206,15 @@ func (n *NetworkController) connect(ctx context.Context, candidate Candidate, ga
 		}
 		result = NewAppError(code)
 	}()
+	stage := func(name string) {
+		n.mu.Lock()
+		n.status.Stage = name
+		n.mu.Unlock()
+	}
+	n.mu.Lock()
+	n.status.Proof = nil
+	n.mu.Unlock()
+	stage("prepare")
 	n.set("Preparing")
 	if err := n.valid(ctx, generation, gate); err != nil {
 		return err
@@ -229,22 +242,29 @@ func (n *NetworkController) connect(ctx context.Context, candidate Candidate, ga
 		}
 		return n.valid(attempt, generation, gate)
 	}
+	stage("protect")
 	if err = step(func() error { return n.driver.Protect(attempt, ticket, transactionDeadline) }); err != nil {
 		return err
 	}
+	stage("start")
 	if err = step(func() error { return n.driver.Start(attempt, ticket) }); err != nil {
 		return err
 	}
+	stage("probe")
 	proof, err := n.driver.Probe(attempt, ticket)
 	if err != nil {
 		return err
 	}
+	n.mu.Lock()
+	n.status.Proof = &proof
+	n.mu.Unlock()
 	if err = n.valid(attempt, generation, gate); err != nil {
 		return err
 	}
 	if !proof.TCP || !proof.DNS {
 		return NewAppError("CONNECT_TIMEOUT")
 	}
+	stage("commit")
 	if err = step(func() error { return n.driver.Commit(attempt, ticket) }); err != nil {
 		return err
 	}

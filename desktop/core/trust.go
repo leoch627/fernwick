@@ -259,3 +259,24 @@ func ValidateBuild(config BuildConfig) (BuildConfig, error) {
 	}
 	return config, nil
 }
+
+// MirrorURLs lists raw, then the same path on each other trusted origin. An endpoint
+// reachable under several domains signs its URLs with the primary one; when that
+// domain is blocked the file is still fetched, and still verified by its hash.
+func MirrorURLs(raw string, origins []string) []string {
+	out := []string{raw}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return out
+	}
+	for _, origin := range origins {
+		mirror, err := url.Parse(origin)
+		if err != nil || mirror.Scheme != "https" || mirror.Host == u.Host {
+			continue
+		}
+		location := *u
+		location.Host = mirror.Host
+		out = append(out, location.String())
+	}
+	return out
+}

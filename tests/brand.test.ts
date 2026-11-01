@@ -27,6 +27,14 @@ it('builds a valid production configuration from a brand', () => {
   expect(config.policyKeys).toEqual(config.updateKeys);
 });
 
+it('lists several endpoint domains in failover order', () => {
+  const config = brandConfig({ ...brand(), endpoint: ['https://dl.mooncloud.net/', 'https://dl.mooncloud.org', 'https://dl.mooncloud.net'] }, base);
+  expect(config.updateFeedUrls).toEqual(['https://dl.mooncloud.net/v1/release', 'https://dl.mooncloud.org/v1/release']);
+  expect(config.policyUrls).toEqual(['https://dl.mooncloud.net/v1/policy', 'https://dl.mooncloud.org/v1/policy']);
+  expect(config.trustedUpdateOrigins).toEqual(['https://dl.mooncloud.net', 'https://dl.mooncloud.org']);
+  expect(config.trustedResourceOrigins).toEqual(config.trustedUpdateOrigins);
+});
+
 it('derives system names from the stable id, not the display name', () => {
   const config = brandConfig({ ...brand(), name: '新名字' }, base);
   expect(helperSocket(config, 'linux')).toBe('/run/moon-cloud/helper.sock');

@@ -119,3 +119,10 @@ func TestBuildTrustValidatesIdentityDeploymentAndPublicKeys(t *testing.T) {
 		t.Fatal("malformed key accepted")
 	}
 }
+
+func TestMirrorURLs(t *testing.T) {
+	got := MirrorURLs("https://dl.example.com/files/rules/x/rules.json", []string{"https://dl.example.com", "https://dl.example.net", "http://insecure.example.org"})
+	if len(got) != 2 || got[0] != "https://dl.example.com/files/rules/x/rules.json" || got[1] != "https://dl.example.net/files/rules/x/rules.json" {
+		t.Fatal(got)
+	}
+}

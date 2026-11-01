@@ -194,6 +194,7 @@ type Command struct {
 	Preferences *Preferences `json:"preferences,omitempty"`
 	NodeIDs     []string     `json:"nodeIds,omitempty"`
 	Link        string       `json:"link,omitempty"`
+	Note        string       `json:"note,omitempty"`
 }
 
 const MaxSafeInteger int64 = 9007199254740991

@@ -32,7 +32,7 @@ func TestCommandBoundariesAndDiscriminatedShapes(t *testing.T) {
 	invalid := []string{`null`, `[]`, `{}`, `{"type":null}`, `{"type":"unknown"}`, `{"type":"state","email":"alice@example.invalid"}`, `{"type":"state","type":"sync"}`,
 		`{"type":"login","email":"a@b","password":"x"}`, `{"type":"login","email":"alice@example.invalid","password":""}`, `{"type":"login","email":"alice@example.invalid","password":null}`, `{"type":"login","email":"alice@example.invalid","password":"` + strings.Repeat(`\ud800`, 1025) + `"}`,
 		`{"type":"login","email":"alice@example.invalid","password":"` + strings.Repeat(`🚄`, 1025) + `"}`,
-		`{"type":"probe-nodes","nodeIds":[]}`, `{"type":"probe-nodes","nodeIds":[null]}`, `{"type":"probe-nodes","nodeIds":[""]}`, `{"type":"probe-nodes","nodeIds":[` + strings.Repeat(`"n",`, 10) + `"n"]}`,
+		`{"type":"probe-nodes","nodeIds":[]}`, `{"type":"probe-nodes","nodeIds":[null]}`, `{"type":"probe-nodes","nodeIds":[""]}`, `{"type":"probe-nodes","nodeIds":[` + strings.Repeat(`"n",`, 64) + `"n"]}`,
 		`{"type":"open-link","link":"https://evil.invalid"}`, `{"type":"preferences","preferences":null}`,
 	}
 	for _, raw := range invalid {

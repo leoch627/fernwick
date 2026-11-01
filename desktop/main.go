@@ -127,7 +127,7 @@ func (s *shell) show() {
 		return
 	}
 	options := application.WebviewWindowOptions{
-		Title: s.name, Width: 1180, Height: 810, MinWidth: 780, MinHeight: 640, URL: "/",
+		Title: s.name, Width: 420, Height: 700, MinWidth: 360, MinHeight: 600, URL: "/",
 		BackgroundColour: application.NewRGB(245, 247, 251),
 		DevToolsEnabled:  !production, DefaultContextMenuDisabled: true,
 		Permissions: map[application.PermissionType]application.Permission{
@@ -332,11 +332,27 @@ func run() error {
 		}
 	})
 	var driver core.NetworkDriver = native
-	var panel core.Panel = core.NewV2BoardAdapter(build, contract, core.NewHelperTransport(native))
+	// Events go straight out (not through the helper): reports can exceed its control body limit.
+	telemetry := core.NewTelemetry(build, filepath.Join(dataDir, "telemetry.json"), core.NewDirectHTTPSTransportTimeout(30*time.Second), func() core.TelemetryInfo {
+		info := core.TelemetryInfo{Version: strings.TrimSpace(string(version)), Platform: runtime.GOOS, Arch: runtime.GOARCH}
+		if info.Platform == "windows" {
+			info.Platform = "win32"
+		}
+		if info.Arch == "amd64" {
+			info.Arch = "x64"
+		}
+		info.OS, _ = systemVersion()
+		if s.controller != nil {
+			info.Email = s.controller.SessionEmail()
+		}
+		return info
+	})
+	var panel core.Panel = core.NewV2BoardAdapter(build, contract, core.NewObservedTransport(core.NewHelperTransport(native), telemetry))
 	var key core.KeyProvider = &systemKeyProvider{service: build.AppID}
 	if demo {
 		driver = core.UnavailableDriver{}
 		panel = core.NewDemoPanel()
+		telemetry = nil
 		key = core.KeyProviderFunc(func(bool) ([]byte, error) { return nil, core.ErrKeyUnavailable })
 	}
 	transport := core.NewHelperTransport(native)
@@ -410,6 +426,8 @@ func run() error {
 		ConfirmInstall: func(version string) bool {
 			return ask(s.app, "安装更新", "将断开连接并安装版本 "+version+"。", []string{"安装", "取消"}, 1) == 0
 		},
+		Telemetry: telemetry,
+		SelfCheck: func(ctx context.Context, nodes []core.ProxyNode) []map[string]any { return core.SelfCheck(ctx, build, nodes) },
 	}
 	s.controller = core.NewClientController(deps)
 	bridge.controller = s.controller

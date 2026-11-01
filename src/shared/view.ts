@@ -12,7 +12,9 @@ export interface AppView {
   nodes: NodeView[]; preferences: Preferences; storage: 'encrypted' | 'memory' | 'locked';
   helperReady: boolean; policy: string; announcement: string | null; update: string; manualUpdate: boolean; pendingRenewal: boolean;
   download: DownloadView; rules: string; showTrafficSummary: boolean;
-  links: { website: boolean; renew: boolean; help: boolean }; now: number;
+  links: { website: boolean; renew: boolean; help: boolean };
+  /** Problem report: the code is what the user gives to support. */
+  report: { status: 'idle' | 'sending' | 'sent' | 'failed'; code: string | null }; reportAvailable: boolean; now: number;
 }
 export interface CommandResult { ok: boolean; state: AppView; error?: ErrorCode; }
 export interface ClientBridge { command(command: Command): Promise<CommandResult>; subscribe(listener: (state: AppView) => void): () => void; }

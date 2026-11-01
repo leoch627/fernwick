@@ -1,113 +1,244 @@
 import React, { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
-import type { AppView, ClientBridge } from '../shared/view';
+import type { AppView, ClientBridge, NodeView } from '../shared/view';
 import type { Command, Preferences } from '../shared/schema';
-import { messages } from '../shared/errors';
+import { messages, type ErrorCode } from '../shared/errors';
 import { previewBridge } from './preview';
 import { isWails, wailsBridge } from './wails';
 import './style.css';
 declare global { interface Window { starrail?: ClientBridge; } }
 const bridge = window.starrail ?? (isWails() ? wailsBridge() : previewBridge());
+
+// One window, three things on it: connect, pick a node, see the plan. Everything else
+// lives in the settings sheet. Most users never open it.
+
 function Icon({ name, size = 20 }: { name: string; size?: number }) {
   const paths: Record<string, ReactNode> = {
     power: <><path d="M12 3v9"/><path d="M6.1 5.8a9 9 0 1 0 11.8 0"/></>,
-    grid: <><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></>,
-    nodes: <><circle cx="12" cy="5" r="3"/><circle cx="5" cy="18" r="3"/><circle cx="19" cy="18" r="3"/><path d="m10.5 7.5-4 8m7-8 4 8M8 18h8"/></>,
-    settings: <><path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1m0-12.8-2.1 2.1m-8.6 8.6-2.1 2.1"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></>,
-    globe: <><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></>,
-    shield: <><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6z"/><path d="m8 12 3 3 5-6"/></>,
-    refresh: <><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.2 6.2A8 8 0 0 1 20 12M4 12a8 8 0 0 0 13.8 5.8"/></>,
-    arrow: <><path d="M5 12h14m-5-5 5 5-5 5"/></>,
+    settings: <><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></>,
     chevron: <path d="m9 5 7 7-7 7"/>,
-    external: <><path d="M14 3h7v7m0-7L10 14"/><path d="M10 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5"/></>,
-    help: <><circle cx="12" cy="12" r="9"/><path d="M9 9a3 3 0 0 1 6 0c0 2-3 2-3 4m0 3h.01"/></>,
+    back: <path d="m15 5-7 7 7 7"/>,
     check: <path d="m5 12 4 4L19 6"/>,
     close: <path d="m6 6 12 12M6 18 18 6"/>,
     search: <><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></>,
-    sparkle: <><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5z"/></>,
-    clock: <><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></>,
-    download: <><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></>,
-    user: <><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/></>,
+    sparkle: <path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5z"/>,
     info: <><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10h.01"/></>,
-    logout: <><path d="M9 3H4v18h5m5-5 4-4-4-4m-6 4h13"/></>,
   };
-  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name] ?? paths.globe}</svg>;
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name] ?? paths.info}</svg>;
 }
-function BrandMark() { return <svg width="37" height="37" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="12" fill="#6958df"/><path d="m21 7 2.5 10L34 20l-10.5 3L21 33l-3-10L8 20l10-3z" fill="white"/><path d="M7 29c9 3 23-8 26-17" stroke="#c4baff" strokeWidth="1.5" fill="none"/></svg>; }
-const date = (value: string | number | null) => value ? new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', timeZoneName: 'short' }).format(new Date(value)) : '暂无数据';
-function bytes(value: string | null) { if (value === null) return '待确认'; const n = BigInt(value); return `${Number(n * 10n / 1073741824n) / 10} GB`; }
+function BrandMark({ size = 32 }: { size?: number }) {
+  return <svg width={size} height={size} viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="12" fill="#6958df"/><path d="m21 7 2.5 10L34 20l-10.5 3L21 33l-3-10L8 20l10-3z" fill="white"/></svg>;
+}
+
+const regions: Record<string, string> = {
+  HK: '香港', TW: '台湾', JP: '日本', SG: '新加坡', US: '美国', KR: '韩国', GB: '英国', DE: '德国', NL: '荷兰', FR: '法国', CA: '加拿大', AU: '澳大利亚',
+  MO: '澳门', IN: '印度', RU: '俄罗斯', TR: '土耳其', MY: '马来西亚', TH: '泰国', VN: '越南', PH: '菲律宾', ID: '印尼', AR: '阿根廷', BR: '巴西', EU: '欧洲',
+  IT: '意大利', ES: '西班牙', SE: '瑞典', CH: '瑞士', PL: '波兰', FI: '芬兰', IE: '爱尔兰', AE: '阿联酋', IL: '以色列', ZA: '南非', MX: '墨西哥', NZ: '新西兰',
+};
+const flag = (code: string | null) => code && /^[A-Z]{2}$/.test(code) ? String.fromCodePoint(...[...code].map(c => 0x1F1E6 + c.charCodeAt(0) - 65)) : '🌐';
+const regionName = (code: string | null) => code ? regions[code] ?? code : '其他';
+/** Node names start with their flag; the flag is drawn separately. */
+const label = (node: NodeView) => node.name.replace(/^\p{Regional_Indicator}{2}\s*/u, '') || node.name;
+const latencyClass = (ms: number) => ms < 200 ? 'fast' : ms < 500 ? 'ok' : 'slow';
+
 function remaining(expires: string | null, now: number, kind: string) {
-  if (kind === 'unlimited') return '长期有效'; if (!expires) return '待确认'; const diff = Date.parse(expires) - now;
-  if (diff <= 0) return '已到期'; if (diff < 3600000) return `剩余 ${Math.ceil(diff / 60000)} 分钟`; if (diff < 86400000) return `剩余 ${Math.ceil(diff / 3600000)} 小时`; return `剩余 ${Math.ceil(diff / 86400000)} 天`;
+  if (kind === 'unlimited') return { text: '长期有效', days: Infinity };
+  if (!expires) return { text: '到期时间待确认', days: Infinity };
+  const diff = Date.parse(expires) - now;
+  if (diff <= 0) return { text: '已到期', days: 0 };
+  if (diff < 86400000) return { text: `剩余 ${Math.ceil(diff / 3600000)} 小时`, days: 0 };
+  return { text: `剩余 ${Math.ceil(diff / 86400000)} 天`, days: Math.ceil(diff / 86400000) };
 }
-function Modal({ title, children, close, wide = false }: { title: string; children: ReactNode; close(): void; wide?: boolean }) {
+const gb = (value: bigint) => `${Number(value * 10n / 1073741824n) / 10} GB`;
+
+type Action = 'nodes' | 'renew' | 'repair' | 'report' | 'connect';
+/** Problems in the words a user understands, each with the one thing to try next. */
+const problems: Partial<Record<ErrorCode, { text: string; action?: Action }>> = {
+  CONNECT_TIMEOUT: { text: '这条线路暂时连不上', action: 'nodes' },
+  NO_COMPATIBLE_NODES: { text: '这条线路暂时用不了', action: 'nodes' },
+  NO_AUTHORIZED_NODES: { text: '暂时没有可用线路', action: 'report' },
+  ACCOUNT_EXPIRED: { text: '套餐已到期', action: 'renew' },
+  QUOTA_EXHAUSTED: { text: '本期流量已用完', action: 'renew' },
+  NO_SERVICE: { text: '账号还没有可用套餐', action: 'renew' },
+  ACCOUNT_BANNED: { text: '账号暂不可用，请联系客服', action: 'report' },
+  PERMISSION_REQUIRED: { text: '需要允许系统授权才能连接', action: 'connect' },
+  COMPONENTS_UNAVAILABLE: { text: '网络组件需要修复', action: 'repair' },
+  NETWORK_RECOVERY_REQUIRED: { text: '网络需要修复', action: 'repair' },
+  NETWORK_CONFLICT: { text: '其他加速软件正在占用网络，请先关闭它' },
+  CONTROL_UNAVAILABLE: { text: '暂时连不上服务器，请检查网络', action: 'report' },
+  SNAPSHOT_EXPIRED: { text: '线路信息太久没更新，请检查网络', action: 'report' },
+  CLOCK_UNTRUSTED: { text: '电脑时间不准，请校正后重试' },
+  CANCELLED: { text: '已取消' },
+};
+const actionLabels: Record<Action, string> = { nodes: '换个线路', renew: '去续费', repair: '修复', report: '上报问题', connect: '重新连接' };
+const problem = (code: ErrorCode) => problems[code] ?? { text: messages[code], action: 'report' as Action };
+
+function Sheet({ title, children, close }: { title: string; children: ReactNode; close(): void }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => { ref.current?.showModal(); return () => ref.current?.close(); }, []);
-  return <dialog ref={ref} className={wide ? 'modal wide' : 'modal'} onCancel={close} onClick={event => { if (event.target === ref.current) close(); }}><header><div><span className="eyebrow">STAR RAIL / NETWORK</span><h2>{title}</h2></div><button className="icon-button" aria-label="关闭对话框" onClick={close}><Icon name="close"/></button></header>{children}</dialog>;
+  return <dialog ref={ref} className="sheet" onCancel={close} aria-label={title}>
+    <header><button className="icon-button" aria-label="返回" onClick={close}><Icon name="back"/></button><h2>{title}</h2><span/></header>
+    <div className="sheet-body">{children}</div>
+  </dialog>;
 }
+
+function Login({ state, busy, run }: { state: AppView; busy: string | null; run(command: Command): Promise<boolean> }) {
+  return <main className="login">
+    <BrandMark size={56}/><h1>{state.brand}</h1>
+    <form onSubmit={event => {
+      event.preventDefault(); const form = event.currentTarget; const data = new FormData(form);
+      void run({ type: 'login', email: String(data.get('email')).trim(), password: String(data.get('password')) }).then(ok => { if (ok) form.reset(); });
+    }}>
+      <input name="email" type="email" aria-label="邮箱" autoComplete="username" placeholder="邮箱" required maxLength={254}/>
+      <input name="password" type="password" aria-label="密码" autoComplete="current-password" placeholder="密码" required maxLength={1024}/>
+      <button className="primary" disabled={!!busy}>{busy === 'login' ? '正在登录…' : '登录'}</button>
+    </form>
+    {state.links.website && <p className="login-links"><button className="link" onClick={() => void run({ type: 'open-link', link: 'website' })}>注册账号</button><span>·</span><button className="link" onClick={() => void run({ type: 'open-link', link: 'website' })}>忘记密码</button></p>}
+    {state.demo && <p className="muted">预览模式不能登录真实账号</p>}
+  </main>;
+}
+
+function NodeSheet({ state, close, run }: { state: AppView; close(): void; run(command: Command): Promise<boolean> }) {
+  const [search, setSearch] = useState('');
+  // Measure every node when the list opens; the core probes them in isolation.
+  useEffect(() => {
+    const ids = state.nodes.filter(n => n.compatible).slice(0, 64).map(n => n.id);
+    if (ids.length) void bridge.command({ type: 'probe-nodes', nodeIds: ids }).catch(() => undefined);
+  }, []);
+  const choose = (nodeId: string | null) => { close(); void run({ type: 'preferences', preferences: { ...state.preferences, nodeId } }); };
+  const visible = state.nodes.filter(n => !search || `${n.name} ${regionName(n.region)}`.toLowerCase().includes(search.toLowerCase()));
+  const groups = new Map<string, NodeView[]>();
+  for (const node of visible) groups.set(node.region ?? '', [...groups.get(node.region ?? '') ?? [], node]);
+  return <Sheet title="选择线路" close={close}>
+    <button className={`node-row auto ${state.selectedNode === null ? 'selected' : ''}`} onClick={() => choose(null)}>
+      <span className="flag"><Icon name="sparkle"/></span><span className="node-name"><strong>自动选择</strong><small>推荐 · 一直使用最快的线路</small></span>
+      {state.selectedNode === null && <Icon name="check" size={18}/>}
+    </button>
+    {state.nodes.length > 12 && <label className="search"><Icon name="search" size={16}/><input aria-label="搜索线路" placeholder="搜索地区或线路" value={search} onChange={e => setSearch(e.target.value)}/></label>}
+    {[...groups].map(([region, nodes]) => <section key={region} className="node-group">
+      <h3>{flag(region || null)} {regionName(region || null)}</h3>
+      {nodes.map(node => <button key={node.id} className={`node-row ${state.selectedNode === node.id ? 'selected' : ''}`} disabled={!node.compatible} onClick={() => choose(node.id)}>
+        <span className="node-name"><strong>{label(node)}</strong>{!node.compatible && <small>暂不可用</small>}</span>
+        <span className={`latency ${node.latency !== null ? latencyClass(node.latency) : ''}`}>{node.probe === 'testing' ? '测速中' : node.latency !== null ? `${Math.round(node.latency)} ms` : node.probe === 'timeout' ? '超时' : ''}</span>
+        {state.selectedNode === node.id && <Icon name="check" size={18}/>}
+      </button>)}
+    </section>)}
+    {!state.nodes.length && <p className="empty">暂时没有线路，稍后会自动刷新</p>}
+  </Sheet>;
+}
+
+function ReportPanel({ state, run }: { state: AppView; run(command: Command): Promise<boolean> }) {
+  const [note, setNote] = useState(''); const [copied, setCopied] = useState(false);
+  const { status, code } = state.report;
+  if (status === 'sent' && code) return <div className="report sent">
+    <p>问题编号</p><strong className="code" aria-label="问题编号">{code}</strong>
+    <button className="secondary" onClick={() => { void navigator.clipboard?.writeText(code).then(() => setCopied(true)); }}>{copied ? '已复制' : '复制编号'}</button>
+    <p className="muted">把编号发给客服，我们能看到你的连接情况</p>
+  </div>;
+  if (!state.reportAvailable) return <div className="report"><p className="muted">导出诊断文件后发给客服</p><button className="secondary" onClick={() => void run({ type: 'diagnostics' })}>导出诊断文件</button></div>;
+  return <div className="report">
+    <textarea aria-label="问题描述" placeholder="遇到了什么问题？（可以不填）" maxLength={500} value={note} onChange={e => setNote(e.target.value)} disabled={status === 'sending'}/>
+    <button className="primary" disabled={status === 'sending'} onClick={() => void run({ type: 'report', note })}>{status === 'sending' ? '正在检查网络并上传…' : '发送'}</button>
+    {status === 'failed' && <p className="warn">发送失败。可以导出诊断文件发给客服：<button className="link" onClick={() => void run({ type: 'diagnostics' })}>导出</button></p>}
+    <p className="muted">会上传连接记录和网络检查结果，不包含浏览记录和密码</p>
+  </div>;
+}
+
+function SettingsSheet({ state, busy, report, close, run, prefs }: { state: AppView; busy: string | null; report: boolean; close(): void; run(command: Command): Promise<boolean>; prefs(change: Partial<Preferences>): void }) {
+  const [reporting, setReporting] = useState(report || state.report.status !== 'idle');
+  const download = state.download;
+  return <Sheet title="设置" close={close}>
+    <div className="group">
+      <div className="row"><span><strong>开机自动启动</strong></span><button role="switch" aria-checked={state.preferences.launchAtLogin} aria-label="开机自动启动" className={`toggle ${state.preferences.launchAtLogin ? 'on' : ''}`} onClick={() => prefs({ launchAtLogin: !state.preferences.launchAtLogin })}/></div>
+      <div className="row"><span><strong>全局代理</strong><small>一般不用打开。个别网站打不开时可以试试</small></span><button role="switch" aria-checked={state.preferences.mode === 'global'} aria-label="全局代理" className={`toggle ${state.preferences.mode === 'global' ? 'on' : ''}`} onClick={() => prefs({ mode: state.preferences.mode === 'global' ? 'rule' : 'global' })}/></div>
+    </div>
+    <div className="group">
+      <button className="row" onClick={() => setReporting(!reporting)} aria-expanded={reporting}><span><strong>上报问题</strong><small>连不上、很慢时点这里</small></span><Icon name="chevron" size={16}/></button>
+      {reporting && <ReportPanel state={state} run={run}/>}
+    </div>
+    <div className="group">
+      <div className="row"><span><strong>检查更新</strong><small>{download.status === 'downloading' ? `正在下载 ${Math.round(download.received / Math.max(1, download.total) * 100)}%` : download.status === 'ready' ? `新版本 ${download.version} 已下载` : state.update}</small></span>
+        {download.status === 'ready' ? <button className="secondary" onClick={() => void run({ type: 'install-update' })}>重启更新</button>
+          : download.status === 'available' || download.status === 'paused' || download.status === 'failed' ? <button className="secondary" onClick={() => void run({ type: 'download-update' })}>{state.manualUpdate ? '去下载' : '下载'}</button>
+          : <button className="secondary" disabled={!!busy || download.status === 'downloading'} onClick={() => void run({ type: 'check-update' })}>检查</button>}
+      </div>
+      <div className="row"><span><strong>修复网络组件</strong><small>{state.helperReady ? '组件正常' : '第一次连接时会自动安装'}</small></span><button className="secondary" disabled={!!busy} onClick={() => void run({ type: 'repair' })}>修复</button></div>
+      {state.links.help && <button className="row" onClick={() => void run({ type: 'open-link', link: 'help' })}><span><strong>使用帮助</strong></span><Icon name="chevron" size={16}/></button>}
+    </div>
+    {state.loggedIn && <button className="danger" onClick={() => { close(); void run({ type: 'logout' }); }}>退出登录</button>}
+    <p className="version">{state.brand} {state.version}{state.environment === 'test' ? ' · 测试版' : ''}</p>
+  </Sheet>;
+}
+
+function Home({ state, busy, run, open }: { state: AppView; busy: string | null; run(command: Command): Promise<boolean>; open(sheet: 'nodes' | 'settings', report?: boolean): void }) {
+  const connected = state.connection === 'Connected';
+  const working = ['Preparing', 'Connecting', 'Switching', 'Reconnecting', 'Disconnecting'].includes(state.connection) || busy === 'connect';
+  const recovery = state.connection === 'RecoveryRequired';
+  const selected = state.nodes.find(n => n.id === state.selectedNode);
+  const actual = state.nodes.find(n => n.id === state.actualNode);
+  const shown = selected ?? (connected ? actual : undefined);
+  const account = state.account;
+  const left = remaining(account?.expiresAt ?? null, state.now, account?.expiryKind ?? 'unknown');
+  const quota = account?.quotaKind === 'finite' && account.quotaBytes ? BigInt(account.quotaBytes) : 0n;
+  const used = BigInt(account?.usedBytes ?? '0');
+  const percent = quota > 0n ? Math.min(100, Number(used * 1000n / quota) / 10) : 0;
+  const renewSoon = !!account && (left.days <= 7 || percent >= 90 || account.status !== '套餐可用');
+  const issue = state.error && !connected ? problem(state.error) : null;
+  const act = (action: Action) => {
+    if (action === 'nodes') open('nodes'); else if (action === 'report') open('settings', true);
+    else if (action === 'renew') void run({ type: 'open-link', link: 'renew' });
+    else if (action === 'repair') void run({ type: 'repair' }); else void run({ type: 'connect' });
+  };
+  const toggle = () => void run({ type: recovery ? 'repair' : connected || working ? 'disconnect' : 'connect' });
+  return <main className="home">
+    {state.announcement && <p className="announcement" role="note">{state.announcement}</p>}
+    <section className={`power ${connected ? 'on' : working ? 'working' : ''}`}>
+      <button className="power-button" aria-label={connected || working ? '断开连接' : recovery ? '修复网络' : '连接'} onClick={toggle}><Icon name="power" size={48}/></button>
+      <h1 aria-live="polite">{connected ? '已连接' : working ? (state.connection === 'Disconnecting' ? '正在断开…' : '正在连接…') : recovery ? '网络需要修复' : '未连接'}</h1>
+      {issue ? <p className="problem" role="status">{issue.text}{issue.action && <button className="link" onClick={() => act(issue.action!)}>{actionLabels[issue.action]}</button>}</p>
+        : <p className="muted">{connected ? (state.preferences.mode === 'global' ? '全局代理' : '智能分流 · 国内网站不受影响') : working ? '第一次连接需要允许系统授权' : '点击按钮开始'}</p>}
+    </section>
+    <button className="card node-card" onClick={() => open('nodes')}>
+      <span className="flag">{shown ? flag(shown.region) : <Icon name="sparkle"/>}</span>
+      <span className="node-name"><small>线路</small><strong>{shown ? label(shown) : state.selectedNode ? '原线路已下线，请重新选择' : '自动选择'}</strong></span>
+      {shown?.latency != null && <span className={`latency ${latencyClass(shown.latency)}`}>{Math.round(shown.latency)} ms</span>}
+      <Icon name="chevron" size={18}/>
+    </button>
+    {account && <section className={`card plan-card ${renewSoon ? 'warn' : ''}`} aria-label="套餐">
+      <div className="plan-line"><strong>{left.text}</strong>{quota > 0n && state.showTrafficSummary && <span>已用 {gb(used)} / {gb(quota)}</span>}</div>
+      {quota > 0n && state.showTrafficSummary && <div className="progress" role="progressbar" aria-label="流量用量" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${percent}%` }}/></div>}
+      <div className="plan-line"><small>{account.planName}{account.status !== '套餐可用' ? ` · ${account.status}` : ''}</small>
+        {state.links.renew && <button className={renewSoon ? 'primary small' : 'link'} onClick={() => void run({ type: 'open-link', link: 'renew' })}>续费</button>}</div>
+      {state.pendingRenewal && <button className="link" onClick={() => void run({ type: 'renewal-return' })}>已经续费？点这里刷新</button>}
+    </section>}
+    {state.download.status === 'ready' && <button className="update-pill" onClick={() => void run({ type: 'install-update' })}>新版本已下载 · 点击重启更新</button>}
+  </main>;
+}
+
 function App() {
-  const [state, setState] = useState<AppView | null>(null); const [modal, setModal] = useState<'nodes' | 'settings' | null>(null);
-  const [search, setSearch] = useState(''); const [busy, setBusy] = useState<string | null>(null); const [toast, setToast] = useState<string | null>(null);
-  useEffect(() => { const unsubscribe = bridge.subscribe(setState); void bridge.command({ type: 'state' }).then(r => setState(r.state)).catch(() => setToast('无法连接桌面服务，请重新启动客户端')); return unsubscribe; }, []);
+  const [state, setState] = useState<AppView | null>(null); const [sheet, setSheet] = useState<'nodes' | 'settings' | null>(null);
+  const [busy, setBusy] = useState<string | null>(null); const [toast, setToast] = useState<string | null>(null); const [report, setReport] = useState(false);
+  useEffect(() => { const unsubscribe = bridge.subscribe(setState); void bridge.command({ type: 'state' }).then(r => setState(r.state)).catch(() => setToast('客户端没有正常启动，请重新打开')); return unsubscribe; }, []);
   useEffect(() => { if (state) document.documentElement.dataset.theme = state.preferences.theme; }, [state?.preferences.theme]);
   useEffect(() => { if (!toast) return; const id = setTimeout(() => setToast(null), 5000); return () => clearTimeout(id); }, [toast]);
-  const run = async (command: Command) => { setBusy(command.type); try { const r = await bridge.command(command); setState(r.state); if (!r.ok && r.error) setToast(messages[r.error]); } catch { setToast('操作未完成，请重试'); } finally { setBusy(null); } };
+  const run = async (command: Command) => {
+    setBusy(command.type);
+    try {
+      const r = await bridge.command(command); setState(r.state);
+      // Connection problems are shown under the button with what to do next.
+      if (!r.ok && r.error && command.type !== 'connect' && command.type !== 'report') setToast(problem(r.error).text);
+      return r.ok;
+    } catch { setToast('操作没有完成，请重试'); return false; } finally { setBusy(null); }
+  };
   const prefs = (change: Partial<Preferences>) => { if (state) void run({ type: 'preferences', preferences: { ...state.preferences, ...change } }); };
-  if (!state) return <div className="loading"><BrandMark/><p>{toast ?? '正在打开…'}</p></div>;
-  const connected = state.connection === 'Connected'; const transitioning = !['Disconnected', 'Connected', 'RecoveryRequired'].includes(state.connection);
-  const selected = state.nodes.find(n => n.id === state.selectedNode); const actual = state.nodes.find(n => n.id === state.actualNode);
-  const expiry = remaining(state.account?.expiresAt ?? null, state.now, state.account?.expiryKind ?? 'unknown');
-  const quota = state.account?.quotaBytes ? BigInt(state.account.quotaBytes) : 0n; const used = BigInt(state.account?.usedBytes ?? '0'); const percent = quota > 0n ? Math.min(100, Number(used * 10000n / quota) / 100) : 0;
-  return <div className="shell">
-    <aside className="sidebar">
-      <div className="brand"><BrandMark/><div><strong>{state.brand}</strong></div></div>
-      <div className="nav-label">工作空间</div>
-      <nav aria-label="主导航">
-        <button className={!modal ? 'nav active' : 'nav'} onClick={() => setModal(null)}><Icon name="grid"/>连接概览<span className="nav-dot"/></button>
-        <button className={modal === 'nodes' ? 'nav active' : 'nav'} onClick={() => setModal('nodes')}><Icon name="nodes"/>节点列表<span className="nav-count">{state.nodes.length}</span></button>
-        <button className={modal === 'settings' ? 'nav active' : 'nav'} onClick={() => setModal('settings')}><Icon name="settings"/>偏好设置</button>
-      </nav>
-      <div className="sidebar-bottom"><div className="sidebar-note"><span className="tiny-star">✦</span><strong>连接更远的世界</strong><p>规则分流，轻松连接。<br/>让网络回归简单。</p></div>
-      <button className="nav" onClick={() => void run({ type: 'open-link', link: 'help' })}><Icon name="help"/>帮助中心<Icon name="external" size={14}/></button>
-      <div className="version"><span className="status-dot"/>v{state.version}<span>{state.environment === 'test' ? '开发版本' : '正式版本'}</span></div></div>
-    </aside>
-    <main>
-      <header className="topbar"><div className="breadcrumb">工作空间 <span>/</span> <b>连接概览</b></div><div className="account-chip"><span className="avatar"><Icon name="user" size={16}/></span><span>{state.account?.email ?? '尚未登录'}</span></div></header>
-      <div className="content">
-        {state.demo && <div className="demo-banner"><Icon name="info" size={16}/><span>界面预览 · 当前账号和节点为示例数据，未接入代理网络</span><span>PREVIEW</span></div>}
-        {state.announcement && <div className="announcement" role="note"><Icon name="info" size={16}/><span>{state.announcement}</span></div>}
-        <div className="page-title"><div><span className="eyebrow">YOUR CONNECTION, SIMPLIFIED</span><h1>连接概览<span className="title-star">✦</span></h1><p>选择你的线路，开始新的旅程。</p></div><button className="secondary refresh-button" disabled={!!busy || !state.loggedIn} onClick={() => void run({ type: 'sync' })}><Icon name="refresh" size={16}/> {state.sync === 'Syncing' ? '正在同步' : '刷新订阅'}</button></div>
-        {state.error && <div className="error-banner" role="status"><Icon name="info" size={17}/><span>{messages[state.error]}{state.sync === 'UsingValidCache' ? '，正在使用上次有效数据。' : ''}</span><button onClick={() => state.error === 'COMPONENTS_UNAVAILABLE' ? setModal('settings') : void run({ type: 'sync' })}>{state.error === 'COMPONENTS_UNAVAILABLE' ? '查看详情' : '重试'}<Icon name="arrow" size={15}/></button></div>}
-        <div className="dashboard-grid">
-          <section className="card connection-card" aria-labelledby="connection-heading">
-            <div className="card-top"><h2 id="connection-heading"><Icon name="shield" size={18}/>网络连接</h2><span className={`badge ${connected ? 'green' : ''}`}><span className="status-dot"/>{connected ? '已连接' : transitioning ? '处理中' : '未连接'}</span></div>
-            {!state.loggedIn ? <form className="login-form" onSubmit={event => { event.preventDefault(); const form = event.currentTarget; const data = new FormData(form); const email = String(data.get('email')); const password = String(data.get('password')); form.reset(); void run({ type: 'login', email, password }); }}>
-              <div className="login-symbol"><Icon name="sparkle" size={30}/></div><h3>欢迎来到 {state.brand}</h3><p>登录后，套餐与节点将自动同步。</p>
-              <label>邮箱地址<input name="email" type="email" autoComplete="username" placeholder="you@example.com" required maxLength={254}/></label>
-              <label>密码<input name="password" type="password" autoComplete="current-password" placeholder="输入账号密码" required maxLength={1024}/></label>
-              <button className="primary" disabled={!!busy}>{busy === 'login' ? '正在登录…' : '登录并同步'}<Icon name="arrow" size={18}/></button>
-              {state.demo && <small>浏览器预览不接受真实账号登录。</small>}
-            </form> : <>
-              <div className={`connection-visual ${connected ? 'connected' : ''}`}><div className="orbit orbit-one"/><div className="orbit orbit-two"/><span className="orbit-point p1"/><span className="orbit-point p2"/>
-                <button className="power-button" aria-label={connected || transitioning ? '断开连接' : '连接网络'} onClick={() => void run({ type: connected || transitioning ? 'disconnect' : 'connect' })}><Icon name="power" size={40}/></button>
-              </div><h3 className="connection-title">{connected ? '连接已就绪' : transitioning ? '正在准备连接' : '准备好，出发吧'}</h3><p className="connection-subtitle">{connected ? `当前线路：${actual?.name ?? '已验证节点'}` : '点击上方按钮，连接你的专属网络'}</p>
-              <div className="mode-switch" role="group" aria-label="代理模式"><button aria-pressed={state.preferences.mode === 'rule'} className={state.preferences.mode === 'rule' ? 'selected' : ''} onClick={() => prefs({ mode: 'rule' })}><Icon name="shield" size={16}/>规则模式</button><button aria-pressed={state.preferences.mode === 'global'} className={state.preferences.mode === 'global' ? 'selected' : ''} onClick={() => prefs({ mode: 'global' })}><Icon name="globe" size={16}/>全局模式</button></div>
-              <p className="mode-description">{state.preferences.mode === 'rule' ? '按规则分流，未命中流量通过代理' : '代理公网流量，保留系统必要例外'}</p>
-              <button className="selected-node" onClick={() => setModal('nodes')}><span className="node-icon"><Icon name={selected ? 'globe' : 'sparkle'} size={22}/></span><span><small>当前选择</small><strong>{selected?.name ?? (state.selectedNode ? '节点已失效，请重新选择' : '自动选择最佳线路')}</strong></span><span className="node-status">{selected ? '未测试' : '自动'}</span><Icon name="chevron" size={17}/></button>
-            </>}
-          </section>
-          <div className="right-column">
-            <section className="card plan-card" aria-labelledby="plan-heading"><div className="card-top"><h2 id="plan-heading"><Icon name="sparkle" size={18}/>我的套餐</h2><span className="small-muted">{state.account?.status ?? '登录后查看'}</span></div><span className="plan-label">{state.account?.planName ?? '你的下一站，即将开启'}</span><div className="expiry"><strong>{expiry}</strong><span className="plan-orbit">✧</span></div><div className="expiry-date"><Icon name="clock" size={14}/>{state.account?.expiryKind === 'unknown' ? '到期时间暂不可用' : date(state.account?.expiresAt ?? null)}</div><div className="plan-divider"/>{state.showTrafficSummary && <><div className="traffic-label"><span>本周期用量</span><strong>{state.account ? bytes(state.account.usedBytes) : '—'} <span>/ {state.account?.quotaKind === 'unlimited' ? '不限流量' : state.account ? bytes(state.account.quotaBytes) : '—'}</span></strong></div><div className="progress" role="progressbar" aria-label="套餐流量用量" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${percent}%` }}/></div><p className="usage-note">用量以面板账单为准</p></>}<button className="renew-button" onClick={() => void run({ type: 'open-link', link: 'renew' })}>续费 / 管理套餐<Icon name="arrow" size={17}/></button><p className="renew-hint">{state.account?.email ?? '在官网登录你的账号'}{state.account ? ' · 续费时请核对账号' : ''}</p></section>
-            <section className="card status-card"><div className="card-top"><h2><Icon name="refresh" size={17}/>同步状态</h2><span className="status-dot violet"/></div><div className="sync-line"><span>{state.sync === 'Fresh' ? '账号与节点已同步' : state.sync === 'Syncing' ? '正在同步账号与节点' : state.sync === 'UsingValidCache' ? '使用上次有效数据' : state.loggedIn ? '等待完整同步' : '登录后自动同步'}</span><span className="sync-check"><Icon name={state.sync === 'Fresh' ? 'check' : 'clock'} size={16}/></span></div><p className="small-muted">{state.lastSync ? date(state.lastSync) : '每次启动都会尝试刷新'}</p>{state.sync === 'UsingValidCache' && <p className="small-muted">可用至 {date(state.usableUntil)}</p>}{state.pendingRenewal && <button className="text-button" onClick={() => void run({ type: 'renewal-return' })}>已续费，刷新权益<Icon name="arrow" size={15}/></button>}</section>
-          </div>
-        </div>
-        <div className="bottom-grid"><button className="shortcut card" onClick={() => void run({ type: 'open-link', link: 'website' })}><span className="shortcut-icon"><Icon name="globe"/></span><span><strong>探索 StarRail</strong><small>访问官网，了解更多服务</small></span><Icon name="external" size={16}/></button><button className="shortcut card" onClick={() => void run({ type: 'open-link', link: 'help' })}><span className="shortcut-icon blue"><Icon name="help"/></span><span><strong>需要一点帮助？</strong><small>查看使用指南与支持</small></span><Icon name="arrow" size={17}/></button></div>
-        <footer><span><Icon name="shield" size={13}/> {state.helperReady ? '网络服务已就绪' : '首次连接将安装网络服务'}</span><span>STAR RAIL · STAY CONNECTED</span></footer>
-      </div>
-    </main>
-    {modal === 'nodes' && <Modal title="选择你的线路" close={() => setModal(null)} wide><p className="modal-description">自动模式优先保留健康节点。手动选择不会自动切换地区。</p><div className="search-box"><Icon name="search" size={18}/><input aria-label="搜索节点" placeholder="搜索节点名称或分组" value={search} onChange={e => setSearch(e.target.value)}/></div><button className={`node-row auto-row ${!state.selectedNode ? 'node-selected' : ''}`} onClick={() => { prefs({ nodeId: null }); setModal(null); }}><span className="node-icon"><Icon name="sparkle"/></span><span><strong>自动选择</strong><small>最多探测 3 个合格候选</small></span>{!state.selectedNode && <Icon name="check"/>}</button><div className="list-heading"><span>可用线路 · {state.nodes.length} 个节点</span><button className="text-button" disabled={!!busy || !state.nodes.some(n => n.compatible)} onClick={() => void run({ type: 'probe-nodes', nodeIds: state.nodes.filter(n => n.compatible && `${n.name} ${n.group}`.toLowerCase().includes(search.toLowerCase())).slice(0, 10).map(n => n.id) })}>{busy === 'probe-nodes' ? '正在测试…' : '测试前 10 项'}</button></div><div className="node-list">{state.nodes.filter(n => `${n.name} ${n.group}`.toLowerCase().includes(search.toLowerCase())).map(n => <button key={n.id} className={`node-row ${state.selectedNode === n.id ? 'node-selected' : ''}`} disabled={!n.compatible} onClick={() => { prefs({ nodeId: n.id }); setModal(null); }}><span className="node-icon neutral"><Icon name="globe"/></span><span><strong>{n.name}</strong><small>{n.reason ?? `${n.protocol.toUpperCase()} · ${n.group}`}</small></span><span className="probe-label">{n.compatible ? n.probe === 'testing' ? '测试中' : n.probe === 'timeout' ? '未通过' : n.latency === null ? '未测试' : `${n.latency} ms` : '不兼容'}</span>{state.selectedNode === n.id && <Icon name="check" size={16}/>}</button>)}{!state.nodes.length && <div className="empty-state"><Icon name="nodes" size={32}/><p>暂无节点</p><small>登录并完成同步后，节点会出现在这里。</small></div>}</div><p className="drawer-note"><Icon name="info" size={14}/>每批最多 10 项，间隔 30 秒。探测仅验证 HTTPS；未测试不代表不可达。</p></Modal>}
-    {modal === 'settings' && <Modal title="偏好设置" close={() => setModal(null)}><div className="settings-group"><div className="setting-row"><span><strong>开机启动</strong><small>登录系统后打开客户端</small></span><button role="switch" aria-checked={state.preferences.launchAtLogin} aria-label="开机启动" className={`toggle ${state.preferences.launchAtLogin ? 'on' : ''}`} onClick={() => prefs({ launchAtLogin: !state.preferences.launchAtLogin })}/></div><div className="setting-row"><span><strong>启动后自动连接</strong><small>完整同步或有效缓存通过门禁后连接</small></span><button role="switch" aria-checked={state.preferences.autoConnect} aria-label="启动后自动连接" className={`toggle ${state.preferences.autoConnect ? 'on' : ''}`} onClick={() => prefs({ autoConnect: !state.preferences.autoConnect })}/></div><label className="setting-row"><span><strong>关闭窗口时</strong><small>没有可靠托盘时始终确认退出</small></span><select value={state.preferences.closeBehavior} onChange={e => prefs({ closeBehavior: e.target.value as Preferences['closeBehavior'] })}><option value="tray">保留在托盘</option><option value="ask">询问是否退出</option></select></label><label className="setting-row"><span><strong>外观</strong><small>选择你喜欢的界面</small></span><select value={state.preferences.theme} onChange={e => prefs({ theme: e.target.value as Preferences['theme'] })}><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></label></div><div className="settings-group"><div className="setting-row"><span><strong>客户端更新</strong><small>{state.update}</small></span><button className="secondary" onClick={() => void run({ type: 'check-update' })} disabled={!!busy}>检查更新</button></div>{state.download.status !== 'idle' && <div className="update-panel"><div className="update-meta"><strong>版本 {state.download.version}</strong><span>{Math.round(state.download.received / Math.max(1, state.download.total) * 100)}%</span></div>{!state.manualUpdate && <progress aria-label="更新下载进度" max={state.download.total || 1} value={state.download.received}/>}<p>{state.manualUpdate ? '此版本未做平台代码签名，需要从下载页手动安装。' : state.download.error ?? (state.download.status === 'ready' ? '下载完整，哈希已校验。安装会先断开连接。' : state.download.status === 'verifying' ? '正在校验下载文件…' : '下载可能使用计费流量，由你选择开始或继续。')}</p><div className="update-actions">{['available', 'paused', 'failed'].includes(state.download.status) && <button className="secondary" onClick={() => void run({ type: 'download-update' })}>{state.manualUpdate ? '打开下载页' : state.download.status === 'available' ? '下载更新' : state.download.status === 'failed' ? '重试下载' : '继续下载'}</button>}{state.download.status === 'downloading' && <button className="secondary" onClick={() => void run({ type: 'pause-update' })}>暂停</button>}{state.download.status === 'ready' && <button className="secondary" onClick={() => void run({ type: 'install-update' })}>重启并安装</button>}{state.download.status !== 'available' && <button className="secondary" onClick={() => void run({ type: 'cancel-update' })}>取消下载</button>}</div></div>}<div className="setting-row"><span><strong>分流规则</strong><small>{state.rules}</small></span></div><div className="setting-row"><span><strong>网络组件</strong><small>{state.helperReady ? '系统服务已就绪' : '安装或修复时需要系统授权'}</small></span><button className="secondary" onClick={() => void run({ type: 'repair' })}>修复</button></div><div className="setting-row"><span><strong>本地诊断</strong><small>导出前确认内容，仅保存在本机</small></span><button className="secondary" onClick={() => void run({ type: 'diagnostics' })}><Icon name="download" size={15}/>导出</button></div></div><div className="storage-note"><Icon name="shield" size={16}/><span>{state.storage === 'encrypted' ? '账号与节点秘密由系统安全存储加密保护。' : state.storage === 'locked' ? '安全存储已锁定；旧密文保留，请解锁后重启。' : '当前为内存会话。未使用明文保存秘密，重启后需重新登录。'}</span></div>{state.loggedIn && <button className="logout-button" onClick={() => { setModal(null); void run({ type: 'logout' }); }}><Icon name="logout" size={17}/>退出账号</button>}</Modal>}
-    {toast && <div className="toast" role="alert"><Icon name="info" size={18}/><span>{toast}</span><button className="icon-button" aria-label="关闭提示" onClick={() => setToast(null)}><Icon name="close" size={16}/></button></div>}
+  const open = (next: 'nodes' | 'settings', reportOpen = false) => { setReport(reportOpen); setSheet(next); };
+  if (!state) return <div className="loading"><BrandMark size={48}/><p>{toast ?? '正在打开…'}</p></div>;
+  return <div className="app">
+    {state.loggedIn && <header className="topbar"><span className="brand"><BrandMark size={24}/>{state.brand}</span>{state.demo && <span className="chip">预览</span>}<button className="icon-button" aria-label="设置" onClick={() => open('settings')}><Icon name="settings"/></button></header>}
+    {state.loggedIn ? <Home state={state} busy={busy} run={run} open={open}/> : <Login state={state} busy={busy} run={run}/>}
+    {sheet === 'nodes' && <NodeSheet state={state} close={() => setSheet(null)} run={run}/>}
+    {sheet === 'settings' && <SettingsSheet state={state} busy={busy} report={report} close={() => setSheet(null)} run={run} prefs={prefs}/>}
+    {toast && <div className="toast" role="alert"><span>{toast}</span><button className="icon-button" aria-label="关闭提示" onClick={() => setToast(null)}><Icon name="close" size={16}/></button></div>}
   </div>;
 }
 createRoot(document.getElementById('root')!).render(<React.StrictMode><App/></React.StrictMode>);

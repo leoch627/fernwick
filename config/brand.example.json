@@ -5,6 +5,6 @@
   "api": ["https://api.starrail.work", "https://host.leiterup.de"],
   "subscriptionOrigins": ["https://sub.starrail.us"],
   "website": "https://www.starrail.work/",
-  "endpoint": "https://updates.starrail.work",
+  "endpoint": ["https://dl.starrail.work", "https://dl.example.net"],
   "publicKey": "-----BEGIN PUBLIC KEY-----\nreplace with the contents of public.pem\n-----END PUBLIC KEY-----\n"
 }

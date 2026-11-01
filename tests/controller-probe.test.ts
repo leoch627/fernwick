@@ -40,7 +40,7 @@ it('manual probes cap a batch at ten, concurrency at four, and enforce a 30 seco
 });
 it('rejects oversized or unknown node batches without calling the executor', async () => {
   let calls = 0; const controller = await client(async () => { calls++; return { healthy: true, latencyMs: 1 }; });
-  expect((await controller.command({ type: 'probe-nodes', nodeIds: controller.view().nodes.map(n => n.id) })).error).toBe('INVALID_INPUT');
+  expect((await controller.command({ type: 'probe-nodes', nodeIds: Array.from({ length: 65 }, () => 'node') })).error).toBe('INVALID_INPUT');
   expect((await controller.command({ type: 'probe-nodes', nodeIds: ['unknown'] })).error).toBe('NO_COMPATIBLE_NODES'); expect(calls).toBe(0);
 });
 it('logout cancels a running batch and rejects its late latency results', async () => {

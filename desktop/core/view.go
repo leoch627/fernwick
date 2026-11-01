@@ -56,7 +56,16 @@ type AppView struct {
 	Rules              string          `json:"rules"`
 	ShowTrafficSummary bool            `json:"showTrafficSummary"`
 	Links              ViewLinks       `json:"links"`
+	Report             ReportView      `json:"report"`
+	ReportAvailable    bool            `json:"reportAvailable"`
 	Now                int64           `json:"now"`
+}
+
+// ReportView is the state of the user's problem report: idle, sending, sent (with the
+// code to give support) or failed.
+type ReportView struct {
+	Status string  `json:"status"`
+	Code   *string `json:"code"`
 }
 type CommandResult struct {
 	OK    bool      `json:"ok"`

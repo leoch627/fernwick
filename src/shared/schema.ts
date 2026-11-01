@@ -69,7 +69,8 @@ export const CommandSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('login'), email: z.string().email().max(254), password: z.string().min(1).max(1024) }).strict(),
   ...(['state', 'sync', 'connect', 'disconnect', 'logout', 'repair', 'check-update', 'download-update', 'pause-update', 'cancel-update', 'install-update', 'diagnostics', 'renewal-return'] as const).map(type => z.object({ type: z.literal(type) }).strict()),
   z.object({ type: z.literal('preferences'), preferences: PreferencesSchema }).strict(),
-  z.object({ type: z.literal('probe-nodes'), nodeIds: z.array(text).min(1).max(10) }).strict(),
+  z.object({ type: z.literal('probe-nodes'), nodeIds: z.array(text).min(1).max(64) }).strict(),
+  z.object({ type: z.literal('report'), note: z.string().max(500) }).strict(),
   z.object({ type: z.literal('open-link'), link: z.enum(['website', 'renew', 'help']) }).strict(),
 ]);
 export type Command = z.infer<typeof CommandSchema>;

@@ -50,7 +50,7 @@ add('command array', 'command', []);
 add('command escaped duplicate', 'command', '{"type":"state","\\u0074ype":"connect"}', true);
 add('command constructor key', 'command', '{"type":"state","constructor":{}}', true);
 add('command trailing', 'command', '{"type":"state"}false', true);
-for (const count of [0, 1, 10, 11]) add(`probe count ${count}`, 'command', { type: 'probe-nodes', nodeIds: Array.from({ length: count }, (_, i) => `node-${i}`) });
+for (const count of [0, 1, 64, 65]) add(`probe count ${count}`, 'command', { type: 'probe-nodes', nodeIds: Array.from({ length: count }, (_, i) => `node-${i}`) });
 add('probe empty ID', 'command', { type: 'probe-nodes', nodeIds: [''] });
 add('probe long ID', 'command', { type: 'probe-nodes', nodeIds: ['x'.repeat(257)] });
 add('open allowed link', 'command', { type: 'open-link', link: 'renew' });

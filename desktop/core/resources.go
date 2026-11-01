@@ -364,11 +364,16 @@ func (r *ResourceCoordinator) Apply(ctx context.Context, envelope string) error 
 		if prior != nil && prior.SHA256 != descriptor.SHA256 || latest != nil && (descriptor.Version < latest.Version || descriptor.Version == latest.Version && descriptor.SHA256 != latest.SHA256) || prior == nil && len(identities) >= 4096 {
 			return NewAppError("POLICY_INVALID")
 		}
-		response, err := r.http.Request(operation, HTTPRequest{URL: descriptor.URL, MaxBytes: int(descriptor.Bytes)})
-		if err != nil {
-			return err
+		var response HTTPResponse
+		for _, location := range MirrorURLs(descriptor.URL, r.build.TrustedResourceOrigins) {
+			if response, err = r.http.Request(operation, HTTPRequest{URL: location, MaxBytes: int(descriptor.Bytes)}); err == nil {
+				err = RequireSuccess(response, "public")
+			}
+			if err == nil || operation.Err() != nil {
+				break
+			}
 		}
-		if err = RequireSuccess(response, "public"); err != nil {
+		if err != nil {
 			return err
 		}
 		if err = current(); err != nil {

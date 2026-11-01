@@ -59,6 +59,10 @@ type ControllerDeps struct {
 	LaunchAtLogin     func(bool) error
 	OSCompatible      func(string) bool
 	ConfirmInstall    func(string) bool
+	// Telemetry reports to the operator's endpoint; nil disables it. SelfCheck runs the
+	// network checks attached to a problem report.
+	Telemetry *Telemetry
+	SelfCheck func(context.Context, []ProxyNode) []map[string]any
 }
 type savedProbe struct {
 	fingerprint string
@@ -127,6 +131,7 @@ type ClientController struct {
 	listenerID                                                            uint64
 	diagnosticsMu                                                         sync.Mutex
 	diagnosticEvents                                                      []map[string]any
+	report                                                                ReportView
 }
 
 func NewClientController(deps ControllerDeps) *ClientController {
@@ -146,7 +151,7 @@ func NewClientController(deps ControllerDeps) *ClientController {
 		}
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	c := &ClientController{deps: deps, preferences: DefaultPreferences, clock: NewConservativeClock(0), restrictions: map[ErrorCode]bool{}, syncStatus: "Idle", updateStatus: "尚未检查", publicCtx: ctx, cancelPublic: cancel, probeResults: map[string]savedProbe{}, dirty: make(chan struct{}, 1), listeners: map[uint64]func(AppView){}, diagnosticEvents: []map[string]any{}}
+	c := &ClientController{deps: deps, preferences: DefaultPreferences, clock: NewConservativeClock(0), restrictions: map[ErrorCode]bool{}, syncStatus: "Idle", updateStatus: "尚未检查", report: ReportView{Status: "idle"}, publicCtx: ctx, cancelPublic: cancel, probeResults: map[string]savedProbe{}, dirty: make(chan struct{}, 1), listeners: map[uint64]func(AppView){}, diagnosticEvents: []map[string]any{}}
 	c.pool = NewEndpointPool(deps.Build.APIEndpoints, c.now)
 	c.policy = NewPolicyService(deps.Build, func(record PolicyRecord) error { return deps.PolicyStore.Save(record, nil) }, c.now)
 	c.network = NewNetworkController(deps.NetworkDriver, c.emit)
@@ -184,6 +189,16 @@ func NewClientController(deps ControllerDeps) *ClientController {
 	return c
 }
 func (c *ClientController) now() int64 { return c.clock.Now() }
+
+// SessionEmail is the signed-in account, for telemetry; empty when signed out.
+func (c *ClientController) SessionEmail() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.session == nil {
+		return ""
+	}
+	return c.session.Email
+}
 func (c *ClientController) maxAge() int {
 	if p := c.policy.Active(); p != nil {
 		return p.Refresh.MaxSnapshotAgeSec
@@ -263,6 +278,7 @@ func (c *ClientController) record(stage, code string) {
 	if len(c.diagnosticEvents) > 200 {
 		c.diagnosticEvents = c.diagnosticEvents[len(c.diagnosticEvents)-200:]
 	}
+	c.deps.Telemetry.Record(stage, map[string]any{"code": code}, false)
 }
 func (c *ClientController) fail(code ErrorCode) {
 	c.mu.Lock()
@@ -483,7 +499,7 @@ func (c *ClientController) View() AppView {
 	defer c.mu.Unlock()
 	now := c.clock.Now()
 	gate := c.gateLocked()
-	view := AppView{Brand: c.deps.Build.Name, Version: c.deps.Version, Environment: c.deps.Build.Environment, Demo: c.deps.Demo, LoggedIn: c.session != nil, Connection: network.State, SelectedNode: c.preferences.NodeID, ActualNode: c.actualNode, Sync: c.syncStatus, Nodes: []NodeView{}, Preferences: c.preferences, Storage: storage, HelperReady: c.network.Ready(), Policy: "使用内置设置", Update: c.updateStatus, ManualUpdate: c.manualUpdateLocked(), PendingRenewal: c.renewalUntil > now, Download: download, Rules: rules, ShowTrafficSummary: true, Links: ViewLinks{c.linkLocked("website", p) != nil, c.linkLocked("renew", p) != nil, c.linkLocked("help", p) != nil}, Now: now}
+	view := AppView{Brand: c.deps.Build.Name, Version: c.deps.Version, Environment: c.deps.Build.Environment, Demo: c.deps.Demo, LoggedIn: c.session != nil, Connection: network.State, SelectedNode: c.preferences.NodeID, ActualNode: c.actualNode, Sync: c.syncStatus, Nodes: []NodeView{}, Preferences: c.preferences, Storage: storage, HelperReady: c.network.Ready(), Policy: "使用内置设置", Update: c.updateStatus, ManualUpdate: c.manualUpdateLocked(), PendingRenewal: c.renewalUntil > now, Download: download, Rules: rules, ShowTrafficSummary: true, Links: ViewLinks{c.linkLocked("website", p) != nil, c.linkLocked("renew", p) != nil, c.linkLocked("help", p) != nil}, Report: c.report, ReportAvailable: c.deps.Telemetry.Enabled(), Now: now}
 	if c.failure != "" {
 		e := c.failure
 		view.Error = &e
@@ -653,6 +669,10 @@ func (c *ClientController) Start(ctx context.Context) error {
 		c.fail(CodeOf(err))
 	}
 	c.record("startup", "STARTUP_ATTEMPT")
+	c.deps.Telemetry.Record("start", map[string]any{"helper": c.network.Ready(), "storage": c.deps.Secure.Mode(), "loggedIn": c.sessionCopy() != nil}, false)
+	if c.deps.Telemetry != nil {
+		go c.deps.Telemetry.Run(c.publicCtx)
+	}
 	if c.deps.Resources != nil && c.policy.Active() != nil {
 		if envelope := c.policy.Envelope(); envelope != nil {
 			go func() { _ = c.deps.Resources.Apply(c.publicCtx, *envelope) }()
@@ -971,7 +991,7 @@ func (c *ClientController) probeNodes(ctx context.Context, ids []string) error {
 		c.mu.Unlock()
 		return NewAppError("COMPONENTS_UNAVAILABLE")
 	}
-	if c.probeCancel != nil || !c.lastProbeBatch.IsZero() && time.Since(c.lastProbeBatch) < 30*time.Second {
+	if c.probeCancel != nil || !c.lastProbeBatch.IsZero() && time.Since(c.lastProbeBatch) < 15*time.Second {
 		c.mu.Unlock()
 		return NewAppError("RATE_LIMITED")
 	}
@@ -996,7 +1016,7 @@ func (c *ClientController) probeNodes(ctx context.Context, ids []string) error {
 			return NewAppError("NO_COMPATIBLE_NODES")
 		}
 	}
-	budget, cancel := context.WithTimeout(ctx, 20*time.Second)
+	budget, cancel := context.WithTimeout(ctx, 30*time.Second)
 	c.probeCancel = cancel
 	c.probeGeneration++
 	probeGeneration := c.probeGeneration
@@ -1035,7 +1055,7 @@ func (c *ClientController) probeNodes(ctx context.Context, ids []string) error {
 	}
 	close(jobs)
 	var wg sync.WaitGroup
-	for range min(4, len(nodes)) {
+	for range min(6, len(nodes)) {
 		wg.Go(func() {
 			for n := range jobs {
 				c.mu.Lock()
@@ -1247,7 +1267,9 @@ func (c *ClientController) execute(ctx context.Context, cmd Command) error {
 			}
 			c.mu.Unlock()
 		}()
+		started := time.Now()
 		session, err := c.deps.Panel.Login(loginCtx, endpoints[0].ID, cmd.Email, cmd.Password)
+		c.deps.Telemetry.Record("login", map[string]any{"ok": err == nil, "code": string(CodeOf(err)), "ms": time.Since(started).Milliseconds(), "email": cmd.Email}, err != nil)
 		if err != nil {
 			return err
 		}
@@ -1289,7 +1311,14 @@ func (c *ClientController) execute(ctx context.Context, cmd Command) error {
 		c.mu.Unlock()
 		return c.refresh(ctx, true)
 	case "connect":
-		return c.connect(ctx)
+		started := time.Now()
+		err := c.connect(ctx)
+		c.recordConnect(err, time.Since(started))
+		if err == nil {
+			// Reconnect on the next launch, as the user left it.
+			c.rememberConnected(true)
+		}
+		return err
 	case "disconnect":
 		c.mu.Lock()
 		c.intentGeneration++
@@ -1301,7 +1330,10 @@ func (c *ClientController) execute(ctx context.Context, cmd Command) error {
 		c.actualNode = nil
 		c.failure = ""
 		c.mu.Unlock()
+		c.rememberConnected(false)
 		return nil
+	case "report":
+		return c.sendReport(ctx, cmd.Note)
 	case "repair":
 		driver, ok := c.deps.NetworkDriver.(interface{ Repair(context.Context) error })
 		if !ok {
@@ -1593,6 +1625,7 @@ func (c *ClientController) Resume(ctx context.Context) error {
 	return nil
 }
 func (c *ClientController) NativeFailure(ctx context.Context, code ErrorCode) error {
+	c.deps.Telemetry.Record("dropped", map[string]any{"code": string(code)}, true)
 	c.mu.Lock()
 	if c.recovery != nil {
 		f := c.recovery
@@ -1668,5 +1701,110 @@ func (c *ClientController) Stop(ctx context.Context) error {
 	if c.deps.Resources != nil {
 		c.deps.Resources.Stop()
 	}
+	if c.deps.Telemetry != nil {
+		flush, cancel := context.WithTimeout(ctx, 2*time.Second)
+		_ = c.deps.Telemetry.Flush(flush)
+		cancel()
+		c.deps.Telemetry.Persist()
+	}
 	return c.persist()
+}
+
+// recordConnect tells the operator how a connection attempt went: which step failed,
+// what the data path proved, and which node and mode were used.
+func (c *ClientController) recordConnect(err error, took time.Duration) {
+	network := c.network.View()
+	c.mu.Lock()
+	fields := map[string]any{"ok": err == nil, "ms": took.Milliseconds(), "mode": c.preferences.Mode, "automatic": c.preferences.NodeID == nil, "stage": network.Stage, "helper": c.network.Ready()}
+	if err != nil {
+		fields["code"] = string(CodeOf(err))
+	}
+	id := c.actualNode
+	if id == nil {
+		id = c.preferences.NodeID
+	}
+	if c.snapshot != nil {
+		fields["nodes"] = len(c.snapshot.Nodes)
+		for _, n := range c.snapshot.Nodes {
+			if id != nil && n.ID == *id {
+				fields["node"] = n.Name
+				fields["protocol"] = n.Protocol + "/" + n.Transport + "/" + n.Security
+			}
+		}
+	}
+	c.mu.Unlock()
+	if p := network.Proof; p != nil {
+		fields["tcp"], fields["dns"], fields["udp"], fields["ipv6"] = p.TCP, p.DNS, p.UDP, p.IPv6
+	}
+	c.deps.Telemetry.Record("connect", fields, err != nil)
+}
+
+func (c *ClientController) rememberConnected(connected bool) {
+	c.mu.Lock()
+	change := c.preferences
+	c.mu.Unlock()
+	if change.AutoConnect == connected {
+		return
+	}
+	change.AutoConnect = connected
+	if c.deps.Preferences.Save(change, nil) == nil {
+		c.mu.Lock()
+		c.preferences.AutoConnect = connected
+		c.mu.Unlock()
+	}
+}
+
+// sendReport uploads recent events with a fresh network self-check and shows the
+// returned code, which the user gives to support.
+func (c *ClientController) sendReport(parent context.Context, note string) error {
+	if !c.deps.Telemetry.Enabled() {
+		return NewAppError("CONFIGURATION_REQUIRED")
+	}
+	c.mu.Lock()
+	if c.report.Status == "sending" {
+		c.mu.Unlock()
+		return nil
+	}
+	c.report = ReportView{Status: "sending"}
+	nodes := []ProxyNode{}
+	if c.snapshot != nil {
+		nodes = append(nodes, c.snapshot.Nodes...)
+	}
+	c.mu.Unlock()
+	c.emit()
+	ctx, cancel := context.WithTimeout(parent, 45*time.Second)
+	defer cancel()
+	view := c.View()
+	state := map[string]any{"name": "client", "kind": "state", "connection": string(view.Connection), "helper": view.HelperReady, "sync": view.Sync, "mode": view.Preferences.Mode, "automatic": view.Preferences.NodeID == nil, "storage": view.Storage, "rules": view.Rules, "policy": view.Policy, "update": view.Update}
+	if view.Error != nil {
+		state["error"] = string(*view.Error)
+	}
+	if view.Account != nil {
+		state["plan"], state["planStatus"] = view.Account.PlanName, view.Account.Status
+		if view.Account.ExpiresAt != nil {
+			state["expiresAt"] = *view.Account.ExpiresAt
+		}
+	}
+	if view.UsableUntil != nil {
+		state["usableUntil"] = float64(*view.UsableUntil)
+	}
+	checks := []map[string]any{normalizeEvent(state)}
+	if c.deps.SelfCheck != nil {
+		checks = append(checks, c.deps.SelfCheck(ctx, nodes)...)
+	}
+	c.diagnosticsMu.Lock()
+	events := append([]map[string]any{}, c.deps.Telemetry.Recent(400)...)
+	for _, e := range c.diagnosticEvents {
+		events = append(events, map[string]any{"type": "local", "stage": e["stage"], "code": e["code"], "time": e["at"]})
+	}
+	c.diagnosticsMu.Unlock()
+	code, err := c.deps.Telemetry.Report(ctx, note, events, checks)
+	c.mu.Lock()
+	if err != nil {
+		c.report = ReportView{Status: "failed"}
+	} else {
+		c.report = ReportView{Status: "sent", Code: &code}
+	}
+	c.mu.Unlock()
+	return err
 }

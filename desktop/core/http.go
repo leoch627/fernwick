@@ -26,11 +26,20 @@ type HTTPResponse struct {
 type Transport interface {
 	Request(context.Context, HTTPRequest) (HTTPResponse, error)
 }
-type DirectHTTPSTransport struct{ client *http.Client }
+type DirectHTTPSTransport struct {
+	client  *http.Client
+	timeout time.Duration
+}
 
 func NewDirectHTTPSTransport() *DirectHTTPSTransport {
-	transport := &http.Transport{Proxy: nil, DialContext: (&net.Dialer{Timeout: 3 * time.Second}).DialContext, TLSHandshakeTimeout: 3 * time.Second, DisableKeepAlives: true, DisableCompression: true, ResponseHeaderTimeout: 6 * time.Second}
-	return &DirectHTTPSTransport{client: &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
+	return NewDirectHTTPSTransportTimeout(6 * time.Second)
+}
+
+// NewDirectHTTPSTransportTimeout allows a longer total time per request, for uploads
+// such as problem reports over slow links.
+func NewDirectHTTPSTransportTimeout(timeout time.Duration) *DirectHTTPSTransport {
+	transport := &http.Transport{Proxy: nil, DialContext: (&net.Dialer{Timeout: 3 * time.Second}).DialContext, TLSHandshakeTimeout: 3 * time.Second, DisableKeepAlives: true, DisableCompression: true, ResponseHeaderTimeout: timeout}
+	return &DirectHTTPSTransport{client: &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, timeout: timeout}
 }
 func (t *DirectHTTPSTransport) Request(ctx context.Context, input HTTPRequest) (HTTPResponse, error) {
 	if ctx.Err() != nil {
@@ -47,7 +56,7 @@ func (t *DirectHTTPSTransport) Request(ctx context.Context, input HTTPRequest) (
 	if method != "GET" && method != "POST" {
 		return HTTPResponse{}, NewAppError("INVALID_INPUT")
 	}
-	deadline, cancel := context.WithTimeout(ctx, 6*time.Second)
+	deadline, cancel := context.WithTimeout(ctx, t.timeout)
 	defer cancel()
 	request, err := http.NewRequestWithContext(deadline, method, u.String(), strings.NewReader(input.Body))
 	if err != nil {
