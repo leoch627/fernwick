@@ -182,8 +182,8 @@ function Home({ state, busy, run, open }: { state: AppView; busy: string | null;
   const quota = account?.quotaKind === 'finite' && account.quotaBytes ? BigInt(account.quotaBytes) : 0n;
   const used = BigInt(account?.usedBytes ?? '0');
   const percent = quota > 0n ? Math.min(100, Number(used * 1000n / quota) / 10) : 0;
-  const renewSoon = !!account && (left.days <= 7 || percent >= 90 || account.status !== '套餐可用');
   const issue = state.error && !connected ? problem(state.error) : null;
+  const renewSoon = !!account && (left.days <= 7 || percent >= 90 || issue?.action === 'renew');
   const act = (action: Action) => {
     if (action === 'nodes') open('nodes'); else if (action === 'report') open('settings', true);
     else if (action === 'renew') void run({ type: 'open-link', link: 'renew' });
@@ -196,7 +196,7 @@ function Home({ state, busy, run, open }: { state: AppView; busy: string | null;
       <button className="power-button" aria-label={connected || working ? '断开连接' : recovery ? '修复网络' : '连接'} onClick={toggle}><Icon name="power" size={48}/></button>
       <h1 aria-live="polite">{connected ? '已连接' : working ? (state.connection === 'Disconnecting' ? '正在断开…' : '正在连接…') : recovery ? '网络需要修复' : '未连接'}</h1>
       {issue ? <p className="problem" role="status">{issue.text}{issue.action && <button className="link" onClick={() => act(issue.action!)}>{actionLabels[issue.action]}</button>}</p>
-        : <p className="muted">{connected ? (state.preferences.mode === 'global' ? '全局代理' : '智能分流 · 国内网站不受影响') : working ? '第一次连接需要允许系统授权' : '点击按钮开始'}</p>}
+        : <p className="muted">{connected ? (state.preferences.mode === 'global' ? '全局代理' : '智能分流 · 国内网站不受影响') : working ? (state.helperReady ? '请稍候' : '第一次连接需要输入电脑密码授权') : '点击按钮开始'}</p>}
     </section>
     <button className="card node-card" onClick={() => open('nodes')}>
       <span className="flag">{shown ? flag(shown.region) : <Icon name="sparkle"/>}</span>
@@ -207,7 +207,7 @@ function Home({ state, busy, run, open }: { state: AppView; busy: string | null;
     {account && <section className={`card plan-card ${renewSoon ? 'warn' : ''}`} aria-label="套餐">
       <div className="plan-line"><strong>{left.text}</strong>{quota > 0n && state.showTrafficSummary && <span>已用 {gb(used)} / {gb(quota)}</span>}</div>
       {quota > 0n && state.showTrafficSummary && <div className="progress" role="progressbar" aria-label="流量用量" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${percent}%` }}/></div>}
-      <div className="plan-line"><small>{account.planName}{account.status !== '套餐可用' ? ` · ${account.status}` : ''}</small>
+      <div className="plan-line"><small>{account.planName}</small>
         {state.links.renew && <button className={renewSoon ? 'primary small' : 'link'} onClick={() => void run({ type: 'open-link', link: 'renew' })}>续费</button>}</div>
       {state.pendingRenewal && <button className="link" onClick={() => void run({ type: 'renewal-return' })}>已经续费？点这里刷新</button>}
     </section>}

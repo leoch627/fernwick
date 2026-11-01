@@ -427,7 +427,9 @@ func run() error {
 			return ask(s.app, "安装更新", "将断开连接并安装版本 "+version+"。", []string{"安装", "取消"}, 1) == 0
 		},
 		Telemetry: telemetry,
-		SelfCheck: func(ctx context.Context, nodes []core.ProxyNode) []map[string]any { return core.SelfCheck(ctx, build, nodes) },
+		SelfCheck: func(ctx context.Context, nodes []core.ProxyNode) []map[string]any {
+			return core.SelfCheck(ctx, build, nodes)
+		},
 	}
 	s.controller = core.NewClientController(deps)
 	bridge.controller = s.controller

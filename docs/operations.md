@@ -46,9 +46,9 @@ npm run sign -- verify release signed-index.json config/your-build.json
 
 ## 内置和远程规则
 
-`resources/rules/manifest.json` 记录固定的 Loyalsoldier/clash-rules 提交、原始数据及转换结果哈希。运行 `npm run rules:import` 可用 Python 标准库复现完整 baseline；构建过程也会复核文件哈希和运行时 Schema。变更基线必须作为新的应用构建审核、更新 manifest 并重新测试，不能就地覆盖固定哈希的文件。
+`resources/rules/manifest.json` 记录固定的 v2fly geosite/geoip 发布版本、原始数据哈希及转换结果哈希。`python3 tools/import-rules.py check` 下载固定版本并复现完整 baseline；构建过程也会复核哈希和运行时 Schema。规则按运营方 Mihomo 模版的分段顺序生成（direct / proxy / ai / block），段落顺序就是优先级，见脚本开头。变更基线必须作为新的应用构建审核、更新 manifest 并重新测试。
 
-远程策略只指向白名单来源中的精确资源，下载调度不会阻塞控制策略生效；新规则须校验并持久化后激活，失败时使用有效旧规则或内置数据。ID 不能绑定不同字节，版本不能降序，历史随缓存保存。独立资源最大 32 MiB；域名/IP 数量限制见 rules.schema.json。当前生产规则源未配置，应用使用随包基线。
+远程策略只指向白名单来源中的精确资源，下载调度不会阻塞控制策略生效；新规则须校验并持久化后激活，失败时使用有效旧规则或内置数据。ID 不能绑定不同字节，版本不能降序，历史随缓存保存。独立资源最大 32 MiB；域名/IP 数量限制见 rules.schema.json。远程规则由自建端点下发（server/README.md），未部署时应用使用随包基线。
 
 更新下载由用户点击开始，因为当前没有可靠计费网络/电池状态判断。支持单槽下载、暂停/续传/取消/重试、启动与周期清理。撤回或不兼容时清除待下载文件；安装前重新取得有效签名索引。用户确认安装后由原生服务独立复验，并交给平台更新进程备份、安装和故障恢复；本轮未运行安装验收。
 

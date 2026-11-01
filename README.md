@@ -1,9 +1,13 @@
 # V2Board 桌面客户端
 
-Wails v3 + Go + React + Xray 的 V2Board 桌面客户端，支持 Windows 11 x64、macOS 14+（Apple 芯片 / Intel）和 Ubuntu 24.04 x64。机场名称、主备 API 都在打包时提供，同一份代码可以给不同机场出包。配套的 Cloudflare Worker（`server/`）负责自动更新、远程规则更新和安装包下载页。
+Wails v3 + Go + React + Xray 的 V2Board 桌面客户端，支持 Windows 11 x64、macOS 14+（Apple 芯片 / Intel）和 Ubuntu 24.04 x64。面向中国大陆网络下的普通用户：下载、安装、打开、选线路、连接，其余全部自动。机场名称、主备 API 都在打包时提供，同一份代码可以给不同机场出包。配套的自建端点（`server/`，一个 Go 程序）负责自动更新、远程规则、安装包下载页和遥测。
 
-- 登录、套餐/到期/流量、续费跳转，主备 API 自动切换，严格订阅解析，加密本地缓存
-- 规则/全局模式，自动/手动选节点，节点测速，到期提醒，托盘与开机启动
+- 一个窗口：登录、连接按钮、线路、套餐；其余放在设置里。出错时给一句人话和下一步按钮
+- Xray 随包，规则随包，连接时不从 GitHub / Cloudflare 下载任何东西
+- 分流照搬运营方的 Mihomo 模版（v2fly geosite/geoip）：广告拦截，AI 不走港澳节点，Apple/Steam/B 站直连，国内直连，其余走代理
+- 「自动选择」由 Xray 内置测速负载均衡完成，节点挂了自动切换；AI 流量自动走最快的美日新等节点
+- 主备 API 和主备端点自动切换；面板 API 连不上时，上次同步的线路最多再用 7 天（不超过套餐到期）
+- 遥测：连接结果、失败步骤、错误码、各域名可达性，带用户邮箱；「上报问题」附网络自检并给出 6 位问题编号
 - Go 原生服务（systemd / launchd / Windows 服务）接管 TUN、路由、DNS，崩溃与断电后可恢复
 - 签名更新索引与签名策略（Ed25519），远程规则更新，断点续传下载
 
@@ -44,7 +48,7 @@ npm run test:packaging        # 安装器资源/恢复约束检查
 | `api` | API 地址数组，第一个为主，其余为备用 |
 | `subscriptionOrigins` | 可选，订阅链接域名与 API 不同时填写 |
 | `website` | 可选，官网/续费页，默认主 API 域名 |
-| `endpoint` | 更新端点地址（部署 `server/` 后得到） |
+| `endpoint` | 自建端点地址，可以是数组：第一个是主域名（CI 发布到这里），其余是指向同一台服务器的备用域名 |
 | `publicKey` | 签名公钥（`public.pem` 全文），见下文；CI 打包不用填，自动从 `SIGNING_KEY` 计算 |
 
 ```sh
@@ -57,24 +61,21 @@ python3 tools/package.py --target darwin-arm64
 
 打包目标为 `darwin-arm64`、`darwin-x64`、`win32-x64`、`linux-x64`。macOS/Linux 在相应系统上构建；Windows 可交叉编译。产物位于 `release/`，Go 可执行文件位于 `dist/desktop/<target>/`。打包前会核对品牌配置与 helper 的构建 ID，并在签名后复核核心、helper、规则及许可证哈希。macOS 默认 ad-hoc 签名；`STARRAIL_MAC_SIGN_IDENTITY` 可指定签名身份，公证仍需发布环境另行完成。
 
-## 更新端点（Cloudflare Worker + R2）
+## 更新端点（自建）
 
-整套只需要一把签名密钥，也只配置一次（`SIGNING_KEY`）：Worker 用它给更新索引和规则策略签名；CI 打包时从它算出公钥内置进客户端；CI 调用 Worker 管理接口的令牌也从它推导。
+端点是 `server/` 里的一个 Go 程序，部署在你自己的服务器上（Cloudflare 在大陆不稳定）。部署步骤见 [server/README.md](server/README.md)。
+
+整套只需要一把签名密钥（`SIGNING_KEY`）：端点用它给更新索引和规则策略签名；CI 打包时从它算出公钥内置进客户端；调用端点管理接口的令牌也从它推导（`node tools/admin-token.mjs private.pem`）。
 
 1. 生成密钥，写进 GitHub（私钥只进 Secrets，`~/keys/signing` 留作备份）：
    ```sh
    npm run sign -- generate-key ~/keys/signing
    gh secret set SIGNING_KEY < ~/keys/signing/private.pem
    ```
-2. Cloudflare（用托管端点域名的那个账号）：开通 R2；My Profile → API Tokens 用「Edit Cloudflare Workers」模板建 Token，并加上 Account → Workers R2 Storage → Edit。
-   ```sh
-   gh secret set CLOUDFLARE_API_TOKEN --body '<token>'
-   gh secret set CLOUDFLARE_ACCOUNT_ID --body '<account id>'
-   ```
-3. GitHub Variables 填品牌：`BRAND_ID`、`BRAND_NAME`、`BRAND_API_PRIMARY`、`BRAND_API_BACKUP`、`UPDATE_ENDPOINT`，可选 `BRAND_APP_ID`、`BRAND_WEBSITE`、`BRAND_SUBSCRIPTION_ORIGINS`、`R2_BUCKET`（默认 `v2board-client-files`）。
-4. Actions → **Update endpoint** → `deploy`。`UPDATE_ENDPOINT` 的域名会自动绑定为 Worker 的 Custom domain（该域名须托管在同一 Cloudflare 账号，且没有同名 DNS 记录；`workers.dev` 在大陆访问不了）。打开该地址就是下载页。
+2. 按 server/README.md 部署端点，把同一份 `private.pem` 放到服务器上。
+3. GitHub Variables 填品牌：`BRAND_ID`、`BRAND_NAME`、`BRAND_API_PRIMARY`、`BRAND_API_BACKUP`、`UPDATE_ENDPOINT`（多个域名用空格分隔，第一个为主），可选 `BRAND_APP_ID`、`BRAND_WEBSITE`、`BRAND_SUBSCRIPTION_ORIGINS`。
 
-端点接口：`/v1/release`（签名更新索引，每 6 小时重签）、`/v1/policy`（签名策略，携带规则更新）、`/files/...`（支持断点续传）、`/`（下载页）、`/admin/*`（仅 CI 使用）。
+端点接口：`/v1/release`（签名更新索引，每 6 小时重签）、`/v1/policy`（签名策略，携带规则更新）、`/files/...`（支持断点续传）、`/`（下载页，附未签名安装包的打开说明）、`/v1/telemetry`、`/v1/report`（客户端遥测和问题报告）、`/admin/`（按邮箱或问题编号查用户情况的页面）、`/admin/*`（CI 上传和发布）。
 
 ## 发布
 
@@ -83,10 +84,11 @@ npm version 0.2.0 --no-git-tag-version   # 改 package.json 版本并提交
 git tag v0.2.0 && git push origin v0.2.0
 ```
 
-**Release** 工作流会检查、四平台打包、创建 GitHub Release、上传 R2 并登记新版本，已安装的客户端会收到更新。也可以在 Actions 里手动运行 Release，临时填写其他机场名和 API 出包；勾选 `publish_endpoint` 才会推给现有用户（端点只接受同一个 `id`，换 `id` 的包需要单独部署端点）。
+**Release** 工作流会检查、四平台打包、创建 GitHub Release、上传到自建端点并登记新版本，已安装的客户端会收到更新。也可以在 Actions 里手动运行 Release，临时填写其他机场名和 API 出包；勾选 `publish_endpoint` 才会推给现有用户（端点只接受同一个 `id`，换 `id` 的包需要单独部署端点）。
 
-- **规则更新**：Actions → Update endpoint → `rules`，或等每周一自动运行，会把最新的 Loyalsoldier/clash-rules 转换后下发。客户端约 15 分钟内拉到新规则，正在连接的会自动按新规则重连。
-- **自定义规则**：编辑 `config/rules-extra.json` 并提交到 main，会自动重新发布规则（需要已部署端点）。`proxyDomains` 强制走代理，`blockedDomains` 屏蔽，`directDomains` 额外直连；这三项都匹配域名及其子域名，`directFullDomains` 只匹配完整域名，`directIPs` 写 IP 或 CIDR。优先级：屏蔽 > 强制代理 > 直连，所以强制代理能覆盖大陆直连列表。只对正式版客户端生效，内置规则不受影响。
+- **规则更新**：Actions → Update endpoint → `rules`，或等每周一自动运行，会用最新的 v2fly geosite/geoip 按 `tools/import-rules.py` 里的分段顺序生成规则并下发。客户端约 15 分钟内拉到新规则，正在连接的会自动按新规则重连。分段顺序和去向在脚本开头，改分流就改那里。随包规则用 `python3 tools/import-rules.py build` 按 `resources/rules/manifest.json` 里固定的数据版本重新生成。
+- **自定义规则**：编辑 `config/rules-extra.json` 并提交到 main，会自动重新发布规则（需要已部署端点）。`proxyDomains` 强制走代理，`blockedDomains` 屏蔽，`directDomains` 额外直连；这三项都匹配域名及其子域名，`directFullDomains` 只匹配完整域名，`directIPs` 写 IP 或 CIDR。它们排在所有生成规则之前，优先级：屏蔽 > 强制代理 > 直连。只对远程规则生效，随包规则不受影响。
+- **端点程序**：Actions → Update endpoint → `build` 编译 Linux amd64/arm64 二进制，下载后按 server/README.md 替换。
 - **代码签名**：CI 目前不做 Windows/macOS 代码签名。客户端在这两个平台检测到新版本时会打开下载页，由用户手动安装；Linux 可以在客户端内直接更新。以后接入 Windows 证书或 Apple Developer ID 签名公证后，这两个平台也能在客户端内更新：打包脚本直接从签好的安装包读出证书 Subject / Team ID 写进更新索引，不需要另外填写。
 
 ## 目录
@@ -97,7 +99,7 @@ git tag v0.2.0 && git push origin v0.2.0
 | `src/shared/` 及保留的 TS 逻辑 | 前端类型、构建校验和迁移对照测试 |
 | `desktop/` | Wails 外壳、Go 协调器、领域/网络/存储逻辑及测试 |
 | `native/helper/` | Go 原生服务 |
-| `server/` | 更新端点 Worker |
+| `server/` | 自建端点（更新、规则、下载页、遥测），Go |
 | `tools/` | 构建、品牌、签名、发布脚本 |
 | `docs/` | 需求、架构、API 合同、运维说明 |
 
