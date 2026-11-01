@@ -303,6 +303,47 @@ func TestCoreSmoke(t *testing.T) {
 	}
 	t.Run("encrypted-loopback", func(t *testing.T) { testCoreEncryptedLoopback(t, core) })
 	t.Run("system-proxy", func(t *testing.T) { testSystemProxySmoke(t, core) })
+	t.Run("system-proxy-node-shapes", func(t *testing.T) { testSystemProxyNodeShapes(t, core) })
+}
+
+// testSystemProxyNodeShapes has the pinned core accept a system proxy pool holding the
+// layered transports and ciphers the parser supports, with the bundled rules.
+func testSystemProxyNodeShapes(t *testing.T, core *CoreRuntime) {
+	id, key := "00000000-0000-4000-8000-000000000001", "abcdefghijklmnopqrstuvwxyzABCDEFGHIJ0123456"
+	nodes := []ProxyNode{}
+	for _, uri := range []string{
+		"vless://" + id + "@hk.example.com:443?security=tls&type=tcp&sni=hk.example.com#tcp",
+		"vless://" + id + "@cdn.example.com:443?type=ws&host=edge.example.com&path=%2Fws&security=tls&sni=edge.example.com&ech=cloudflare-ech.com%2Bhttps%3A%2F%2F1.1.1.1%2Fdns-query#ws-ech",
+		"vless://" + id + "@de.example.com:443?encryption=none&type=xhttp&path=%2Fx&security=reality&fp=edge&sni=www.example.com&pbk=" + key + "&sid=ab&mode=auto#xhttp",
+		"ss://2022-blake3-aes-256-gcm:" + url.QueryEscape("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=") + "@tw.example.com:443#ss2022",
+	} {
+		nodes = append(nodes, proxyTestNode(t, uri))
+	}
+	raw, err := os.ReadFile("../../resources/rules/baseline.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rules Rules
+	if err = DecodeStrict(raw, &rules, 64*1024*1024); err != nil {
+		t.Fatal(err)
+	}
+	config, err := CompileSystemProxy(Candidate{Node: nodes[0], Pool: nodes[1:], Automatic: true, Mode: "rule", Tunnel: "proxy", Rules: rules}, proxyTestPorts())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if outbounds := config["outbounds"].([]any); len(outbounds) != len(nodes)+3 {
+		t.Fatalf("a node was left out: %d outbounds", len(outbounds))
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	check, err := core.launchProxy(ctx, config, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-check.done
+	if check.err != nil {
+		t.Fatalf("core rejected the system proxy pool: %v", check.err)
+	}
 }
 
 // testSystemProxySmoke connects in system proxy mode with the bundled rules through a

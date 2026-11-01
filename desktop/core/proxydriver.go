@@ -201,7 +201,7 @@ func (d *ProxyDriver) Probe(ctx context.Context, ticket string) (NetworkProof, e
 	}
 	for _, target := range d.targets {
 		attempt, cancel := context.WithTimeout(ctx, 4*time.Second)
-		err := probeHTTPSWithTLS(attempt, auth, target, d.core.probeTLS)
+		_, err := probeHTTPSWithTLS(attempt, auth, target, d.core.probeTLS)
 		cancel()
 		if ctx.Err() != nil {
 			return NetworkProof{}, NewAppError("CANCELLED")
