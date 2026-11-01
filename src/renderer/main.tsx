@@ -169,7 +169,6 @@ function SettingsSheet({ state, busy, report, close, run, prefs }: { state: AppV
       {reporting && <ReportPanel state={state} run={run}/>}
     </div>
     <div className="group">
-      <div className="row"><span><strong>自动检查更新</strong><small>打开时和每隔几小时检查一次，有新版本会显示在首页</small></span><button role="switch" aria-checked={state.preferences.autoUpdate} aria-label="自动检查更新" className={`toggle ${state.preferences.autoUpdate ? 'on' : ''}`} onClick={() => prefs({ autoUpdate: !state.preferences.autoUpdate })}/></div>
       <div className="row"><span><strong>检查更新</strong><small>{state.installing ? (download.status === 'downloading' ? `正在下载 ${Math.round(download.received / Math.max(1, download.total) * 100)}%` : '正在安装，完成后自动重新打开') : download.status === 'ready' ? `新版本 ${download.version} 已下载` : state.update}</small></span>
         {download.version && download.status !== 'idle' && !state.installing ? <button className="secondary" onClick={() => void run({ type: 'install-update' })}>{state.manualUpdate ? '去下载' : '立即更新'}</button>
           : <button className="secondary" disabled={!!busy || state.installing || download.status === 'downloading'} onClick={() => void run({ type: 'check-update' })}>检查</button>}
@@ -197,11 +196,10 @@ function ModeCard({ state, working, prefs }: { state: AppView; working: boolean;
   </section>;
 }
 
-/** Clash Party style: a new version shows on the home screen and installs in one click. */
+/** Clash Party style: a new version stays on the home screen until installed, in one click. */
 function UpdateCard({ state, run }: { state: AppView; run(command: Command): Promise<boolean> }) {
-  const [later, setLater] = useState<string | null>(null);
   const { status, version, received, total, error } = state.download;
-  if (!version || status === 'idle' || (later === version && !state.installing)) return null;
+  if (!version || status === 'idle') return null;
   const percent = Math.min(100, Math.round(received / Math.max(1, total) * 100));
   const downloading = status === 'downloading';
   const detail = state.manualUpdate ? '这个安装位置不能自动更新，请从官网下载'
@@ -216,10 +214,7 @@ function UpdateCard({ state, run }: { state: AppView; run(command: Command): Pro
       <small aria-live="polite">{detail}</small>
       {state.installing && <span className="progress" role="progressbar" aria-label="更新进度" aria-valuenow={downloading ? percent : 100} aria-valuemin={0} aria-valuemax={100}><span className={downloading ? '' : 'indeterminate'} style={{ width: `${downloading ? percent : 100}%` }}/></span>}
     </span>
-    {!state.installing && <>
-      <button className="primary small" onClick={() => void run({ type: 'install-update' })}>{state.manualUpdate ? '去下载' : status === 'failed' ? '重试' : '立即更新'}</button>
-      <button className="icon-button" aria-label="稍后提醒" title="稍后提醒" onClick={() => setLater(version)}><Icon name="close" size={16}/></button>
-    </>}
+    {!state.installing && <button className="primary small" onClick={() => void run({ type: 'install-update' })}>{state.manualUpdate ? '去下载' : status === 'failed' ? '重试' : '立即更新'}</button>}
   </section>;
 }
 

@@ -194,8 +194,9 @@ func TestControllerInstallUpdateDownloadsThenInstalls(t *testing.T) {
 	}
 }
 
-// Automatic checks follow the preference; a manual check always runs.
-func TestControllerAutomaticUpdateCheckPreference(t *testing.T) {
+// Update checks are mandatory: one runs at start without any user action, and a
+// manual check still works afterwards.
+func TestControllerChecksForUpdatesWithoutBeingAsked(t *testing.T) {
 	f, _, envelope := updateFixture(t, "linux", "unsigned")
 	var requests atomic.Int32
 	h := newControllerHarness(t, func(d *ControllerDeps) {
@@ -213,25 +214,16 @@ func TestControllerAutomaticUpdateCheckPreference(t *testing.T) {
 			return HTTPResponse{Status: 200, Body: envelope}, nil
 		})
 	}, false)
-	if !h.controller.View().Preferences.AutoUpdate {
-		t.Fatal("automatic update checks must default on")
-	}
-	prefs := h.controller.View().Preferences
-	prefs.AutoUpdate = false
-	if result := commandForTest(h.controller, map[string]any{"type": "preferences", "preferences": prefs}); !result.OK {
-		t.Fatal(result)
-	}
-	if h.controller.autoUpdate() {
-		t.Fatal("preference ignored")
-	}
-	// Let the check that started with the app finish; a check in flight is shared.
 	deadline := time.Now().Add(3 * time.Second)
 	for (requests.Load() == 0 || h.controller.View().Update == "正在检查更新") && time.Now().Before(deadline) {
 		time.Sleep(time.Millisecond)
 	}
+	if requests.Load() == 0 || !strings.HasPrefix(h.controller.View().Update, "发现新版本 9.0.0") {
+		t.Fatalf("no automatic check: %d requests, %q", requests.Load(), h.controller.View().Update)
+	}
 	before := requests.Load()
 	if result := commandForTest(h.controller, map[string]any{"type": "check-update"}); !result.OK || requests.Load() != before+1 {
-		t.Fatal("manual check must run with automatic checks off")
+		t.Fatal("manual check")
 	}
 }
 func TestControllerShutdownCleansNetworkBeforeWaitingForDownloads(t *testing.T) {

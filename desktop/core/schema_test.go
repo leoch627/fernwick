@@ -97,8 +97,7 @@ func TestSchemaDatesAndCodePointLengths(t *testing.T) {
 	}
 }
 
-// Preference files written before a field existed load with its default; automatic update
-// checks must come on for existing users, not off.
+// Preference files written before a field existed load with its default.
 func TestOlderPreferencesLoadWithDefaults(t *testing.T) {
 	var prefs Preferences
 	raw := `{"mode":"rule","nodeId":null,"autoConnect":false,"launchAtLogin":false,"closeBehavior":"tray","theme":"system"}`
@@ -108,7 +107,7 @@ func TestOlderPreferencesLoadWithDefaults(t *testing.T) {
 	if prefs != DefaultPreferences {
 		t.Fatalf("got %+v, want %+v", prefs, DefaultPreferences)
 	}
-	if !prefs.AutoUpdate || !prefs.AdBlock || prefs.Tunnel != "proxy" {
+	if !prefs.AdBlock || prefs.Tunnel != "proxy" {
 		t.Fatalf("defaults not applied: %+v", prefs)
 	}
 }

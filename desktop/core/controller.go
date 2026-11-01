@@ -718,9 +718,8 @@ func (c *ClientController) Start(ctx context.Context) error {
 			}
 		}
 	}()
-	if c.autoUpdate() {
-		go c.checkUpdate(c.publicCtx)
-	}
+	// Update checks are not optional: at start and every policy interval.
+	go c.checkUpdate(c.publicCtx)
 	if auto && c.gate() == "" {
 		if err := c.connect(ctx); err != nil {
 			c.fail(CodeOf(err))
@@ -878,7 +877,7 @@ func (c *ClientController) tick() {
 	if policyCheck {
 		go c.checkPolicy()
 	}
-	if updateCheck && c.autoUpdate() {
+	if updateCheck {
 		go c.checkUpdate(c.publicCtx)
 	}
 	if persist {
@@ -1225,11 +1224,6 @@ func (c *ClientController) openDownloadPage() error {
 	_, err = c.deps.OpenExternal(target, "")
 	return err
 }
-func (c *ClientController) autoUpdate() bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.preferences.AutoUpdate
-}
 
 // downloadThenInstall finishes the download the user asked to install, then installs
 // it unless they cancelled in the meantime.
@@ -1508,9 +1502,6 @@ func (c *ClientController) execute(ctx context.Context, cmd Command) error {
 		c.mu.Lock()
 		c.preferences = change
 		c.mu.Unlock()
-		if change.AutoUpdate && !before.AutoUpdate {
-			go c.checkUpdate(c.publicCtx)
-		}
 		if reconnect {
 			return c.connect(ctx)
 		}

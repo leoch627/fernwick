@@ -82,10 +82,20 @@ func TestCompileSystemProxyListensOnLoopbackOnly(t *testing.T) {
 	if _, network := last["network"]; network || !reflect.DeepEqual(last["ip"], []any{"0.0.0.0/0", "::/0"}) {
 		t.Fatalf("rule mode must end on an address rule so unmatched names resolve: %v", last)
 	}
+	// No DNS leak: the mainland resolver sees only names a direct list names; the rest
+	// resolve through the proxy (with a mainland ECS subnet) and never fall back.
 	servers := decoded["dns"].(map[string]any)["servers"].([]any)
-	mainland := servers[len(servers)-2].(map[string]any)
-	if mainland["tag"] != "dns-direct" || mainland["domains"] != nil || !reflect.DeepEqual(mainland["expectIPs"], []any{"1.0.1.0/24"}) {
-		t.Fatalf("unlisted names must ask the mainland resolver first: %v", servers)
+	for _, raw := range servers {
+		if s := raw.(map[string]any); s["tag"] == "dns-direct" && (s["domains"] == nil || s["skipFallback"] != true || s["finalQuery"] != true) {
+			t.Fatalf("mainland resolver answers unlisted names: %v", s)
+		}
+	}
+	fallback := servers[len(servers)-1].(map[string]any)
+	if fallback["tag"] != "dns-proxy" || fallback["address"] != UnlistedResolver || fallback["clientIP"] != MainlandClientSubnet || fallback["finalQuery"] != true || fallback["domains"] != nil {
+		t.Fatalf("unlisted names must resolve through the proxy: %v", fallback)
+	}
+	if !reflect.DeepEqual(rules[1].(map[string]any)["inboundTag"], []any{"dns-direct"}) || rules[1].(map[string]any)["outboundTag"] != "direct" || !reflect.DeepEqual(rules[2].(map[string]any)["inboundTag"], []any{"dns-proxy"}) || rules[2].(map[string]any)["outboundTag"] != "node-0" {
+		t.Fatalf("resolver traffic must follow its tag: %v %v", rules[1], rules[2])
 	}
 	for _, raw := range decoded["outbounds"].([]any) {
 		if out := raw.(map[string]any); out["tag"] == "direct" && out["settings"].(map[string]any)["domainStrategy"] != "UseIPv4v6" {

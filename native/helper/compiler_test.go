@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"reflect"
 	"runtime"
 	"testing"
 )
@@ -115,13 +114,10 @@ func TestCompileCoreRuleMode(t *testing.T) {
 	}
 	// Blocked domains need no resolver; the others are resolved in section order.
 	servers := cfg.DNS.Servers
-	if len(servers) != 5 || servers[0]["tag"] != "dns-proxy" || servers[1]["tag"] != "dns-proxy" || servers[2]["tag"] != "dns-direct" || len(servers[2]["domains"].([]any)) != 3 || servers[4]["tag"] != "dns-proxy" || servers[4]["domains"] != nil {
+	if len(servers) != 4 || servers[0]["tag"] != "dns-proxy" || servers[1]["tag"] != "dns-proxy" || servers[2]["tag"] != "dns-direct" || len(servers[2]["domains"].([]any)) != 3 || servers[3]["domains"] != nil {
 		t.Errorf("dns servers = %v", servers)
 	}
-	// Unlisted names ask the mainland resolver first and keep only mainland answers.
-	if s := servers[3]; s["tag"] != "dns-direct" || s["domains"] != nil || s["skipFallback"] != false || !reflect.DeepEqual(s["expectIPs"], []any{"1.0.1.0/24", "2001:db8::/32"}) {
-		t.Errorf("unlisted names are not resolved in the mainland first: %v", s)
-	}
+	assertNoDNSLeak(t, servers)
 	for _, raw := range cfg.Outbounds {
 		if raw.Tag == "direct" && raw.Settings["domainStrategy"] != "UseIPv4v6" {
 			t.Errorf("direct connections must prefer IPv4: %v", raw)
@@ -129,13 +125,18 @@ func TestCompileCoreRuleMode(t *testing.T) {
 	}
 }
 
-func TestMainlandAddressesSkipReservedRanges(t *testing.T) {
-	rules := Rules{SchemaVersion: 2, Sections: []RuleSection{
-		{Target: "proxy", IPs: []string{"8.8.8.0/24"}},
-		{Target: "direct", IPs: []string{"0.0.0.0/8", "10.0.0.0/8", "1.0.1.0/24", "127.0.0.0/8", "fe80::/10", "240e::/18", "not-a-cidr"}},
-	}}
-	if got := mainlandAddresses(rules); !reflect.DeepEqual(got, []string{"1.0.1.0/24", "240e::/18"}) {
-		t.Errorf("mainland addresses = %v", got)
+// assertNoDNSLeak: the mainland resolver only ever sees names a direct list names; every
+// other name goes through the proxy, with a mainland ECS subnet, and is final.
+func assertNoDNSLeak(t *testing.T, servers []map[string]any) {
+	t.Helper()
+	for _, s := range servers {
+		if s["tag"] == "dns-direct" && (s["domains"] == nil || s["skipFallback"] != true || s["finalQuery"] != true) {
+			t.Errorf("mainland resolver answers unlisted names: %v", s)
+		}
+	}
+	last := servers[len(servers)-1]
+	if last["tag"] != "dns-proxy" || last["address"] != "https://8.8.8.8/dns-query" || last["clientIP"] != "223.5.5.0" || last["finalQuery"] != true {
+		t.Errorf("unlisted names must resolve through the proxy with a mainland subnet: %v", last)
 	}
 }
 

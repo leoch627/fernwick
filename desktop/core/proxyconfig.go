@@ -1,9 +1,6 @@
 package core
 
-import (
-	"net"
-	"strconv"
-)
+import "strconv"
 
 // System proxy mode runs the pinned core as the user, with no network service: apps
 // that follow the system proxy reach a loopback HTTP/SOCKS port, and the core routes
@@ -46,45 +43,17 @@ func (r Rules) WithoutTarget(target string) Rules {
 	return kept
 }
 
-// reservedRanges are never real mainland answers: a resolver that returns them for a
-// public name is broken or poisoned, so they do not count as "in China" below.
-var reservedRanges = func() []*net.IPNet {
-	var out []*net.IPNet
-	for _, cidr := range []string{"0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16", "172.16.0.0/12", "192.168.0.0/16", "224.0.0.0/3", "::/8", "fc00::/7", "fe80::/10", "ff00::/8"} {
-		_, network, _ := net.ParseCIDR(cidr)
-		out = append(out, network)
-	}
-	return out
-}()
-
-// MainlandAddresses lists the public address ranges the rules send direct (the CN
-// geoip section). A mainland resolver's answer inside them is trusted as a mainland
-// CDN address; an answer outside them (a foreign or poisoned address) is not.
-func MainlandAddresses(rules Rules) []string {
-	out := []string{}
-	for _, section := range rules.Sections {
-		if section.Target != "direct" {
-			continue
-		}
-		for _, cidr := range section.IPs {
-			ip, _, err := net.ParseCIDR(cidr)
-			if err != nil {
-				continue
-			}
-			reserved := false
-			for _, network := range reservedRanges {
-				if network.Contains(ip) {
-					reserved = true
-					break
-				}
-			}
-			if !reserved {
-				out = append(out, cidr)
-			}
-		}
-	}
-	return out
-}
+// Names no rule list covers are resolved only through the proxy, never by a mainland
+// resolver: asking one would show it every foreign site the user visits (a DNS leak),
+// and a failed answer does not fall back to one. Google's resolver honours EDNS Client
+// Subnet, so a fixed mainland subnet (AliDNS's anycast /24, not the user's address)
+// still gets unlisted mainland sites their mainland CDN addresses, which then route
+// direct. Cloudflare ignores ECS and returned overseas nodes, sending such sites abroad.
+// native/helper/compiler.go uses the same pair for TUN mode.
+const (
+	UnlistedResolver     = "https://8.8.8.8/dns-query"
+	MainlandClientSubnet = "223.5.5.0"
+)
 
 // CompileSystemProxy builds the core configuration for system proxy mode. It never
 // creates a TUN inbound, and every inbound listens on loopback only.
@@ -180,13 +149,12 @@ func CompileSystemProxy(c Candidate, ports ProxyPorts) (map[string]any, error) {
 	} else {
 		routes = append(routes, withTarget(map[string]any{"type": "field", "network": "tcp,udp"}, primary))
 	}
-	// A name no list covers is asked of the mainland resolver first and kept only when
-	// the answer is a mainland address, like Mihomo's fallback-filter. Asking abroad
-	// first sent unlisted mainland sites to overseas CDN nodes, through the proxy.
-	if mainland := MainlandAddresses(c.Rules); c.Mode == "rule" && len(mainland) > 0 {
-		dns = append(dns, map[string]any{"address": "https://223.5.5.5/dns-query", "tag": "dns-direct", "expectIPs": mainland, "skipFallback": false})
+	// Everything else is resolved through the proxy only (see UnlistedResolver).
+	if c.Mode == "rule" {
+		dns = append(dns, map[string]any{"address": UnlistedResolver, "tag": "dns-proxy", "clientIP": MainlandClientSubnet, "skipFallback": false, "finalQuery": true})
+	} else {
+		dns = append(dns, map[string]any{"address": "https://1.1.1.1/dns-query", "tag": "dns-proxy", "skipFallback": false, "finalQuery": true})
 	}
-	dns = append(dns, map[string]any{"address": "https://1.1.1.1/dns-query", "tag": "dns-proxy", "skipFallback": false, "finalQuery": true})
 	outbounds = append(outbounds,
 		// Prefer IPv4: "UseIP" picks a random A or AAAA answer, and on the many networks
 		// without working IPv6 every other direct connection failed or hung.

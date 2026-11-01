@@ -1,43 +1,19 @@
 package main
 
-import (
-	"net"
-	"runtime"
-)
+import "runtime"
 
 type object = map[string]any
 
 var lan = []string{"127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16", "::1/128", "fc00::/7", "fe80::/10"}
 
-// mainlandAddresses mirrors desktop/core MainlandAddresses: the public ranges the rules
-// send direct, without reserved ranges a broken or poisoned resolver might return.
-func mainlandAddresses(rules Rules) []string {
-	var reserved []*net.IPNet
-	for _, cidr := range []string{"0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16", "172.16.0.0/12", "192.168.0.0/16", "224.0.0.0/3", "::/8", "fc00::/7", "fe80::/10", "ff00::/8"} {
-		_, network, _ := net.ParseCIDR(cidr)
-		reserved = append(reserved, network)
-	}
-	out := []string{}
-	for _, section := range rules.Sections {
-		if section.Target != "direct" {
-			continue
-		}
-	next:
-		for _, cidr := range section.IPs {
-			ip, _, e := net.ParseCIDR(cidr)
-			if e != nil {
-				continue
-			}
-			for _, network := range reserved {
-				if network.Contains(ip) {
-					continue next
-				}
-			}
-			out = append(out, cidr)
-		}
-	}
-	return out
-}
+// Unlisted names resolve through the proxy only, with a fixed mainland ECS subnet so
+// mainland CDNs still answer with mainland addresses; never a mainland resolver, which
+// would see every foreign site visited. Mirrors desktop/core/proxyconfig.go.
+const (
+	unlistedResolver     = "https://8.8.8.8/dns-query"
+	mainlandClientSubnet = "223.5.5.0"
+)
+
 func tunName() string {
 	if runtime.GOOS == "darwin" {
 		return "utun50"
@@ -175,12 +151,13 @@ func compileCore(c Candidate, j Journal) []byte {
 		}
 	}
 	routes = append(routes, route(object{"type": "field", "network": "tcp,udp"}, primary))
-	// Unlisted names: mainland resolver first, kept only for a mainland answer (see
-	// desktop/core/proxyconfig.go); otherwise resolved abroad through the proxy.
-	if mainland := mainlandAddresses(c.Rules); c.Mode == "rule" && len(mainland) > 0 {
-		dns = append(dns, object{"address": "https://223.5.5.5/dns-query", "tag": "dns-direct", "expectIPs": mainland, "skipFallback": false})
+	// Every other name, including each app's own lookups captured by the TUN, is resolved
+	// through the proxy only; a failure never falls back to a mainland resolver.
+	if c.Mode == "rule" {
+		dns = append(dns, object{"address": unlistedResolver, "tag": "dns-proxy", "clientIP": mainlandClientSubnet, "skipFallback": false, "finalQuery": true})
+	} else {
+		dns = append(dns, object{"address": "https://1.1.1.1/dns-query", "tag": "dns-proxy", "skipFallback": false, "finalQuery": true})
 	}
-	dns = append(dns, object{"address": "https://1.1.1.1/dns-query", "tag": "dns-proxy", "skipFallback": false, "finalQuery": true})
 	tun := object{"name": j.Tun, "desc": ruleTag() + " TUN", "mtu": 1500, "gateway": []string{"172.19.0.1/30", "fdfe:dcba:9876::1/126"}, "autoSystemRoutingTable": []string{}, "autoOutboundsInterface": j.Interface.Name, "autoSystemDnsToGateway": false}
 	// Windows Xray owns its adapter's routes, DNS and dynamic WFP filters. Other platforms use helper-owned routing/DNS.
 	if runtime.GOOS == "windows" {

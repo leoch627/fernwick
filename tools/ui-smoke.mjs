@@ -66,7 +66,7 @@ try {
 
   // Settings: global mode is a switch, and without an endpoint a report falls back to a file.
   await page.getByRole('button', { name: '设置' }).click();
-  assert.equal(await page.getByRole('switch', { name: '自动检查更新' }).getAttribute('aria-checked'), 'true');
+  assert.equal(await page.getByRole('switch', { name: '自动检查更新' }).count(), 0); // update checks are not optional
   // Appearance follows the system; 亮色 (三月七) and 暗色 (黑塔) force one palette.
   assert.equal(await page.getByRole('radio', { name: '跟随系统' }).getAttribute('aria-checked'), 'true');
   await page.getByRole('radio', { name: '暗色' }).click();
@@ -139,15 +139,15 @@ try {
   assert.deepEqual((await proxied.evaluate(() => window.__commands)).filter(value => value !== 'state'), ['preferences', 'connect']);
   await proxied.close();
 
-  // Windows shows the name in its own title bar, so the page does not repeat it; "later" hides the update.
+  // Windows shows the name in its own title bar, so the page does not repeat it. The update cannot be dismissed.
   const windows = await browser.newPage({ viewport: { width: 420, height: 700 }, userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0' });
   windows.on('pageerror', error => failures.push(error.message));
   await windows.addInitScript(fakeBridge, fixture);
   await windows.goto('http://127.0.0.1:5173/');
   await windows.getByRole('button', { name: '设置' }).waitFor();
   assert.equal(await windows.locator('header.topbar').getByText(fixture.brand).count(), 0);
-  await windows.getByRole('region', { name: '推荐更新' }).getByRole('button', { name: '稍后提醒' }).click();
-  assert.equal(await windows.getByRole('region', { name: '推荐更新' }).count(), 0);
+  await windows.getByRole('region', { name: '推荐更新' }).getByRole('button', { name: '立即更新' }).waitFor();
+  assert.equal(await windows.getByRole('button', { name: '稍后提醒' }).count(), 0);
   await windows.screenshot({ path: 'work/preview-windows.png' });
   await windows.close();
   assert.equal(await page.locator('header.topbar').getByText(fixture.brand).count(), 1);
