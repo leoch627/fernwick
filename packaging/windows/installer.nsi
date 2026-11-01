@@ -36,7 +36,7 @@ Function .onInit
 FunctionEnd
 Section "Install"
   SetOutPath "$INSTDIR"
-  File /r "@STAGE@/*"
+  File /r "@STAGE@\*"
   nsExec::ExecToStack '"$INSTDIR\resources\native\win32-x64\helper.exe" install --app "$INSTDIR"'
   Pop $0
   Pop $1
