@@ -7,7 +7,6 @@ import os
 from pathlib import Path
 import platform
 import plistlib
-import re
 import shlex
 import shutil
 import subprocess
@@ -74,11 +73,7 @@ def expected_resources(target, manifest):
             raise ValueError('Unexpected native manifest path')
         entries[f'native/{target}/{expected_name}'] = component['sha256']
     entries.update({f'native/{target}/{name}': value for name, value in asset.get('extras', {}).items()})
-    rules = read_json(ROOT / 'resources/rules/manifest.json')
-    for name, value in rules['files'].items():
-        if not re.fullmatch(r'(?:source/(?:direct\.txt|cncidr\.txt|LICENSE)|baseline\.json)', name):
-            raise ValueError('Unexpected rules manifest path')
-        entries['rules/' + name] = value
+    entries['rules/baseline.json'] = read_json(ROOT / 'resources/rules/manifest.json')['baseline.json']
     return entries
 
 
@@ -87,7 +82,7 @@ def verify_resources(root, target, manifest):
         path = root / name
         if not path.is_file() or path.is_symlink() or sha(path) != expected:
             raise ValueError(f'Packaged resource missing or modified: {path}')
-    for name in ['core-lock.json', 'native-manifest.json', 'THIRD_PARTY_NOTICES.md', 'rules/import-rules.py']:
+    for name in ['core-lock.json', 'native-manifest.json', 'THIRD_PARTY_NOTICES.md', 'rules/manifest.json']:
         if not (root / name).is_file():
             raise ValueError(f'Missing packaged resource: {name}')
 
@@ -103,7 +98,6 @@ def copy_resources(destination, target, manifest):
     for name in ['core-lock.json', 'native-manifest.json']:
         shutil.copy2(ROOT / 'resources' / name, destination / name)
     shutil.copy2(ROOT / 'THIRD_PARTY_NOTICES.md', destination / 'THIRD_PARTY_NOTICES.md')
-    shutil.copy2(ROOT / 'tools/import-rules.py', destination / 'rules/import-rules.py')
     verify_resources(destination, target, manifest)
 
 

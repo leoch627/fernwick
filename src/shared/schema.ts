@@ -20,12 +20,12 @@ export const RefreshSchema = z.object({
   subscriptionIntervalSec: z.number().int().min(300).max(21600),
   accountIntervalSec: z.number().int().min(60).max(3600),
   policyIntervalSec: z.number().int().min(300).max(3600),
-  maxSnapshotAgeSec: z.number().int().min(600).max(86400),
+  maxSnapshotAgeSec: z.number().int().min(600).max(604800),
 }).strict().superRefine((r, ctx) => {
   if (r.accountIntervalSec > r.subscriptionIntervalSec || r.subscriptionIntervalSec * 1.1 + 80 >= r.maxSnapshotAgeSec)
     ctx.addIssue({ code: 'custom', message: 'refresh intervals exceed authorization window' });
 });
-export const defaults = { subscriptionIntervalSec: 1800, accountIntervalSec: 300, policyIntervalSec: 900, maxSnapshotAgeSec: 86400 } as const;
+export const defaults = { subscriptionIntervalSec: 1800, accountIntervalSec: 300, policyIntervalSec: 900, maxSnapshotAgeSec: 604800 } as const;
 export const BuildSchema = z.object({
   schemaVersion: z.literal(2), productId: text, appId: text, name: text,
   environment: z.enum(['test', 'production']), channel: z.enum(['test', 'stable']), tenantId: text,
@@ -40,7 +40,7 @@ export const BuildSchema = z.object({
   nodeCapabilitiesConfirmed: z.boolean(),
   allowUnverifiedNodeTrials: z.boolean().default(false),
   healthTargets: z.array(z.object({ url: z.string().url(), status: z.number().int().min(200).max(299), bodySha256: z.string().regex(/^[a-f0-9]{64}$/), failureDomain: text }).strict()).max(3).default([]),
-  hardLimits: z.object({ startupNetworkBudgetSec: z.literal(20), networkTransactionSec: z.literal(15), maxSnapshotAgeSec: z.literal(86400), subscriptionDecodedMaxBytes: z.literal(10485760), subscriptionMaxNodes: z.literal(5000) }).strict(),
+  hardLimits: z.object({ startupNetworkBudgetSec: z.literal(20), networkTransactionSec: z.literal(15), maxSnapshotAgeSec: z.literal(604800), subscriptionDecodedMaxBytes: z.literal(10485760), subscriptionMaxNodes: z.literal(5000) }).strict(),
 }).strict();
 export type BuildConfig = z.infer<typeof BuildSchema>;
 export const NodeOperationSchema = z.object({ nodeId: text, hiddenFromList: z.boolean(), eligibleForAuto: z.boolean(), disabledForConnection: z.boolean(), order: z.number().int().optional(), group: text.optional() }).strict();

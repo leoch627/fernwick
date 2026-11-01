@@ -208,7 +208,7 @@ export class ClientController {
     if (this.closing || this.gate() || networkGeneration !== this.network.generation || generation !== this.policy.generation || session !== this.session?.generation) throw new AppError('CANCELLED');
     const node = await selectNode(this.snapshot!.nodes, this.policy.active, this.preferences.nodeId, this.actualNode, null, this.deps.probe);
     if (this.closing || this.gate() || networkGeneration !== this.network.generation || generation !== this.policy.generation || session !== this.session?.generation) throw new AppError('CANCELLED');
-    const candidate = { node, mode: this.preferences.mode, rules: this.deps.resources?.rules ?? { schemaVersion: 1, directDomains: [], proxyDomains: [], blockedDomains: [], directIPs: [] }, authorizedUntil: this.snapshot!.usableUntil };
+    const candidate = { node, mode: this.preferences.mode, rules: this.deps.resources?.rules ?? { schemaVersion: 2, sections: [] }, authorizedUntil: this.snapshot!.usableUntil };
     await this.network.connect(candidate, () => !this.gate() && generation === this.policy.generation && session === this.session?.generation && eligible(node, this.policy.active, false)); this.actualNode = node.id;
   }
   private link(key: 'website' | 'renew' | 'help') { return this.policy.active?.links[key] ?? this.deps.build.links[key]; }

@@ -1,14 +1,18 @@
 {
-  "schemaVersion": 1,
-  "upstream": "https://github.com/Loyalsoldier/clash-rules",
-  "revision": "611f7e9db13b5c824233ed7451abdf867fc08a41",
-  "license": "GPL-3.0",
-  "importedAt": "2026-10-31",
-  "conversion": "tools/import-rules.py (GPL-3.0-only); exact domains preserved separately from suffixes; no rejected/advertising/app-specific lists imported",
-  "files": {
-    "source/direct.txt": "d084836b99fb734a007c1834aa08e2d016d2e116242d6653b412dd6070982e08",
-    "source/cncidr.txt": "d260e0a85238bf8b103b5cf40737af804c291dc2d75fa3505a0f82ac6ebbc5df",
-    "source/LICENSE": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
-    "baseline.json": "87e7abcf578ba328dc3ce20d1d19280c01f29c13df33200dd0ed1590bb44b56c"
-  }
+  "schemaVersion": 2,
+  "conversion": "tools/import-rules.py; section order mirrors the operator's Mihomo template, see the script docstring",
+  "importedAt": "2026-11-01",
+  "sources": {
+    "geosite": {
+      "url": "https://github.com/v2fly/domain-list-community/releases/download/20261101074624/dlc.dat",
+      "sha256": "64f213e84d75f7fddf43b9a75f5afcce09f07124cce592e458cbbfa045906aa8",
+      "license": "MIT"
+    },
+    "geoip": {
+      "url": "https://github.com/v2fly/geoip/releases/download/202610050438/geoip-only-cn-private.dat",
+      "sha256": "989cc8badc2ea6f7f1c1a2e70dbfd944658579c35589c07b4feff77421316c72",
+      "license": "CC-BY-SA-4.0"
+    }
+  },
+  "baseline.json": "26a611514e91d7164971498ac4c0eaa29e0e1d41f01ae2ec9c2cf61261334ab0"
 }

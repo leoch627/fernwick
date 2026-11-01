@@ -6,7 +6,7 @@ import { validateBuild } from '../src/domain/trust';
 import { PolicySchema } from '../src/shared/schema';
 import { ReleaseSchema, verifyRelease } from '../src/services/update';
 import { verifyPolicy } from '../src/services/policy';
-import { KEY_ID } from '../server/src/signing';
+import { KEY_ID } from './signing';
 async function main() {
   const [action, kind, input, keyPath, output] = process.argv.slice(2);
   if (action === 'generate-key' && kind && !input) {

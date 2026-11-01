@@ -36,17 +36,28 @@ type Node struct {
 	Fingerprint string `json:"fingerprint,omitempty"`
 	WSPath      string `json:"wsPath,omitempty"`
 	WSHost      string `json:"wsHost,omitempty"`
+	// AI marks nodes whose exit region AI services accept (not mainland China, Hong Kong or Macao).
+	AI bool `json:"ai,omitempty"`
+}
+
+// RuleSection routes matching domains or addresses to one target. Sections are
+// evaluated in order; domains use Xray's domain:, full:, keyword: and regexp: forms.
+type RuleSection struct {
+	Target  string   `json:"target"`
+	Domains []string `json:"domains,omitempty"`
+	IPs     []string `json:"ips,omitempty"`
 }
 type Rules struct {
-	SchemaVersion     int      `json:"schemaVersion"`
-	DirectDomains     []string `json:"directDomains"`
-	DirectFullDomains []string `json:"directFullDomains,omitempty"`
-	ProxyDomains      []string `json:"proxyDomains"`
-	BlockedDomains    []string `json:"blockedDomains"`
-	DirectIPs         []string `json:"directIPs"`
+	SchemaVersion int           `json:"schemaVersion"`
+	Sections      []RuleSection `json:"sections"`
 }
+
+// Candidate is one connection. Node is the user's node, or the best probed node when
+// Automatic; Pool holds the other usable nodes for the automatic and AI balancers.
 type Candidate struct {
 	Node            Node   `json:"node"`
+	Pool            []Node `json:"pool,omitempty"`
+	Automatic       bool   `json:"automatic,omitempty"`
 	Mode            string `json:"mode"`
 	Rules           Rules  `json:"rules"`
 	AuthorizedUntil int64  `json:"authorizedUntil"`
@@ -132,6 +143,7 @@ type Journal struct {
 	Interface       Interface `json:"interface"`
 	Tun             string    `json:"tun"`
 	NodeAddress     string    `json:"nodeAddress"`
+	PoolAddresses   []string  `json:"poolAddresses,omitempty"`
 	Bypass          []string  `json:"bypass"`
 	CorePID         int       `json:"corePid"`
 	CoreBirth       string    `json:"coreBirth"`
@@ -211,11 +223,28 @@ func stringHash(value string) string {
 	h := sha256.Sum256([]byte(value))
 	return hex.EncodeToString(h[:])
 }
+
+const maxAuthorization = 7 * 24 * time.Hour
+const maxPool = 63
+
+var targets = []string{"direct", "proxy", "ai", "block"}
+var keywordPattern = regexp.MustCompile(`^[a-z0-9.-]{1,253}$`)
+
 func (c *Candidate) validate() error {
-	if c == nil || c.Mode != "rule" && c.Mode != "global" || c.AuthorizedUntil <= time.Now().UnixMilli() || c.AuthorizedUntil > time.Now().Add(24*time.Hour).UnixMilli()+2000 {
+	if c == nil || c.Mode != "rule" && c.Mode != "global" || c.AuthorizedUntil <= time.Now().UnixMilli() || c.AuthorizedUntil > time.Now().Add(maxAuthorization).UnixMilli()+2000 || len(c.Pool) > maxPool {
 		return failure("INVALID_INPUT")
 	}
-	n := &c.Node
+	if e := c.Node.validate(); e != nil {
+		return e
+	}
+	for i := range c.Pool {
+		if e := c.Pool[i].validate(); e != nil {
+			return e
+		}
+	}
+	return c.Rules.validate()
+}
+func (n *Node) validate() error {
 	if !host(n.Host) || n.Port < 1 || n.Port > 65535 || len(n.Credential) < 1 || len(n.Credential) > 2048 || !contains([]string{"tcp", "ws"}, n.Transport) {
 		return failure("INVALID_INPUT")
 	}
@@ -257,21 +286,59 @@ func (c *Candidate) validate() error {
 	if n.Transport == "ws" && (!strings.HasPrefix(n.WSPath, "/") || len(n.WSPath) > 2048 || strings.ContainsAny(n.WSPath, "\r\n\x00") || !host(n.WSHost)) {
 		return failure("NO_COMPATIBLE_NODES")
 	}
-	r := &c.Rules
-	if r.SchemaVersion != 1 || len(r.DirectDomains) > 200000 || len(r.DirectFullDomains) > 200000 || len(r.ProxyDomains) > 100000 || len(r.BlockedDomains) > 100000 || len(r.DirectIPs) > 100000 {
+	return nil
+}
+
+// validRuleDomain accepts only the matcher forms the rule data uses. In particular
+// geosite:/ext: are rejected so that no rule can make the core open a file.
+func validRuleDomain(value string) bool {
+	kind, rest, ok := strings.Cut(value, ":")
+	if !ok {
+		return false
+	}
+	switch kind {
+	case "domain", "full":
+		return domain(rest)
+	case "keyword":
+		return keywordPattern.MatchString(rest)
+	case "regexp":
+		if len(rest) < 1 || len(rest) > 512 {
+			return false
+		}
+		for _, r := range rest {
+			if r < 0x20 || r > 0x7e {
+				return false
+			}
+		}
+		_, e := regexp.Compile(rest)
+		return e == nil
+	}
+	return false
+}
+func (r Rules) validate() error {
+	if r.SchemaVersion != 2 || len(r.Sections) > 64 {
 		return failure("INVALID_INPUT")
 	}
-	for _, list := range [][]string{r.DirectDomains, r.DirectFullDomains, r.ProxyDomains, r.BlockedDomains} {
-		for _, v := range list {
-			if !domain(v) {
+	domains, addresses := 0, 0
+	for _, section := range r.Sections {
+		if !contains(targets, section.Target) {
+			return failure("INVALID_INPUT")
+		}
+		domains += len(section.Domains)
+		addresses += len(section.IPs)
+		if domains > 200000 || addresses > 100000 {
+			return failure("INVALID_INPUT")
+		}
+		for _, v := range section.Domains {
+			if !validRuleDomain(v) {
 				return failure("INVALID_INPUT")
 			}
 		}
-	}
-	for _, v := range r.DirectIPs {
-		if _, e := netip.ParsePrefix(v); e != nil {
-			if _, e = netip.ParseAddr(v); e != nil {
-				return failure("INVALID_INPUT")
+		for _, v := range section.IPs {
+			if _, e := netip.ParsePrefix(v); e != nil {
+				if _, e = netip.ParseAddr(v); e != nil {
+					return failure("INVALID_INPUT")
+				}
 			}
 		}
 	}

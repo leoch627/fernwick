@@ -141,7 +141,7 @@ func TestNativePrepareSendsOnlyFrozenCandidateFields(t *testing.T) {
 		}
 		return nativeReply{OK: true}
 	})
-	ticket, err := driver.Prepare(context.Background(), Candidate{Node: ProxyNode{ID: "private-id", Credential: "secret", Protocol: "trojan", Host: "node.invalid", Port: 443, Transport: "tcp", Security: "tls"}, Mode: "rule", Rules: Rules{SchemaVersion: 1, DirectDomains: []string{}, ProxyDomains: []string{}, BlockedDomains: []string{}, DirectIPs: []string{}}, AuthorizedUntil: time.Now().Add(time.Hour).UnixMilli()})
+	ticket, err := driver.Prepare(context.Background(), Candidate{Node: ProxyNode{ID: "private-id", Credential: "secret", Protocol: "trojan", Host: "node.invalid", Port: 443, Transport: "tcp", Security: "tls"}, Mode: "rule", Rules: EmptyRules(), AuthorizedUntil: time.Now().Add(time.Hour).UnixMilli()})
 	if err != nil || ticket != "owner-ticket" {
 		t.Fatal(ticket, err)
 	}

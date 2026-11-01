@@ -260,7 +260,7 @@
         },
         "maxSnapshotAgeSec": {
           "type": "number",
-          "const": 86400
+          "const": 604800
         },
         "subscriptionDecodedMaxBytes": {
           "type": "number",

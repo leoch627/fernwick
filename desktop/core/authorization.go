@@ -46,7 +46,7 @@ func CreateSnapshot(build BuildConfig, session Session, account Account, parsed 
 	if err := account.Validate(); err != nil {
 		return Snapshot{}, err
 	}
-	if age < 600 || age > 86400 || now < 0 || now > 9007199254740991-int64(age)*1000 || opSeq < 0 || opSeq > 9007199254740991 {
+	if age < 600 || age > MaxSnapshotAgeSec || now < 0 || now > 9007199254740991-int64(age)*1000 || opSeq < 0 || opSeq > 9007199254740991 {
 		return Snapshot{}, NewAppError("INVALID_INPUT")
 	}
 	nodes := append([]ProxyNode{}, parsed.Nodes...)
@@ -79,7 +79,7 @@ func TightenSnapshot(snapshot Snapshot, maxAge int, account *Account) Snapshot {
 	}
 	// Limit arithmetic to the local hard limit even for callers with an invalid
 	// remote policy. An invalid negative age denies rather than extends access.
-	age := max(0, min(maxAge, 86400))
+	age := max(0, min(maxAge, MaxSnapshotAgeSec))
 	snapshot.UsableUntil = min(snapshot.UsableUntil, snapshot.FullSyncCompletedAt+int64(age)*1000, expires)
 	return snapshot
 }

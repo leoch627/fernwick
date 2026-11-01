@@ -48,7 +48,7 @@ def inspect_deb(package, config, manifest):
     prefix = './opt/' + packager.product_name(config) + '/'
     resources = prefix + 'resources/'
     expected = {resources + name: digest for name, digest in packager.expected_resources('linux-x64', manifest).items()}
-    required = {prefix + config['productId'], resources + 'native-manifest.json', resources + 'core-lock.json', resources + 'THIRD_PARTY_NOTICES.md', resources + 'rules/import-rules.py'}
+    required = {prefix + config['productId'], resources + 'native-manifest.json', resources + 'core-lock.json', resources + 'THIRD_PARTY_NOTICES.md', resources + 'rules/manifest.json'}
     seen = set()
     process = subprocess.Popen(['dpkg-deb', '--fsys-tarfile', str(package)], stdout=subprocess.PIPE)
     try:

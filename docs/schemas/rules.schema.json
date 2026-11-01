@@ -4,59 +4,48 @@
   "properties": {
     "schemaVersion": {
       "type": "number",
-      "const": 1
+      "const": 2
     },
-    "directDomains": {
-      "maxItems": 200000,
+    "sections": {
+      "maxItems": 64,
       "type": "array",
       "items": {
-        "type": "string",
-        "minLength": 1,
-        "maxLength": 253
-      }
-    },
-    "directFullDomains": {
-      "maxItems": 200000,
-      "type": "array",
-      "items": {
-        "type": "string",
-        "minLength": 1,
-        "maxLength": 253
-      }
-    },
-    "proxyDomains": {
-      "maxItems": 100000,
-      "type": "array",
-      "items": {
-        "type": "string",
-        "minLength": 1,
-        "maxLength": 253
-      }
-    },
-    "blockedDomains": {
-      "maxItems": 100000,
-      "type": "array",
-      "items": {
-        "type": "string",
-        "minLength": 1,
-        "maxLength": 253
-      }
-    },
-    "directIPs": {
-      "maxItems": 100000,
-      "type": "array",
-      "items": {
-        "type": "string",
-        "maxLength": 64
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string",
+            "enum": [
+              "direct",
+              "proxy",
+              "ai",
+              "block"
+            ]
+          },
+          "domains": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 520
+            }
+          },
+          "ips": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        },
+        "required": [
+          "target"
+        ],
+        "additionalProperties": false
       }
     }
   },
   "required": [
     "schemaVersion",
-    "directDomains",
-    "proxyDomains",
-    "blockedDomains",
-    "directIPs"
+    "sections"
   ],
   "additionalProperties": false
 }

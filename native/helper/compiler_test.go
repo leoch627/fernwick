@@ -19,13 +19,18 @@ type coreConfig struct {
 		Servers []map[string]any `json:"servers"`
 	} `json:"dns"`
 	Routing struct {
-		Rules []map[string]any `json:"rules"`
+		Rules     []map[string]any `json:"rules"`
+		Balancers []map[string]any `json:"balancers"`
 	} `json:"routing"`
+	Observatory map[string]any `json:"observatory"`
 }
 
 func compile(t *testing.T, c Candidate) coreConfig {
 	t.Helper()
 	j := Journal{Interface: Interface{Name: "eth0"}, Tun: tunName(), NodeAddress: "203.0.113.10"}
+	for i := range c.Pool {
+		j.PoolAddresses = append(j.PoolAddresses, "203.0.113."+itoa(20+i))
+	}
 	var out coreConfig
 	if e := json.Unmarshal(compileCore(c, j), &out); e != nil {
 		t.Fatal(e)
@@ -41,10 +46,19 @@ func ruleIndex(rules []map[string]any, tag string, key string) int {
 	return -1
 }
 
+var testRules = Rules{SchemaVersion: 2, Sections: []RuleSection{
+	{Target: "block", Domains: []string{"domain:ads.example"}},
+	{Target: "ai", Domains: []string{"domain:openai.com"}},
+	{Target: "proxy", Domains: []string{"domain:google.com", "keyword:google"}},
+	{Target: "direct", Domains: []string{"domain:cn", "full:example.cn", "regexp:^cdn[0-9]+\\.example\\.cn$"}},
+	{Target: "direct", IPs: []string{"1.0.1.0/24", "2001:db8::/32"}},
+}}
+
 func TestCompileCoreRuleMode(t *testing.T) {
 	c := validCandidate()
 	c.Node.Fingerprint = "hellochrome_120"
-	c.Rules = Rules{SchemaVersion: 1, DirectDomains: []string{"cn"}, DirectFullDomains: []string{"example.cn"}, ProxyDomains: []string{"google.com"}, BlockedDomains: []string{"ads.example"}, DirectIPs: []string{"1.0.1.0/24"}}
+	c.Node.AI = true
+	c.Rules = testRules
 	cfg := compile(t, c)
 
 	for _, key := range []string{"loglevel", "access", "error"} {
@@ -53,7 +67,7 @@ func TestCompileCoreRuleMode(t *testing.T) {
 		}
 	}
 	proxy := cfg.Outbounds[0]
-	if proxy.Tag != "proxy" || proxy.Protocol != "vless" {
+	if proxy.Tag != "node-ai-0" || proxy.Protocol != "vless" {
 		t.Fatalf("first outbound = %s/%s", proxy.Tag, proxy.Protocol)
 	}
 	server := proxy.Settings["vnext"].([]any)[0].(map[string]any)
@@ -69,34 +83,52 @@ func TestCompileCoreRuleMode(t *testing.T) {
 	}
 
 	rules := cfg.Routing.Rules
-	blocked, lan, proxied, direct := ruleIndex(rules, "block", "domain"), -1, ruleIndex(rules, "proxy", "domain"), ruleIndex(rules, "direct", "domain")
+	lan := -1
 	for i, r := range rules {
 		if r["outboundTag"] == "direct" && r["ip"] != nil && lan < 0 {
 			lan = i
 		}
 	}
-	if blocked < 0 || lan < 0 || proxied < 0 || direct < 0 || !(blocked < lan && lan < proxied && proxied < direct) {
-		t.Errorf("rule order block=%d lan=%d proxy=%d direct=%d", blocked, lan, proxied, direct)
+	blocked, ai, proxied, direct := ruleIndex(rules, "block", "domain"), -1, -1, ruleIndex(rules, "direct", "domain")
+	for i, r := range rules {
+		if r["domain"] != nil && r["outboundTag"] == "node-ai-0" {
+			if ai < 0 {
+				ai = i
+			} else if proxied < 0 {
+				proxied = i
+			}
+		}
+	}
+	if lan < 0 || blocked < 0 || ai < 0 || proxied < 0 || direct < 0 || !(lan < blocked && blocked < ai && ai < proxied && proxied < direct) {
+		t.Errorf("rule order lan=%d block=%d ai=%d proxy=%d direct=%d", lan, blocked, ai, proxied, direct)
+	}
+	if domains := rules[direct]["domain"].([]any); len(domains) != 3 || domains[2] != "regexp:^cdn[0-9]+\\.example\\.cn$" {
+		t.Errorf("direct domains = %v", domains)
 	}
 	last := rules[len(rules)-1]
-	if last["outboundTag"] != "proxy" || last["network"] != "tcp,udp" {
-		t.Errorf("unmatched traffic does not default to the proxy: %v", last)
+	if last["outboundTag"] != "node-ai-0" || last["network"] != "tcp,udp" {
+		t.Errorf("unmatched traffic does not default to the chosen node: %v", last)
 	}
-	if len(cfg.DNS.Servers) != 3 {
-		t.Errorf("dns servers = %v", cfg.DNS.Servers)
+	if len(cfg.Routing.Balancers) != 0 || cfg.Observatory != nil {
+		t.Errorf("a manual AI-capable node needs no balancer: %v %v", cfg.Routing.Balancers, cfg.Observatory)
+	}
+	// Blocked domains need no resolver; the others are resolved in section order.
+	servers := cfg.DNS.Servers
+	if len(servers) != 4 || servers[0]["tag"] != "dns-proxy" || servers[1]["tag"] != "dns-proxy" || servers[2]["tag"] != "dns-direct" || len(servers[2]["domains"].([]any)) != 3 || servers[3]["tag"] != "dns-proxy" || servers[3]["domains"] != nil {
+		t.Errorf("dns servers = %v", servers)
 	}
 }
 
 func TestCompileCoreGlobalMode(t *testing.T) {
 	c := validCandidate()
 	c.Mode = "global"
-	c.Rules = Rules{SchemaVersion: 1, DirectDomains: []string{"cn"}, ProxyDomains: []string{"google.com"}, BlockedDomains: []string{"ads.example"}, DirectIPs: []string{"1.0.1.0/24"}}
+	c.Rules = testRules
 	cfg := compile(t, c)
-	if ruleIndex(cfg.Routing.Rules, "direct", "domain") >= 0 || ruleIndex(cfg.Routing.Rules, "proxy", "domain") >= 0 {
+	if ruleIndex(cfg.Routing.Rules, "direct", "domain") >= 0 {
 		t.Error("global mode applies domain split rules")
 	}
 	for _, r := range cfg.Routing.Rules {
-		if ips, ok := r["ip"].([]any); ok && r["outboundTag"] == "direct" && len(ips) == 1 {
+		if ips, ok := r["ip"].([]any); ok && r["outboundTag"] == "direct" && len(ips) == 2 {
 			t.Error("global mode sends rule IPs direct")
 		}
 	}
@@ -105,6 +137,92 @@ func TestCompileCoreGlobalMode(t *testing.T) {
 	}
 	if len(cfg.DNS.Servers) != 1 || cfg.DNS.Servers[0]["tag"] != "dns-proxy" {
 		t.Errorf("global dns servers = %v", cfg.DNS.Servers)
+	}
+}
+
+func balancer(cfg coreConfig, tag string) map[string]any {
+	for _, b := range cfg.Routing.Balancers {
+		if b["tag"] == tag {
+			return b
+		}
+	}
+	return nil
+}
+func targetOf(rules []map[string]any, domain string) string {
+	for _, r := range rules {
+		if domains, ok := r["domain"].([]any); ok && len(domains) > 0 && domains[0] == domain {
+			if tag, ok := r["balancerTag"].(string); ok {
+				return "balancer:" + tag
+			}
+			return r["outboundTag"].(string)
+		}
+	}
+	return ""
+}
+
+func TestCompileCoreAutomaticPool(t *testing.T) {
+	c := validCandidate()
+	c.Rules = testRules
+	c.Automatic = true
+	hk := validCandidate().Node
+	hk.Host = "hk.example.com"
+	us := validCandidate().Node
+	us.Host, us.AI = "us.example.com", true
+	c.Pool = []Node{hk, us}
+	cfg := compile(t, c)
+	if len(cfg.Outbounds) != 6 || cfg.Outbounds[0].Tag != "node-0" || cfg.Outbounds[1].Tag != "node-1" || cfg.Outbounds[2].Tag != "node-ai-2" {
+		t.Fatalf("outbounds = %v", cfg.Outbounds)
+	}
+	if address := cfg.Outbounds[2].Settings["vnext"].([]any)[0].(map[string]any)["address"]; address != "203.0.113.21" {
+		t.Errorf("pool node dials %v", address)
+	}
+	auto, ai := balancer(cfg, "auto"), balancer(cfg, "ai")
+	if auto == nil || auto["fallbackTag"] != "node-0" || auto["selector"].([]any)[0] != "node-" || ai == nil || ai["fallbackTag"] != "node-ai-2" || ai["selector"].([]any)[0] != "node-ai-" {
+		t.Fatalf("balancers = %v", cfg.Routing.Balancers)
+	}
+	if got := targetOf(cfg.Routing.Rules, "domain:google.com"); got != "balancer:auto" {
+		t.Errorf("proxy traffic goes to %s", got)
+	}
+	if got := targetOf(cfg.Routing.Rules, "domain:openai.com"); got != "balancer:ai" {
+		t.Errorf("AI traffic goes to %s", got)
+	}
+	if last := cfg.Routing.Rules[len(cfg.Routing.Rules)-1]; last["balancerTag"] != "auto" {
+		t.Errorf("unmatched traffic goes to %v", last)
+	}
+	if cfg.Observatory == nil || cfg.Observatory["subjectSelector"].([]any)[0] != "node-" || cfg.Observatory["probeInterval"] != "5m" {
+		t.Errorf("observatory = %v", cfg.Observatory)
+	}
+}
+
+func TestCompileCoreManualNodeKeepsAIOffUnsuitableExit(t *testing.T) {
+	c := validCandidate()
+	c.Rules = testRules
+	us := validCandidate().Node
+	us.Host, us.AI = "us.example.com", true
+	c.Pool = []Node{us}
+	cfg := compile(t, c)
+	if got := targetOf(cfg.Routing.Rules, "domain:google.com"); got != "node-0" {
+		t.Errorf("manual node traffic goes to %s", got)
+	}
+	if got := targetOf(cfg.Routing.Rules, "domain:openai.com"); got != "balancer:ai" {
+		t.Errorf("AI traffic goes to %s", got)
+	}
+	if balancer(cfg, "auto") != nil || cfg.Observatory["subjectSelector"].([]any)[0] != "node-ai-" {
+		t.Errorf("balancers %v observatory %v", cfg.Routing.Balancers, cfg.Observatory)
+	}
+}
+
+func TestCompileCoreSkipsUnresolvedPoolNodes(t *testing.T) {
+	c := validCandidate()
+	c.Automatic = true
+	c.Pool = []Node{validCandidate().Node, validCandidate().Node}
+	j := Journal{Interface: Interface{Name: "eth0"}, Tun: tunName(), NodeAddress: "203.0.113.10", PoolAddresses: []string{"", "203.0.113.30"}}
+	var cfg coreConfig
+	if e := json.Unmarshal(compileCore(c, j), &cfg); e != nil {
+		t.Fatal(e)
+	}
+	if len(cfg.Outbounds) != 5 || cfg.Outbounds[1].Tag != "node-1" || cfg.Outbounds[1].Settings["vnext"].([]any)[0].(map[string]any)["address"] != "203.0.113.30" {
+		t.Fatalf("outbounds = %v", cfg.Outbounds)
 	}
 }
 

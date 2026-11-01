@@ -51,7 +51,7 @@
   "hardLimits": {
     "startupNetworkBudgetSec": 20,
     "networkTransactionSec": 15,
-    "maxSnapshotAgeSec": 86400,
+    "maxSnapshotAgeSec": 604800,
     "subscriptionDecodedMaxBytes": 10485760,
     "subscriptionMaxNodes": 5000
   },

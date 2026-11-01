@@ -94,23 +94,23 @@ jobs:
             gh release create "$tag" release/*.exe release/*.dmg release/*.zip release/*.deb release/SHA256SUMS.txt \
               --title "$(node -p "require('./release/build-config.json').name") $tag" --notes-file notes.md --target "$GITHUB_SHA"
           fi
-      - name: Upload to R2 and register with the update endpoint
+      - name: Upload to the update endpoint and register the release
         if: github.event_name == 'push' || inputs.publish_endpoint
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
-          ENDPOINT: ${{ vars.UPDATE_ENDPOINT }}
-          BUCKET: ${{ vars.R2_BUCKET || 'v2board-client-files' }}
+          ENDPOINTS: ${{ vars.UPDATE_ENDPOINT }}
         run: |
-          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$SIGNING_KEY" ] || [ -z "$ENDPOINT" ]; then
-            echo "::warning::Update endpoint not configured (secrets CLOUDFLARE_API_TOKEN, SIGNING_KEY, vars.UPDATE_ENDPOINT); skipped."
+          # The first UPDATE_ENDPOINT is the server; further ones are mirror domains of it.
+          ENDPOINT=$(echo "$ENDPOINTS" | tr ', ' '\n\n' | grep -m1 .) || true
+          if [ -z "$SIGNING_KEY" ] || [ -z "$ENDPOINT" ]; then
+            echo "::warning::Update endpoint not configured (secrets.SIGNING_KEY, vars.UPDATE_ENDPOINT); skipped."
             exit 0
           fi
+          ADMIN_TOKEN=$(node tools/admin-token.mjs)
           for f in release/*.exe release/*.dmg release/*.zip release/*.deb; do
-            npx --yes wrangler@4.151.1 r2 object put "$BUCKET/releases/$VERSION/$(basename "$f")" --file "$f" --remote
+            curl --fail-with-body -sS -X POST -T "$f" -H "Authorization: Bearer $ADMIN_TOKEN" \
+              "${ENDPOINT%/}/admin/upload?key=releases/$VERSION/$(basename "$f")"
           done
           node tools/release-assets.mjs payload "$VERSION" > payload.json
-          ADMIN_TOKEN=$(node --no-warnings --input-type=module -e "const { adminToken } = await import('./server/src/signing.ts'); process.stdout.write(await adminToken(process.env.SIGNING_KEY))")
           curl --fail-with-body -sS -X POST "${ENDPOINT%/}/admin/release" \
             -H "Authorization: Bearer $ADMIN_TOKEN" -H 'Content-Type: application/json' --data-binary @payload.json

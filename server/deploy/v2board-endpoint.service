@@ -1,0 +1,28 @@
+[Unit]
+Description=V2Board desktop client update and telemetry endpoint
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# Edit PUBLIC_ORIGIN; put the signing key in /etc/v2board-endpoint/signing.pem (mode 600, owned by root).
+Environment=PUBLIC_ORIGIN=https://dl.example.com
+LoadCredential=signing.pem:/etc/v2board-endpoint/signing.pem
+ExecStart=/usr/local/bin/v2board-endpoint -listen 127.0.0.1:8787 -data /var/lib/v2board-endpoint -key-file ${CREDENTIALS_DIRECTORY}/signing.pem
+DynamicUser=yes
+StateDirectory=v2board-endpoint
+Restart=always
+RestartSec=2
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+
+[Install]
+WantedBy=multi-user.target

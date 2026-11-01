@@ -13,7 +13,7 @@ func validCandidate() Candidate {
 	return Candidate{
 		Node:            Node{Protocol: "vless", Host: "node.example.com", Port: 443, Credential: testUUID, Transport: "tcp", Security: "tls", SNI: "node.example.com"},
 		Mode:            "rule",
-		Rules:           Rules{SchemaVersion: 1},
+		Rules:           Rules{SchemaVersion: 2},
 		AuthorizedUntil: time.Now().Add(time.Hour).UnixMilli(),
 	}
 }
@@ -28,7 +28,8 @@ func TestCandidateValidate(t *testing.T) {
 		{"global mode", func(c *Candidate) { c.Mode = "global" }, ""},
 		{"unknown mode", func(c *Candidate) { c.Mode = "direct" }, "INVALID_INPUT"},
 		{"authorization expired", func(c *Candidate) { c.AuthorizedUntil = time.Now().Add(-time.Second).UnixMilli() }, "INVALID_INPUT"},
-		{"authorization beyond 24h", func(c *Candidate) { c.AuthorizedUntil = time.Now().Add(25 * time.Hour).UnixMilli() }, "INVALID_INPUT"},
+		{"authorization within 7 days", func(c *Candidate) { c.AuthorizedUntil = time.Now().Add(6 * 24 * time.Hour).UnixMilli() }, ""},
+		{"authorization beyond 7 days", func(c *Candidate) { c.AuthorizedUntil = time.Now().Add(8 * 24 * time.Hour).UnixMilli() }, "INVALID_INPUT"},
 		{"port zero", func(c *Candidate) { c.Node.Port = 0 }, "INVALID_INPUT"},
 		{"port too large", func(c *Candidate) { c.Node.Port = 65536 }, "INVALID_INPUT"},
 		{"host with space", func(c *Candidate) { c.Node.Host = "bad host" }, "INVALID_INPUT"},
@@ -84,11 +85,33 @@ func TestCandidateValidate(t *testing.T) {
 			c.Node.Protocol, c.Node.Credential, c.Node.Security, c.Node.SNI, c.Node.Method = "shadowsocks", "password", "none", "", "rc4-md5"
 		}, "NO_COMPATIBLE_NODES"},
 		{"unknown protocol", func(c *Candidate) { c.Node.Protocol = "hysteria2" }, "NO_COMPATIBLE_NODES"},
-		{"rules schema", func(c *Candidate) { c.Rules.SchemaVersion = 2 }, "INVALID_INPUT"},
-		{"rule domain", func(c *Candidate) { c.Rules.ProxyDomains = []string{"exa mple.com"} }, "INVALID_INPUT"},
-		{"rule full domain", func(c *Candidate) { c.Rules.DirectFullDomains = []string{"a..b"} }, "INVALID_INPUT"},
-		{"rule addresses", func(c *Candidate) { c.Rules.DirectIPs = []string{"10.0.0.0/8", "1.1.1.1", "2001:db8::/32"} }, ""},
-		{"rule bad address", func(c *Candidate) { c.Rules.DirectIPs = []string{"300.1.1.1"} }, "INVALID_INPUT"},
+		{"rules schema", func(c *Candidate) { c.Rules.SchemaVersion = 1 }, "INVALID_INPUT"},
+		{"rule target", func(c *Candidate) { c.Rules.Sections = []RuleSection{{Target: "reject"}} }, "INVALID_INPUT"},
+		{"rule domain forms", func(c *Candidate) {
+			c.Rules.Sections = []RuleSection{{Target: "direct", Domains: []string{"domain:example.cn", "full:a.example.cn", "keyword:taobao", `regexp:^ad[0-9]+\.example$`}}}
+		}, ""},
+		{"rule domain", func(c *Candidate) {
+			c.Rules.Sections = []RuleSection{{Target: "proxy", Domains: []string{"domain:exa mple.com"}}}
+		}, "INVALID_INPUT"},
+		{"rule bare domain", func(c *Candidate) {
+			c.Rules.Sections = []RuleSection{{Target: "proxy", Domains: []string{"example.com"}}}
+		}, "INVALID_INPUT"},
+		{"rule geosite file", func(c *Candidate) {
+			c.Rules.Sections = []RuleSection{{Target: "proxy", Domains: []string{"geosite:cn"}}}
+		}, "INVALID_INPUT"},
+		{"rule external file", func(c *Candidate) {
+			c.Rules.Sections = []RuleSection{{Target: "proxy", Domains: []string{"ext:geo.dat:cn"}}}
+		}, "INVALID_INPUT"},
+		{"rule bad regexp", func(c *Candidate) {
+			c.Rules.Sections = []RuleSection{{Target: "proxy", Domains: []string{"regexp:(?=x)"}}}
+		}, "INVALID_INPUT"},
+		{"rule addresses", func(c *Candidate) {
+			c.Rules.Sections = []RuleSection{{Target: "direct", IPs: []string{"10.0.0.0/8", "1.1.1.1", "2001:db8::/32"}}}
+		}, ""},
+		{"rule bad address", func(c *Candidate) { c.Rules.Sections = []RuleSection{{Target: "direct", IPs: []string{"300.1.1.1"}}} }, "INVALID_INPUT"},
+		{"pool node", func(c *Candidate) { c.Pool = []Node{validCandidate().Node} }, ""},
+		{"bad pool node", func(c *Candidate) { n := validCandidate().Node; n.Port = 0; c.Pool = []Node{n} }, "INVALID_INPUT"},
+		{"pool too large", func(c *Candidate) { c.Pool = make([]Node, maxPool+1) }, "INVALID_INPUT"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

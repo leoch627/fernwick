@@ -1,55 +1,40 @@
 name: Update endpoint
-# deploy: create the R2 bucket if needed, deploy server/ and install SIGNING_KEY from GitHub Secrets.
-# rules:  convert the latest Loyalsoldier/clash-rules data plus config/rules-extra.json and publish it as a
-#         remote rule update (also weekly, and whenever rules-extra.json changes on main).
+# build: compile the self-hosted endpoint server (server/) for Linux; download the artifact and
+#        install it as described in server/README.md.
+# rules: convert the latest v2fly geosite/geoip data plus config/rules-extra.json and publish it as a
+#        remote rule update (also weekly, and whenever rules-extra.json changes on main).
 on:
   push:
     branches: [main]
     paths: ['config/rules-extra.json']
   workflow_dispatch:
     inputs:
-      action: { description: 'deploy or rules', type: choice, options: [deploy, rules], default: deploy }
-      rules_ref: { description: 'clash-rules ref for "rules" (branch, tag or commit)', type: string, default: release }
+      action: { description: 'build or rules', type: choice, options: [build, rules], default: build }
   schedule:
     - cron: '23 3 * * 1'
 permissions:
   contents: read
-env:
-  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-  BUCKET: ${{ vars.R2_BUCKET || 'v2board-client-files' }}
-  WRANGLER: npx --yes wrangler@4.151.1
 jobs:
-  deploy:
-    if: github.event_name == 'workflow_dispatch' && inputs.action == 'deploy'
+  build:
+    if: github.event_name == 'workflow_dispatch' && inputs.action == 'build'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-go@v5
         with:
-          node-version: 24
-      - name: Bucket
-        run: $WRANGLER r2 bucket create "$BUCKET" || echo "Bucket $BUCKET already exists"
-      - name: Deploy
+          go-version: '1.27.3'
+          cache-dependency-path: server/go.sum
+      - name: Build
         working-directory: server
-        env:
-          ENDPOINT: ${{ vars.UPDATE_ENDPOINT }}
         run: |
-          args=(--var "PUBLIC_ORIGIN:$ENDPOINT")
-          # UPDATE_ENDPOINT is the only place the domain is configured: attach it as the Worker's custom domain.
-          if [ -n "$ENDPOINT" ]; then
-            host=$(node -p 'new URL(process.argv[1]).hostname' "$ENDPOINT")
-            if [[ "$host" != *.workers.dev ]]; then args+=(--domain "$host"); fi
-          fi
-          if [ "$BUCKET" != v2board-client-files ]; then sed -i "s/\"v2board-client-files\"/\"$BUCKET\"/" wrangler.jsonc; fi
-          $WRANGLER deploy "${args[@]}"
-      - name: Signing key
-        working-directory: server
-        env:
-          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
-        run: |
-          if [ -z "$SIGNING_KEY" ]; then echo "::error::GitHub secret SIGNING_KEY is missing"; exit 1; fi
-          printf '%s' "$SIGNING_KEY" | $WRANGLER secret put SIGNING_KEY
+          for arch in amd64 arm64; do
+            CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -trimpath -ldflags='-s -w' -o ../work/v2board-endpoint-linux-$arch .
+          done
+          cp deploy/* ../work/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v2board-endpoint
+          path: work/
   rules:
     if: (github.event_name != 'workflow_dispatch' && vars.UPDATE_ENDPOINT != '') || (github.event_name == 'workflow_dispatch' && inputs.action == 'rules')
     runs-on: ubuntu-24.04
@@ -59,27 +44,23 @@ jobs:
         with:
           node-version: 24
       - name: Convert
-        env:
-          REF: ${{ inputs.rules_ref || 'release' }}
         run: |
-          base="https://raw.githubusercontent.com/Loyalsoldier/clash-rules/$REF"
-          curl --fail -sSL -o direct.txt "$base/direct.txt"
-          curl --fail -sSL -o cncidr.txt "$base/cncidr.txt"
-          python3 tools/import-rules.py --convert direct.txt cncidr.txt rules.json config/rules-extra.json | tee stats.json
+          python3 tools/import-rules.py latest rules.json config/rules-extra.json | tee stats.json
           echo "SHA=$(sha256sum rules.json | cut -d' ' -f1)" >> "$GITHUB_ENV"
           echo "BYTES=$(stat -c %s rules.json)" >> "$GITHUB_ENV"
       - name: Publish
         env:
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
-          ENDPOINT: ${{ vars.UPDATE_ENDPOINT }}
+          ENDPOINTS: ${{ vars.UPDATE_ENDPOINT }}
         run: |
-          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$SIGNING_KEY" ]; then
-            echo "::warning::Update endpoint not configured (secrets CLOUDFLARE_API_TOKEN, SIGNING_KEY); rules converted and validated but not published."
+          ENDPOINT=$(echo "$ENDPOINTS" | tr ', ' '\n\n' | grep -m1 .) || true
+          if [ -z "$SIGNING_KEY" ] || [ -z "$ENDPOINT" ]; then
+            echo "::warning::Update endpoint not configured (secrets.SIGNING_KEY, vars.UPDATE_ENDPOINT); rules converted and validated but not published."
             exit 0
           fi
-          ADMIN_TOKEN=$(node --no-warnings --input-type=module -e "const { adminToken } = await import('./server/src/signing.ts'); process.stdout.write(await adminToken(process.env.SIGNING_KEY))")
+          ADMIN_TOKEN=$(node tools/admin-token.mjs)
           key="rules/${SHA:0:16}/rules.json"
-          $WRANGLER r2 object put "$BUCKET/$key" --file rules.json --content-type application/json --remote
+          curl --fail-with-body -sS -X POST -T rules.json -H "Authorization: Bearer $ADMIN_TOKEN" "${ENDPOINT%/}/admin/upload?key=$key"
           curl --fail-with-body -sS -X POST "${ENDPOINT%/}/admin/rules" \
             -H "Authorization: Bearer $ADMIN_TOKEN" -H 'Content-Type: application/json' \
             --data "{\"key\":\"$key\",\"sha256\":\"$SHA\",\"bytes\":$BYTES}"

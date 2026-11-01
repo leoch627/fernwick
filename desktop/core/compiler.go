@@ -9,60 +9,109 @@ import (
 	"unicode/utf8"
 )
 
+// RuleSection routes matching domains or addresses to one target: direct, proxy,
+// ai (the AI-capable exit) or block. Sections are evaluated in order; domains use
+// Xray's domain:, full:, keyword: and regexp: matcher forms.
+type RuleSection struct {
+	Target  string   `json:"target"`
+	Domains []string `json:"domains,omitempty"`
+	IPs     []string `json:"ips,omitempty"`
+}
 type Rules struct {
-	SchemaVersion     int      `json:"schemaVersion"`
-	DirectDomains     []string `json:"directDomains"`
-	DirectFullDomains []string `json:"directFullDomains,omitempty"`
-	ProxyDomains      []string `json:"proxyDomains"`
-	BlockedDomains    []string `json:"blockedDomains"`
-	DirectIPs         []string `json:"directIPs"`
+	SchemaVersion int           `json:"schemaVersion"`
+	Sections      []RuleSection `json:"sections"`
 }
 
 var ruleDomainLabel = regexp.MustCompile(`^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$`)
+var ruleKeyword = regexp.MustCompile(`^[a-z0-9.-]{1,253}$`)
 var ruleCIDRLength = regexp.MustCompile(`^(0|[1-9][0-9]{0,2})$`)
 var lanCIDRs = []string{"127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16", "::1/128", "fc00::/7", "fe80::/10"}
 
+func validRuleDomain(value string) bool {
+	kind, rest, ok := strings.Cut(value, ":")
+	if !ok {
+		return false
+	}
+	switch kind {
+	case "domain", "full":
+		if len(rest) < 1 || len(rest) > 253 {
+			return false
+		}
+		for _, label := range strings.Split(rest, ".") {
+			if !ruleDomainLabel.MatchString(label) {
+				return false
+			}
+		}
+		return true
+	case "keyword":
+		return ruleKeyword.MatchString(rest)
+	case "regexp":
+		if len(rest) < 1 || len(rest) > 512 {
+			return false
+		}
+		for _, r := range rest {
+			if r < 0x20 || r > 0x7e {
+				return false
+			}
+		}
+		_, err := regexp.Compile(rest)
+		return err == nil
+	}
+	return false
+}
+func validRuleAddress(value string) bool {
+	parts := strings.Split(value, "/")
+	if len(value) > 64 || len(parts) > 2 {
+		return false
+	}
+	addr, err := netip.ParseAddr(parts[0])
+	if err != nil || addr.Zone() != "" {
+		return false
+	}
+	if len(parts) == 2 {
+		if !ruleCIDRLength.MatchString(parts[1]) {
+			return false
+		}
+		prefix, _ := strconv.Atoi(parts[1])
+		maximum := 128
+		if addr.Is4() {
+			maximum = 32
+		}
+		return prefix <= maximum
+	}
+	return true
+}
+
 func (r Rules) Validate() error {
-	if r.SchemaVersion != 1 || r.DirectDomains == nil || r.ProxyDomains == nil || r.BlockedDomains == nil || r.DirectIPs == nil || len(r.DirectDomains) > 200000 || len(r.DirectFullDomains) > 200000 || len(r.ProxyDomains) > 100000 || len(r.BlockedDomains) > 100000 || len(r.DirectIPs) > 100000 {
+	if r.SchemaVersion != 2 || r.Sections == nil || len(r.Sections) > 64 {
 		return NewAppError("INVALID_INPUT")
 	}
-	for _, group := range [][]string{r.DirectDomains, r.DirectFullDomains, r.ProxyDomains, r.BlockedDomains} {
-		for _, domain := range group {
-			if len(domain) < 1 || len(domain) > 253 {
-				return NewAppError("INVALID_INPUT")
-			}
-			for _, label := range strings.Split(domain, ".") {
-				if !ruleDomainLabel.MatchString(label) {
-					return NewAppError("INVALID_INPUT")
-				}
-			}
-		}
-	}
-	for _, value := range r.DirectIPs {
-		parts := strings.Split(value, "/")
-		if len(value) > 64 || len(parts) > 2 {
+	domains, addresses := 0, 0
+	for _, section := range r.Sections {
+		if section.Target != "direct" && section.Target != "proxy" && section.Target != "ai" && section.Target != "block" {
 			return NewAppError("INVALID_INPUT")
 		}
-		addr, err := netip.ParseAddr(parts[0])
-		if err != nil || addr.Zone() != "" && !subscriptionIPZone.MatchString(addr.Zone()) {
+		domains += len(section.Domains)
+		addresses += len(section.IPs)
+		if domains > 200000 || addresses > 100000 {
 			return NewAppError("INVALID_INPUT")
 		}
-		if len(parts) == 2 {
-			if !ruleCIDRLength.MatchString(parts[1]) {
+		for _, value := range section.Domains {
+			if !validRuleDomain(value) {
 				return NewAppError("INVALID_INPUT")
 			}
-			prefix, _ := strconv.Atoi(parts[1])
-			maximum := 128
-			if addr.Is4() {
-				maximum = 32
-			}
-			if prefix > maximum {
+		}
+		for _, value := range section.IPs {
+			if !validRuleAddress(value) {
 				return NewAppError("INVALID_INPUT")
 			}
 		}
 	}
 	return nil
 }
+
+// EmptyRules routes everything that is not local through the proxy.
+func EmptyRules() Rules { return Rules{SchemaVersion: 2, Sections: []RuleSection{}} }
 
 func optionalMapString(target map[string]any, key string, value *string) {
 	if value != nil {
@@ -127,54 +176,4 @@ func CompileOutbound(node ProxyNode) (map[string]any, error) {
 		settings = map[string]any{"servers": []any{server}}
 	}
 	return map[string]any{"tag": "proxy", "protocol": node.Protocol, "settings": settings, "streamSettings": stream}, nil
-}
-
-func prefixedDomains(prefix string, domains []string) []string {
-	result := make([]string, len(domains))
-	for i, domain := range domains {
-		result[i] = prefix + domain
-	}
-	return result
-}
-
-func CompileRouting(mode string, rules Rules) (map[string]any, error) {
-	if mode != "rule" && mode != "global" {
-		return nil, NewAppError("INVALID_INPUT")
-	}
-	if err := rules.Validate(); err != nil {
-		return nil, err
-	}
-	output := []any{map[string]any{"type": "field", "inboundTag": []string{"health"}, "outboundTag": "proxy"}, map[string]any{"type": "field", "port": "53", "network": "tcp,udp", "outboundTag": "dns-out"}}
-	if len(rules.BlockedDomains) > 0 {
-		output = append(output, map[string]any{"type": "field", "domain": prefixedDomains("domain:", rules.BlockedDomains), "outboundTag": "block"})
-	}
-	output = append(output, map[string]any{"type": "field", "ip": append([]string{}, lanCIDRs...), "outboundTag": "direct"})
-	if mode == "rule" {
-		if len(rules.ProxyDomains) > 0 {
-			output = append(output, map[string]any{"type": "field", "domain": prefixedDomains("domain:", rules.ProxyDomains), "outboundTag": "proxy"})
-		}
-		if len(rules.DirectDomains) > 0 {
-			output = append(output, map[string]any{"type": "field", "domain": prefixedDomains("domain:", rules.DirectDomains), "outboundTag": "direct"})
-		}
-		if len(rules.DirectFullDomains) > 0 {
-			output = append(output, map[string]any{"type": "field", "domain": prefixedDomains("full:", rules.DirectFullDomains), "outboundTag": "direct"})
-		}
-		if len(rules.DirectIPs) > 0 {
-			output = append(output, map[string]any{"type": "field", "ip": append([]string{}, rules.DirectIPs...), "outboundTag": "direct"})
-		}
-	}
-	output = append(output, map[string]any{"type": "field", "network": "tcp,udp", "outboundTag": "proxy"})
-	return map[string]any{"domainStrategy": "AsIs", "rules": output}, nil
-}
-
-func CompileCandidate(node ProxyNode, mode string, rules Rules) (map[string]any, error) {
-	outbound, err := CompileOutbound(node)
-	if err != nil {
-		return nil, err
-	}
-	routing, err := CompileRouting(mode, rules)
-	if err != nil {
-		return nil, err
-	}
-	return map[string]any{"log": map[string]any{"loglevel": "warning", "access": "none"}, "outbounds": []any{outbound, map[string]any{"tag": "direct", "protocol": "freedom"}, map[string]any{"tag": "block", "protocol": "blackhole"}}, "routing": routing}, nil
 }

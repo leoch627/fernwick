@@ -96,3 +96,19 @@ jobs:
       - name: go vet (windows)
         run: GOOS=windows GOARCH=amd64 go vet ./...
       - run: go test -race ./...
+  endpoint-server:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.3'
+          cache-dependency-path: server/go.sum
+      - name: gofmt
+        run: test -z "$(gofmt -l .)"
+      - run: go vet ./...
+      - name: Payloads pass the client's own verifiers
+        run: go test -race ./...

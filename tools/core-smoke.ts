@@ -75,7 +75,7 @@ try {
   const nodes = [ss, vless, vless.replace('security=tls', 'security=reality&pbk=' + 'A'.repeat(43) + '&sid=1234&flow=xtls-rprx-vision'), vmess, 'trojan://test@localhost:443?security=tls&type=tcp&sni=localhost'].map(uri => parseSubscription(uri, options).nodes[0]!);
   for (const node of nodes) {
     assert(node.compatible); await runtime.check(node, new AbortController().signal);
-    const config = compileTun(node, 'rule', { schemaVersion: 1, directDomains: ['example.cn'], proxyDomains: ['force.example.cn'], blockedDomains: [], directIPs: [] }, {
+    const config = compileTun(node, 'rule', { schemaVersion: 2, sections: [{ target: 'proxy', domains: ['domain:force.example.cn'] }, { target: 'direct', domains: ['domain:example.cn'] }] }, {
       platform: processPlatform(), interface: 'lo', resolvedNodeAddress: '127.0.0.1', bootstrapDns: 'https://223.5.5.5/dns-query', proxyDns: 'https://1.1.1.1/dns-query',
     }, { port: await port(), user: 'test', password: 'test-long-random-session' });
     const check = spawnSync(executable, ['run', '-test', '-format', 'json', '-config', 'stdin:'], { input: JSON.stringify(config), timeout: 3000, env: { LANG: 'C' } });

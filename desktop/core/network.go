@@ -8,11 +8,15 @@ import (
 
 type ConnectionState string
 
+// Candidate is one connection. Node is the user's node, or the best probed node when
+// Automatic; Pool holds further nodes for the core's automatic and AI balancers.
 type Candidate struct {
-	Node            ProxyNode `json:"node"`
-	Mode            string    `json:"mode"`
-	Rules           Rules     `json:"rules"`
-	AuthorizedUntil int64     `json:"authorizedUntil"`
+	Node            ProxyNode   `json:"node"`
+	Pool            []ProxyNode `json:"pool,omitempty"`
+	Automatic       bool        `json:"automatic,omitempty"`
+	Mode            string      `json:"mode"`
+	Rules           Rules       `json:"rules"`
+	AuthorizedUntil int64       `json:"authorizedUntil"`
 }
 type NetworkProof struct {
 	TCP  bool `json:"tcp"`
@@ -238,7 +242,7 @@ func (n *NetworkController) connect(ctx context.Context, candidate Candidate, ga
 	if err = n.valid(attempt, generation, gate); err != nil {
 		return err
 	}
-	if !proof.TCP || !proof.UDP || !proof.DNS || !proof.IPv6 {
+	if !proof.TCP || !proof.DNS {
 		return NewAppError("CONNECT_TIMEOUT")
 	}
 	if err = step(func() error { return n.driver.Commit(attempt, ticket) }); err != nil {

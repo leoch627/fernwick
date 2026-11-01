@@ -35,7 +35,12 @@ type Refresh struct {
 	MaxSnapshotAgeSec       int `json:"maxSnapshotAgeSec"`
 }
 
-var DefaultRefresh = Refresh{1800, 300, 900, 86400}
+// MaxSnapshotAgeSec is how long the last full sync stays usable while the panel API is
+// unreachable. Mainland users can lose the API for days when a domain gets blocked;
+// plan expiry still ends access on time.
+const MaxSnapshotAgeSec = 7 * 24 * 3600
+
+var DefaultRefresh = Refresh{1800, 300, 900, MaxSnapshotAgeSec}
 
 type APIEndpoint struct {
 	ID       string `json:"id"`
@@ -252,7 +257,7 @@ func (a Account) Validate() error {
 	return invalidUnless(textField(a.AccountID) && validEmail(a.Email) && boundedText(a.PlanName, 0, 256) && oneOf(a.SessionStatus, "valid", "invalid", "unknown") && oneOf(a.ServiceAllowed, "yes", "no", "unknown") && oneOf(a.Banned, "yes", "no", "unknown") && oneOf(a.HasPlan, "yes", "no", "unknown") && oneOf(a.TrafficExhausted, "yes", "no", "unknown") && oneOf(a.ExpiryKind, "finite", "unlimited", "unknown") && nullableCheck(a.ExpiresAt, validUTC) && oneOf(a.QuotaKind, "finite", "unlimited", "unknown") && nullableCheck(a.UsedBytes, decimalPattern.MatchString) && nullableCheck(a.QuotaBytes, decimalPattern.MatchString) && nullableCheck(a.ResetAt, validUTC) && validUTC(a.ObservedAt) && textField(a.SourceEndpointID) && boundedText(a.AuthorizationEvidence, 0, 512) && ((a.ExpiryKind == "finite") == (a.ExpiresAt != nil)) && (a.QuotaKind != "finite" || a.QuotaBytes != nil) && (a.ServiceAllowed != "yes" || a.AuthorizationEvidence != ""))
 }
 func (r Refresh) Validate() error {
-	return invalidUnless(inRange(r.SubscriptionIntervalSec, 300, 21600) && inRange(r.AccountIntervalSec, 60, 3600) && inRange(r.PolicyIntervalSec, 300, 3600) && inRange(r.MaxSnapshotAgeSec, 600, 86400) && r.AccountIntervalSec <= r.SubscriptionIntervalSec && float64(r.SubscriptionIntervalSec)*1.1+80 < float64(r.MaxSnapshotAgeSec))
+	return invalidUnless(inRange(r.SubscriptionIntervalSec, 300, 21600) && inRange(r.AccountIntervalSec, 60, 3600) && inRange(r.PolicyIntervalSec, 300, 3600) && inRange(r.MaxSnapshotAgeSec, 600, MaxSnapshotAgeSec) && r.AccountIntervalSec <= r.SubscriptionIntervalSec && float64(r.SubscriptionIntervalSec)*1.1+80 < float64(r.MaxSnapshotAgeSec))
 }
 func (e APIEndpoint) Validate() error {
 	return invalidUnless(textField(e.ID) && validURL(e.BaseURL) && int64(e.Priority) >= -MaxSafeInteger && int64(e.Priority) <= MaxSafeInteger)
@@ -267,7 +272,7 @@ func (h HealthTarget) Validate() error {
 	return invalidUnless(validURL(h.URL) && inRange(h.Status, 200, 299) && sha256Pattern.MatchString(h.BodySHA256) && textField(h.FailureDomain))
 }
 func (h HardLimits) Validate() error {
-	return invalidUnless(h.StartupNetworkBudgetSec == 20 && h.NetworkTransactionSec == 15 && h.MaxSnapshotAgeSec == 86400 && h.SubscriptionDecodedMaxBytes == 10485760 && h.SubscriptionMaxNodes == 5000)
+	return invalidUnless(h.StartupNetworkBudgetSec == 20 && h.NetworkTransactionSec == 15 && h.MaxSnapshotAgeSec == MaxSnapshotAgeSec && h.SubscriptionDecodedMaxBytes == 10485760 && h.SubscriptionMaxNodes == 5000)
 }
 func (b BuildConfig) Validate() error {
 	if !(b.SchemaVersion == 2 && textField(b.ProductID) && textField(b.AppID) && textField(b.Name) && oneOf(b.Environment, "test", "production") && oneOf(b.Channel, "test", "stable") && textField(b.TenantID) && b.AdapterID == "v2board-explicit-v1" && b.SubscriptionFormatID == "v2ray-uri-base64-v1" && len(b.APIEndpoints) <= 8 && len(b.HealthTargets) <= 3) {

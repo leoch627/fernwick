@@ -482,7 +482,7 @@ func subscriptionParser(build core.BuildConfig) func(context.Context, string, co
 		done := make(chan result, 1)
 		go func() {
 			nodes, err := core.ParseSubscription(raw, core.ParserOptions{Capabilities: build.ProtocolCapabilities, ConfirmedTCPUDP: build.NodeCapabilitiesConfirmed || (build.Environment == "test" && build.AllowUnverifiedNodeTrials), AuthoritativeEmpty: descriptor.AuthoritativeEmpty, Source: build.AdapterID})
-			done <- result{nodes, err}
+			done <- result{core.UsableNodes(nodes), err}
 		}()
 		select {
 		case <-ctx.Done():

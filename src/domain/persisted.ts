@@ -9,7 +9,7 @@ const NodeSchema = z.object({
 }).strict();
 export const SnapshotSchema = z.object({
   productId: z.string(), environment: z.string(), adapterId: z.string(), accountId: z.string(), sessionGeneration: z.string(), opSeq: z.number().int(), account: AccountSchema, nodes: z.array(NodeSchema).max(5000),
-  fullSyncCompletedAt: z.number().safe(), usableUntil: z.number().safe(), maxAgeAtCommitSec: z.number().int().min(600).max(86400), quarantinedNodeCount: z.number().int().nonnegative(), authoritativeEmpty: z.boolean(), contentHash: z.string().regex(/^[a-f0-9]{64}$/),
+  fullSyncCompletedAt: z.number().safe(), usableUntil: z.number().safe(), maxAgeAtCommitSec: z.number().int().min(600).max(604800), quarantinedNodeCount: z.number().int().nonnegative(), authoritativeEmpty: z.boolean(), contentHash: z.string().regex(/^[a-f0-9]{64}$/),
 }).strict().refine(s => s.usableUntil <= s.fullSyncCompletedAt + s.maxAgeAtCommitSec * 1000);
 export const PersistedSchema = z.object({
   schemaVersion: z.literal(1), productId: z.string(), environment: z.string(),

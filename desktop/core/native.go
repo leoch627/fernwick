@@ -328,6 +328,17 @@ func (n *NativeDriver) SetAuthorizedUntil(deadline int64) {
 	n.deadline = deadline
 	n.mu.Unlock()
 }
+
+// nativeNode is the helper's frozen node shape; only these fields cross the IPC boundary.
+func nativeNode(node ProxyNode) map[string]any {
+	fields := map[string]any{"protocol": node.Protocol, "host": node.Host, "port": node.Port, "credential": node.Credential, "transport": node.Transport, "security": node.Security, "ai": AICapable(node)}
+	for key, value := range map[string]*string{"method": node.Method, "sni": node.SNI, "flow": node.Flow, "publicKey": node.PublicKey, "shortId": node.ShortID, "fingerprint": node.Fingerprint, "wsPath": node.WSPath, "wsHost": node.WSHost} {
+		if value != nil {
+			fields[key] = *value
+		}
+	}
+	return fields
+}
 func (n *NativeDriver) Prepare(ctx context.Context, candidate Candidate) (string, error) {
 	if err := candidate.Rules.Validate(); err != nil {
 		return "", err
@@ -339,14 +350,11 @@ func (n *NativeDriver) Prepare(ctx context.Context, candidate Candidate) (string
 	n.deadline = candidate.AuthorizedUntil
 	n.closing = false
 	n.mu.Unlock()
-	node := candidate.Node
-	fields := map[string]any{"protocol": node.Protocol, "host": node.Host, "port": node.Port, "credential": node.Credential, "transport": node.Transport, "security": node.Security}
-	for key, value := range map[string]*string{"method": node.Method, "sni": node.SNI, "flow": node.Flow, "publicKey": node.PublicKey, "shortId": node.ShortID, "fingerprint": node.Fingerprint, "wsPath": node.WSPath, "wsHost": node.WSHost} {
-		if value != nil {
-			fields[key] = *value
-		}
+	pool := make([]map[string]any, len(candidate.Pool))
+	for i, node := range candidate.Pool {
+		pool[i] = nativeNode(node)
 	}
-	reply, err := n.rpc(ctx, "prepare", map[string]any{"candidate": map[string]any{"node": fields, "mode": candidate.Mode, "rules": candidate.Rules, "authorizedUntil": candidate.AuthorizedUntil}})
+	reply, err := n.rpc(ctx, "prepare", map[string]any{"candidate": map[string]any{"node": nativeNode(candidate.Node), "pool": pool, "automatic": candidate.Automatic, "mode": candidate.Mode, "rules": candidate.Rules, "authorizedUntil": candidate.AuthorizedUntil}})
 	if err != nil {
 		return "", err
 	}

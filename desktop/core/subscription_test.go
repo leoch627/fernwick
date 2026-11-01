@@ -23,9 +23,7 @@ func TestSubscriptionTypeScriptOracle(t *testing.T) {
 		t.Fatal(err)
 	}
 	var data struct {
-		Auth     ProbeAuth                  `json:"auth"`
-		Rules    Rules                      `json:"rules"`
-		Routing  map[string]json.RawMessage `json:"routing"`
+		Auth     ProbeAuth `json:"auth"`
 		Fixtures []struct {
 			Name      string            `json:"name"`
 			Raw       string            `json:"raw"`
@@ -69,15 +67,6 @@ func TestSubscriptionTypeScriptOracle(t *testing.T) {
 				}
 				assertSubscriptionJSON(t, probe, test.Probes[i])
 			}
-		})
-	}
-	for _, mode := range []string{"rule", "global"} {
-		t.Run("routing/"+mode, func(t *testing.T) {
-			actual, err := CompileRouting(mode, data.Rules)
-			if err != nil {
-				t.Fatal(err)
-			}
-			assertSubscriptionJSON(t, actual, data.Routing[mode])
 		})
 	}
 }

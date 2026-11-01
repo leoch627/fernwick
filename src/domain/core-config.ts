@@ -33,8 +33,10 @@ export function compileTun(node: ProxyNode, mode: 'rule' | 'global', rules: Rule
   const network = CoreNetworkSchema.parse(input); RulesSchema.parse(rules);
   const proxy = compileOutbound({ ...node, host: network.resolvedNodeAddress });
   proxy.streamSettings.sockopt = { interface: network.interface, domainStrategy: 'UseIP' };
-  const directDomains = mode === 'rule' ? [...rules.directDomains.map(value => `domain:${value}`), ...(rules.directFullDomains ?? []).map(value => `full:${value}`)] : [];
-  const proxyDomains = mode === 'rule' ? rules.proxyDomains.map(value => `domain:${value}`) : [];
+  // One resolver per section in rule order: the first matching section decides, as for routing.
+  const sectionDns = mode === 'rule' ? rules.sections.filter(section => section.target !== 'block' && section.domains?.length).map(section => section.target === 'direct'
+    ? { address: network.bootstrapDns, domains: section.domains, skipFallback: true, tag: 'dns-direct', finalQuery: true }
+    : { address: network.proxyDns, domains: section.domains, skipFallback: true, tag: 'dns-proxy', finalQuery: true }) : [];
   const tunName = tunNames[network.platform];
   const routing = compileRouting(mode, rules);
   return {
@@ -44,8 +46,7 @@ export function compileTun(node: ProxyNode, mode: 'rule' | 'global', rules: Rule
       autoSystemRoutingTable: [], autoOutboundsInterface: network.interface, autoSystemDnsToGateway: false,
     }, sniffing: { enabled: true, destOverride: ['http', 'tls', 'quic'], routeOnly: true } }, healthInbound(auth)],
     dns: { tag: 'dns-proxy', queryStrategy: 'UseIP', disableFallbackIfMatch: true, useSystemHosts: false, servers: [
-      ...(proxyDomains.length ? [{ address: network.proxyDns, domains: proxyDomains, skipFallback: true, tag: 'dns-proxy', finalQuery: true }] : []),
-      ...(directDomains.length ? [{ address: network.bootstrapDns, domains: directDomains, skipFallback: true, tag: 'dns-direct', finalQuery: true }] : []),
+      ...sectionDns,
       { address: network.proxyDns, tag: 'dns-proxy', skipFallback: false, finalQuery: true },
     ] },
     outbounds: [proxy,

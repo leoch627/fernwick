@@ -50,14 +50,27 @@ func TestNetworkUnavailableNeverConnects(t *testing.T) {
 		t.Fatal(v)
 	}
 }
-func TestNetworkAllProofsRequired(t *testing.T) {
+func TestNetworkTCPAndDNSProofsRequired(t *testing.T) {
+	for _, broken := range []func(*NetworkProof){func(p *NetworkProof) { p.TCP = false }, func(p *NetworkProof) { p.DNS = false }} {
+		d := healthyNetworkDriver()
+		broken(&d.proof)
+		n := NewNetworkController(d, nil)
+		if err := n.Connect(context.Background(), Candidate{}, nil); CodeOf(err) != "CONNECT_TIMEOUT" {
+			t.Fatal(err)
+		}
+		if d.commitCount.Load() != 0 || d.cleanupCount.Load() != 1 || n.View().State != "Disconnected" {
+			t.Fatal(n.View())
+		}
+	}
+}
+func TestNetworkConnectsWithoutUDPOrIPv6(t *testing.T) {
 	d := healthyNetworkDriver()
-	d.proof.UDP = false
+	d.proof.UDP, d.proof.IPv6 = false, false
 	n := NewNetworkController(d, nil)
-	if err := n.Connect(context.Background(), Candidate{}, nil); CodeOf(err) != "CONNECT_TIMEOUT" {
+	if err := n.Connect(context.Background(), Candidate{}, nil); err != nil {
 		t.Fatal(err)
 	}
-	if d.commitCount.Load() != 0 || d.cleanupCount.Load() != 1 || n.View().State != "Disconnected" {
+	if d.commitCount.Load() != 1 || n.View().State != "Connected" {
 		t.Fatal(n.View())
 	}
 }

@@ -92,7 +92,7 @@ func (s *service) perform(p Peer, r Request, response *Response) error {
 			return failure("NETWORK_CONFLICT")
 		}
 		s.heartbeat = time.Now()
-		if r.AuthorizedUntil != s.authUntil && r.AuthorizedUntil >= 0 && r.AuthorizedUntil <= time.Now().Add(24*time.Hour).UnixMilli()+2000 {
+		if r.AuthorizedUntil != s.authUntil && r.AuthorizedUntil >= 0 && r.AuthorizedUntil <= time.Now().Add(maxAuthorization).UnixMilli()+2000 {
 			s.authUntil = r.AuthorizedUntil
 			s.authDeadline = time.Now().Add(time.Duration(r.AuthorizedUntil-time.Now().UnixMilli()) * time.Millisecond)
 		}
@@ -144,12 +144,18 @@ func (s *service) perform(p Peer, r Request, response *Response) error {
 			return failure("CONNECT_TIMEOUT")
 		}
 		bypass := []string{address, "223.5.5.5"}
+		pool := resolvePool(ctx, r.Candidate.Pool, physical)
+		for _, ip := range pool {
+			if ip != "" && !contains(bypass, ip) {
+				bypass = append(bypass, ip)
+			}
+		}
 		for _, host := range build.ControlHosts {
 			if ip, e := resolvePhysical(ctx, host, physical); e == nil && !contains(bypass, ip) {
 				bypass = append(bypass, ip)
 			}
 		}
-		j := &Journal{SchemaVersion: 1, ID: nonce(), ProductID: build.ProductID, Owner: p, Phase: "Preparing", Interface: physical, Tun: tunName(), NodeAddress: address, Bypass: bypass, CorePath: installed.CorePath, AuthorizedUntil: r.Candidate.AuthorizedUntil, Deadline: time.Now().Add(30 * time.Second).UnixMilli()}
+		j := &Journal{SchemaVersion: 1, ID: nonce(), ProductID: build.ProductID, Owner: p, Phase: "Preparing", Interface: physical, Tun: tunName(), NodeAddress: address, PoolAddresses: pool, Bypass: bypass, CorePath: installed.CorePath, AuthorizedUntil: r.Candidate.AuthorizedUntil, Deadline: time.Now().Add(30 * time.Second).UnixMilli()}
 		if e = platformPrepare(ctx, j); e != nil {
 			return e
 		}
@@ -281,7 +287,7 @@ func (s *service) perform(p Peer, r Request, response *Response) error {
 		}
 		response.Proof = &proof
 		s.mu.Lock()
-		s.proven = proof.TCP && proof.UDP && proof.DNS && proof.IPv6
+		s.proven = proof.TCP && proof.DNS
 		s.mu.Unlock()
 		return s.current(j)
 	}
@@ -313,6 +319,27 @@ func (s *service) perform(p Peer, r Request, response *Response) error {
 		return writeJournal(j)
 	}
 	return failure("INVALID_INPUT")
+}
+
+// resolvePool looks up the balancer nodes concurrently over the physical interface.
+// A node that does not resolve in time is left out rather than failing the connection.
+func resolvePool(parent context.Context, nodes []Node, physical Interface) []string {
+	ctx, cancel := context.WithTimeout(parent, 4*time.Second)
+	defer cancel()
+	addresses := make([]string, len(nodes))
+	slots := make(chan struct{}, 8)
+	var wait sync.WaitGroup
+	for i, n := range nodes {
+		wait.Go(func() {
+			slots <- struct{}{}
+			defer func() { <-slots }()
+			if ip, e := resolvePhysical(ctx, n.Host, physical); e == nil {
+				addresses[i] = ip
+			}
+		})
+	}
+	wait.Wait()
+	return addresses
 }
 func (s *service) operationContext() (context.Context, context.CancelFunc) {
 	s.mu.Lock()

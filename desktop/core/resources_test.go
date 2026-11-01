@@ -14,12 +14,12 @@ import (
 )
 
 func resourceBaseline() Rules {
-	return Rules{SchemaVersion: 1, DirectDomains: []string{"baseline.cn"}, ProxyDomains: []string{}, BlockedDomains: []string{}, DirectIPs: []string{}}
+	return Rules{SchemaVersion: 2, Sections: []RuleSection{{Target: "direct", Domains: []string{"domain:baseline.cn"}}}}
 }
 func resourceCandidate(t *testing.T, f signedFixture, version int64, domain, id string) (string, Resource, string) {
 	t.Helper()
 	rules := resourceBaseline()
-	rules.DirectDomains = []string{domain}
+	rules.Sections = []RuleSection{{Target: "direct", Domains: []string{"domain:" + domain}}}
 	raw, err := EncodeJSON(rules)
 	if err != nil {
 		t.Fatal(err)
@@ -47,7 +47,7 @@ func TestResourceDurableActivationRestartAndExpiry(t *testing.T) {
 	if err = resources.Apply(context.Background(), envelope); err != nil {
 		t.Fatal(err)
 	}
-	if resources.Fingerprint() != descriptor.SHA256 || resources.Rules().DirectDomains[0] != "new.cn" {
+	if resources.Fingerprint() != descriptor.SHA256 || resources.Rules().Sections[0].Domains[0] != "domain:new.cn" {
 		t.Fatal("resource not activated")
 	}
 	saved, err := store.Load()
@@ -62,7 +62,7 @@ func TestResourceDurableActivationRestartAndExpiry(t *testing.T) {
 		t.Fatal("restart lost validated resource")
 	}
 	now.Add(3600000)
-	if restarted.Rules().DirectDomains[0] != "baseline.cn" || restarted.Status() != "使用内置大陆分流规则" {
+	if restarted.Rules().Sections[0].Domains[0] != "domain:baseline.cn" || restarted.Status() != "使用内置大陆分流规则" {
 		t.Fatal("expired resource retained")
 	}
 }
@@ -82,7 +82,7 @@ func TestResourceCorruptionCannotReplaceValidRules(t *testing.T) {
 	if err := resources.Apply(context.Background(), next); err == nil {
 		t.Fatal("corrupt rules accepted")
 	}
-	if resources.Rules().DirectDomains[0] != "new.cn" || !strings.Contains(resources.Status(), "未验证") {
+	if resources.Rules().Sections[0].Domains[0] != "domain:new.cn" || !strings.Contains(resources.Status(), "未验证") {
 		t.Fatal("valid rules discarded")
 	}
 	record, _ := store.Load()
@@ -95,7 +95,7 @@ func TestResourceCorruptionCannotReplaceValidRules(t *testing.T) {
 	if err := restarted.Restore(); err == nil {
 		t.Fatal("corrupted cache trusted")
 	}
-	if restarted.Rules().DirectDomains[0] != "baseline.cn" {
+	if restarted.Rules().Sections[0].Domains[0] != "domain:baseline.cn" {
 		t.Fatal("unsafe cached rules active")
 	}
 }
@@ -133,7 +133,7 @@ func TestResourceIdentityHighWaterSurvivesBaselineAndRestart(t *testing.T) {
 	if err := restarted.Apply(context.Background(), signed); err == nil {
 		t.Fatal("resource rollback accepted")
 	}
-	if calls != 2 || restarted.Rules().DirectDomains[0] != "baseline.cn" {
+	if calls != 2 || restarted.Rules().Sections[0].Domains[0] != "domain:baseline.cn" {
 		t.Fatal("identity validation happened after fetching")
 	}
 }
@@ -179,7 +179,7 @@ func TestSupersededResourceCannotOverwriteNewCache(t *testing.T) {
 		t.Fatal(err)
 	}
 	record, _ := store.Load()
-	if *record.Body != secondBody || resources.Rules().DirectDomains[0] != "current.cn" {
+	if *record.Body != secondBody || resources.Rules().Sections[0].Domains[0] != "domain:current.cn" {
 		t.Fatal("stale resource won")
 	}
 }
@@ -217,14 +217,14 @@ func TestResourceDiskFailureAndUnknownKeysDoNotAdvance(t *testing.T) {
 	if err := resources.Apply(context.Background(), signed); err == nil {
 		t.Fatal("disk failure ignored")
 	}
-	if resources.Rules().DirectDomains[0] != "first.cn" {
+	if resources.Rules().Sections[0].Domains[0] != "domain:first.cn" {
 		t.Fatal("undurable rules activated")
 	}
 	store.fail = false
 	if err := resources.Apply(context.Background(), signed); err != nil {
 		t.Fatal(err)
 	}
-	if resources.Rules().DirectDomains[0] != "second.cn" {
+	if resources.Rules().Sections[0].Domains[0] != "domain:second.cn" {
 		t.Fatal("failed persistence advanced identity")
 	}
 	files, _ := os.ReadDir(directory)

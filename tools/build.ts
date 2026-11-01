@@ -9,8 +9,8 @@ import { createHash } from 'node:crypto';
 async function main() {
   const config = validateBuild(strictJson(await readFile(process.env.STARRAIL_BUILD_CONFIG ?? 'config/development.json', 'utf8')));
   const contract = ContractSchema.parse(strictJson(await readFile('config/adapter-contract.json', 'utf8')));
-  const ruleManifest = strictJson(await readFile('resources/rules/manifest.json', 'utf8')) as { files: Record<string, string> };
-  for (const [file, hash] of Object.entries(ruleManifest.files)) { if (!/^source\/(direct\.txt|cncidr\.txt|LICENSE)$|^baseline\.json$/.test(file) || createHash('sha256').update(await readFile(`resources/rules/${file}`)).digest('hex') !== hash) throw new Error('Rule inventory mismatch'); }
+  const ruleManifest = strictJson(await readFile('resources/rules/manifest.json', 'utf8')) as { 'baseline.json': string };
+  if (createHash('sha256').update(await readFile('resources/rules/baseline.json')).digest('hex') !== ruleManifest['baseline.json']) throw new Error('Rule baseline does not match resources/rules/manifest.json');
   RulesSchema.parse(strictJson(await readFile('resources/rules/baseline.json', 'utf8'), 33554432));
   await mkdir('desktop/assets/rules', { recursive: true });
   await mkdir('dist/rules', { recursive: true });

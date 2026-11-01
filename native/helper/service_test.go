@@ -99,11 +99,11 @@ func TestHeartbeatBoundsAuthorization(t *testing.T) {
 	if s.authUntil != until || s.heartbeat.IsZero() || time.Until(s.authDeadline) > time.Hour {
 		t.Fatalf("heartbeat state: until=%d deadline=%v", s.authUntil, s.authDeadline)
 	}
-	if r := call(s, owner, Request{Action: "heartbeat", Ticket: "ticket-1", AuthorizedUntil: time.Now().Add(48 * time.Hour).UnixMilli()}); !r.OK {
+	if r := call(s, owner, Request{Action: "heartbeat", Ticket: "ticket-1", AuthorizedUntil: time.Now().Add(maxAuthorization + time.Hour).UnixMilli()}); !r.OK {
 		t.Fatalf("heartbeat: %+v", r)
 	}
 	if s.authUntil != until {
-		t.Fatalf("authorization extended beyond 24h to %d", s.authUntil)
+		t.Fatalf("authorization extended beyond the maximum to %d", s.authUntil)
 	}
 	if r := call(s, owner, Request{Action: "heartbeat", Ticket: "ticket-1", AuthorizedUntil: -1}); !r.OK || s.authUntil != until {
 		t.Fatalf("negative authorization accepted: %+v until=%d", r, s.authUntil)

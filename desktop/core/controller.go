@@ -188,7 +188,7 @@ func (c *ClientController) maxAge() int {
 	if p := c.policy.Active(); p != nil {
 		return p.Refresh.MaxSnapshotAgeSec
 	}
-	return 86400
+	return MaxSnapshotAgeSec
 }
 func (c *ClientController) sessionCopy() *Session {
 	c.mu.Lock()
@@ -935,11 +935,13 @@ func (c *ClientController) connect(ctx context.Context) error {
 	}
 	mode, until := c.preferences.Mode, c.snapshot.UsableUntil
 	c.mu.Unlock()
-	rules := Rules{SchemaVersion: 1, DirectDomains: []string{}, ProxyDomains: []string{}, BlockedDomains: []string{}, DirectIPs: []string{}}
+	rules := EmptyRules()
 	if c.deps.Resources != nil {
 		rules = c.deps.Resources.Rules()
 	}
-	err = c.network.Connect(ctx, Candidate{Node: node, Mode: mode, Rules: rules, AuthorizedUntil: until}, func() bool {
+	automatic := manual == nil
+	pool := ConnectionPool(nodes, node, automatic, c.policy.Active())
+	err = c.network.Connect(ctx, Candidate{Node: node, Pool: pool, Automatic: automatic, Mode: mode, Rules: rules, AuthorizedUntil: until}, func() bool {
 		c.mu.Lock()
 		intentCurrent := c.intentGeneration == userIntent
 		c.mu.Unlock()

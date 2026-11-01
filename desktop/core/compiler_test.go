@@ -7,56 +7,34 @@ import (
 )
 
 func testRoutingRules() Rules {
-	return Rules{SchemaVersion: 1, DirectDomains: []string{"example.cn"}, ProxyDomains: []string{"example.org"}, BlockedDomains: []string{}, DirectIPs: []string{}}
+	return Rules{SchemaVersion: 2, Sections: []RuleSection{{Target: "direct", Domains: []string{"domain:example.cn"}}, {Target: "proxy", Domains: []string{"domain:example.org"}}}}
 }
 
 func TestRulesRejectInvalidDomainAndCIDR(t *testing.T) {
-	for _, value := range []string{"999.1.2.3/24", "192.0.2.0/64", "2001:db8::/129", "1.1.1.1/01", "bad", "fe80::1%bad_zone", "192.168.001.1", "192.0.2.0/24/extra"} {
+	for _, value := range []string{"999.1.2.3/24", "192.0.2.0/64", "2001:db8::/129", "1.1.1.1/01", "bad", "fe80::1%en0/64", "192.168.001.1", "192.0.2.0/24/extra"} {
 		rules := testRoutingRules()
-		rules.DirectIPs = []string{value}
+		rules.Sections = append(rules.Sections, RuleSection{Target: "direct", IPs: []string{value}})
 		if err := rules.Validate(); err == nil {
 			t.Errorf("accepted invalid IP/CIDR %q", value)
 		}
 	}
-	for _, value := range []string{"bad..domain", "-bad.domain", "bad-.domain", ".bad.domain", "bad.domain.", "", strings.Repeat("x", 64) + ".test"} {
+	for _, value := range []string{"domain:bad..domain", "domain:-bad.domain", "full:bad-.domain", "domain:.bad.domain", "domain:bad.domain.", "domain:", "domain:" + strings.Repeat("x", 64) + ".test", "example.cn", "geosite:cn", "ext:rules.dat:cn", "keyword:UPPER", "regexp:(?=lookahead)", "regexp:"} {
 		rules := testRoutingRules()
-		rules.DirectDomains = []string{value}
+		rules.Sections[0].Domains = []string{value}
 		if err := rules.Validate(); err == nil {
 			t.Errorf("accepted invalid domain %q", value)
 		}
 	}
 	rules := testRoutingRules()
-	rules.DirectIPs = []string{"192.0.2.0/24", "2001:db8::/32", "192.0.2.1", "::ffff:192.0.2.1/128", "fe80::1%en0/64"}
+	rules.Sections = append(rules.Sections, RuleSection{Target: "ai", Domains: []string{"full:chat.example", "keyword:openai", `regexp:^ai[0-9]\.example$`}}, RuleSection{Target: "block", IPs: []string{"192.0.2.0/24", "2001:db8::/32", "192.0.2.1", "::ffff:192.0.2.1/128"}})
 	if err := rules.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	for _, raw := range []string{`{"schemaVersion":1,"directDomains":[],"proxyDomains":[],"blockedDomains":[],"directIPs":[],"executable":"evil"}`, `{"schemaVersion":1,"directDomains":null,"proxyDomains":[],"blockedDomains":[],"directIPs":[]}`, `{"schemaVersion":1,"directDomains":[],"proxyDomains":[],"blockedDomains":[],"directIPs":[],"directFullDomains":null}`} {
+	for _, raw := range []string{`{"schemaVersion":2,"sections":[],"executable":"evil"}`, `{"schemaVersion":2,"sections":null}`, `{"schemaVersion":1,"sections":[]}`, `{"schemaVersion":2,"sections":[{"target":"reject"}]}`, `{"schemaVersion":2,"sections":[{"target":"direct","file":"x"}]}`} {
 		var decoded Rules
 		if err := DecodeStrict([]byte(raw), &decoded, 1024); err == nil {
 			t.Errorf("accepted invalid rule object %s", raw)
 		}
-	}
-}
-
-func TestRoutingSafetyOrdering(t *testing.T) {
-	rules := testRoutingRules()
-	rules.BlockedDomains = []string{"blocked.invalid"}
-	rules.DirectFullDomains = []string{"exact.invalid"}
-	routing, err := CompileRouting("rule", rules)
-	if err != nil {
-		t.Fatal(err)
-	}
-	sequence := routing["rules"].([]any)
-	if sequence[0].(map[string]any)["outboundTag"] != "proxy" || sequence[1].(map[string]any)["outboundTag"] != "dns-out" || sequence[len(sequence)-1].(map[string]any)["outboundTag"] != "proxy" {
-		t.Fatal("health, DNS, or fallback routing order changed")
-	}
-	global, err := CompileRouting("global", rules)
-	if err != nil {
-		t.Fatal(err)
-	}
-	raw, _ := json.Marshal(global)
-	if strings.Contains(string(raw), "example.cn") || strings.Contains(string(raw), "exact.invalid") || strings.Contains(string(raw), "100.64.0.0/10") || !strings.Contains(string(raw), "blocked.invalid") {
-		t.Fatalf("unsafe global rules: %s", raw)
 	}
 }
 

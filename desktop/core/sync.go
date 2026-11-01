@@ -228,7 +228,7 @@ func (s *SyncCoordinator) execute(full bool) {
 					return NewAppError("NO_SERVICE")
 				}
 				now := s.hooks.Now()
-				age := 86400
+				age := MaxSnapshotAgeSec
 				if policy := s.hooks.Policy(); policy != nil {
 					age = policy.Refresh.MaxSnapshotAgeSec
 				}

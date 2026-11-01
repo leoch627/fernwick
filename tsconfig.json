@@ -6,5 +6,5 @@
     "resolveJsonModule": true, "skipLibCheck": true, "noUncheckedIndexedAccess": true,
     "types": ["node", "vite/client"]
   },
-  "include": ["src", "server/src", "tests", "tools", "vite.config.ts", "vitest.config.ts"]
+  "include": ["src", "tests", "tools", "vite.config.ts", "vitest.config.ts"]
 }

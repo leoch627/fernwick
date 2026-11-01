@@ -1,5 +1,5 @@
 {
-  "comment": "Additions to the Loyalsoldier lists, published by Update endpoint -> rules (automatic when this file changes on main). Domains match the domain and all subdomains; directFullDomains match exactly. Priority: blocked > proxy > direct.",
+  "comment": "Operator additions placed ahead of the generated v2fly sections, published by Update endpoint -> rules (automatic when this file changes on main). Domains match the domain and all subdomains; directFullDomains match exactly. Priority: blocked > proxy > direct > generated rules.",
   "proxyDomains": [],
   "blockedDomains": [],
   "directDomains": [],

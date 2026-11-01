@@ -106,7 +106,7 @@
         "maxSnapshotAgeSec": {
           "type": "integer",
           "minimum": 600,
-          "maximum": 86400
+          "maximum": 604800
         }
       },
       "required": [

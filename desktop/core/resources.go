@@ -33,14 +33,11 @@ func ValidateResource(body []byte, descriptor Resource, build BuildConfig, now i
 	}
 	return rules, nil
 }
+
+// cloneRules copies the section list. Callers never modify the domain or address
+// slices, so those are shared.
 func cloneRules(rules Rules) Rules {
-	rules.DirectDomains = append([]string{}, rules.DirectDomains...)
-	if rules.DirectFullDomains != nil {
-		rules.DirectFullDomains = append([]string{}, rules.DirectFullDomains...)
-	}
-	rules.ProxyDomains = append([]string{}, rules.ProxyDomains...)
-	rules.BlockedDomains = append([]string{}, rules.BlockedDomains...)
-	rules.DirectIPs = append([]string{}, rules.DirectIPs...)
+	rules.Sections = append([]RuleSection{}, rules.Sections...)
 	return rules
 }
 

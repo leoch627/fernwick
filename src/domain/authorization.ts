@@ -14,7 +14,7 @@ export function createSnapshot(build: BuildConfig, session: Session, account: Ac
   return {
     productId: build.productId, environment: build.environment, adapterId: build.adapterId, accountId: session.accountId,
     sessionGeneration: session.generation, opSeq, account, nodes: parsed.nodes, fullSyncCompletedAt: now,
-    usableUntil: Math.min(now + Math.min(age, 86400) * 1000, account.expiresAt ? Date.parse(account.expiresAt) : Infinity),
+    usableUntil: Math.min(now + Math.min(age, 604800) * 1000, account.expiresAt ? Date.parse(account.expiresAt) : Infinity),
     maxAgeAtCommitSec: age, quarantinedNodeCount: parsed.quarantined.length, authoritativeEmpty: parsed.authoritativeEmpty,
     contentHash: createHash('sha256').update(JSON.stringify({ account, nodes: parsed.nodes })).digest('hex'),
   };

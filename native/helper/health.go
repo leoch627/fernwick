@@ -298,7 +298,9 @@ func probeDataPath(parent context.Context, j *Journal) (Proof, error) {
 	go func() { defer wait.Done(); result.UDP = stunUDP(ctx) }()
 	go func() { defer wait.Done(); result.IPv6 = ipv6HTTPS(ctx) }()
 	wait.Wait()
-	if !result.TCP || !result.DNS || !result.UDP || !result.IPv6 {
+	// UDP and IPv6 depend on the node and the user's ISP; many working nodes have
+	// neither. They are reported for diagnostics but only TCP and DNS gate a connection.
+	if !result.TCP || !result.DNS {
 		return result, failure("CONNECT_TIMEOUT")
 	}
 	return result, nil

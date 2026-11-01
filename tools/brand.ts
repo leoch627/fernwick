@@ -13,7 +13,7 @@ import { strictJson } from '../src/domain/json';
 import { validateBuild } from '../src/domain/trust';
 import { appIdPattern, displayNamePattern, productIdPattern } from '../src/domain/identity';
 import type { BuildConfig } from '../src/shared/schema';
-import { KEY_ID } from '../server/src/signing';
+import { KEY_ID } from './signing';
 
 const https = z.string().url().refine(v => new URL(v).protocol === 'https:', 'must be https');
 const pem = z.string().includes('-----BEGIN PUBLIC KEY-----');

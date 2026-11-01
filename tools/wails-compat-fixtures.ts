@@ -2,7 +2,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { parseSubscription } from '../src/domain/subscription';
-import { compileOutbound, compileRouting } from '../src/domain/compiler';
+import { compileOutbound } from '../src/domain/compiler';
 import { compileProbe } from '../src/domain/core-config';
 import { uri, options } from '../tests/fixtures';
 
@@ -47,14 +47,13 @@ const cases = [
   ['deduplicate', uri + '\n' + uri.replace('#Tokyo', '#renamed')],
 ] as const;
 const auth = { port: 49152, user: 'random-session', password: 'random-session-password' };
-const rules = { schemaVersion: 1 as const, directDomains: ['example.cn'], directFullDomains: ['exact.invalid'], proxyDomains: ['force.example.cn'], blockedDomains: ['blocked.invalid'], directIPs: ['192.0.2.0/24', '2001:db8::/32'] };
 const fixtures = cases.map(([name, raw]) => {
   const parsed = parseSubscription(raw, options);
   return { name: String(name), raw, options, parsed, outbounds: parsed.nodes.map(node => node.compatible ? compileOutbound(node) : null), probes: parsed.nodes.map(node => node.compatible ? compileProbe(node, auth) : null) };
 });
 fixtures.push({ name: 'unconfirmed', raw: uri, options: { ...options, confirmedTcpUdp: false }, parsed: parseSubscription(uri, { ...options, confirmedTcpUdp: false }), outbounds: [null], probes: [null] });
 const target = resolve('desktop/core/testdata/subscriptions.json');
-const output = JSON.stringify({ generatedBy: 'tools/wails-compat-fixtures.ts (TypeScript reference implementation)', auth, rules, routing: { rule: compileRouting('rule', rules), global: compileRouting('global', rules) }, fixtures }, null, 2) + '\n';
+const output = JSON.stringify({ generatedBy: 'tools/wails-compat-fixtures.ts (TypeScript reference implementation)', auth, fixtures }, null, 2) + '\n';
 if (process.argv.includes('--check')) {
   if (readFileSync(target, 'utf8') !== output) throw new Error('Wails subscription compatibility fixtures are stale; run node --import tsx tools/wails-compat-fixtures.ts');
   console.log(`Verified ${fixtures.length} TypeScript subscription compatibility cases`);
