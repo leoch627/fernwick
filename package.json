@@ -36,7 +36,8 @@
     "package:windows": "python3 tools/package.py --target win32-x64",
     "package:macos": "python3 tools/package.py --target darwin-arm64 --target darwin-x64",
     "package:linux": "python3 tools/package.py --target linux-x64",
-    "test:packaging": "python3 -m unittest discover -s tests -p \"packaging_test.py\""
+    "test:packaging": "python3 -m unittest discover -s tests -p \"packaging_test.py\"",
+    "test:rules": "python3 -m unittest discover -s tests -p \"rules_test.py\""
   },
   "dependencies": {
     "react": "19.2.0",

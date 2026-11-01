@@ -85,7 +85,8 @@ git tag v0.2.0 && git push origin v0.2.0
 
 **Release** 工作流会检查、四平台打包、创建 GitHub Release、上传 R2 并登记新版本，已安装的客户端会收到更新。也可以在 Actions 里手动运行 Release，临时填写其他机场名和 API 出包；勾选 `publish_endpoint` 才会推给现有用户（端点只接受同一个 `id`，换 `id` 的包需要单独部署端点）。
 
-- **规则更新**：Actions → Update endpoint → `rules`，或等每周一自动运行，会把最新的 Loyalsoldier/clash-rules 转换后下发。
+- **规则更新**：Actions → Update endpoint → `rules`，或等每周一自动运行，会把最新的 Loyalsoldier/clash-rules 转换后下发。客户端约 15 分钟内拉到新规则，正在连接的会自动按新规则重连。
+- **自定义规则**：编辑 `config/rules-extra.json` 并提交到 main，会自动重新发布规则（需要已部署端点）。`proxyDomains` 强制走代理，`blockedDomains` 屏蔽，`directDomains` 额外直连；这三项都匹配域名及其子域名，`directFullDomains` 只匹配完整域名，`directIPs` 写 IP 或 CIDR。优先级：屏蔽 > 强制代理 > 直连，所以强制代理能覆盖大陆直连列表。只对正式版客户端生效，内置规则不受影响。
 - **代码签名**：CI 目前不做 Windows/macOS 代码签名。客户端在这两个平台检测到新版本时会打开下载页，由用户手动安装；Linux 可以在客户端内直接更新。以后接入 Windows 证书或 Apple Developer ID 签名公证后，这两个平台也能在客户端内更新：打包脚本直接从签好的安装包读出证书 Subject / Team ID 写进更新索引，不需要另外填写。
 
 ## 目录

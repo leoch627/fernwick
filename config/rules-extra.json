@@ -1,0 +1,8 @@
+{
+  "comment": "Additions to the Loyalsoldier lists, published by Update endpoint -> rules (automatic when this file changes on main). Domains match the domain and all subdomains; directFullDomains match exactly. Priority: blocked > proxy > direct.",
+  "proxyDomains": [],
+  "blockedDomains": [],
+  "directDomains": [],
+  "directFullDomains": [],
+  "directIPs": []
+}
