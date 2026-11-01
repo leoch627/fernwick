@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -44,9 +45,11 @@ type fixture struct {
 	now    time.Time
 }
 
-func newFixture(t *testing.T) *fixture {
+func newFixture(t *testing.T) *fixture { return newSplitFixture(t, "") }
+
+func newSplitFixture(t *testing.T, downloads string) *fixture {
 	private, public := keyPair(t)
-	server, err := NewServer(t.TempDir(), origin, private, false)
+	server, err := NewServer(t.TempDir(), origin, downloads, private, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,6 +65,9 @@ func newFixture(t *testing.T) *fixture {
 	b := &f.build
 	b.ProductID, b.Environment, b.Channel = "moon-cloud", "production", "stable"
 	b.TrustedUpdateOrigins, b.TrustedResourceOrigins = []string{origin}, []string{origin}
+	if downloads != "" {
+		b.TrustedUpdateOrigins, b.TrustedResourceOrigins = []string{downloads}, []string{downloads}
+	}
 	b.PolicyURLs, b.UpdateFeedURLs = []string{origin + "/v1/policy"}, []string{origin + "/v1/release"}
 	b.PolicyKeys, b.UpdateKeys = map[string]string{keyID: public}, map[string]string{keyID: public}
 	site := "https://www.mooncloud.net/"
@@ -394,5 +400,53 @@ func TestPruneRemovesOldData(t *testing.T) {
 	}
 	if _, err := os.Stat(fresh); err != nil {
 		t.Error("recent report removed")
+	}
+}
+
+func get(handler http.Handler, path string) *httptest.ResponseRecorder {
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequest("GET", path, nil))
+	return recorder
+}
+
+func TestAPIAndDownloadDomainsServeSeparateRoles(t *testing.T) {
+	const downloads = "https://get.mooncloud.net"
+	f := newSplitFixture(t, downloads).published()
+	api, files := f.server.API(), f.server.Downloads()
+	verified, err := core.VerifyRelease(get(api, "/v1/release").Body.String(), f.build, nil, f.now.UnixMilli())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range verified.Index.Artifacts {
+		if !strings.HasPrefix(a.URL, downloads+"/files/releases/") {
+			t.Fatalf("artifact served from %s", a.URL)
+		}
+	}
+	// The API answers like an API: JSON 404 for the page and files, nothing that names the product.
+	for _, path := range []string{"/", "/download", "/files/releases/0.2.0/app-linux-amd64.deb", "/robots.txt"} {
+		r := get(api, path)
+		if r.Code != 404 || r.Header().Get("Content-Type") != "application/json; charset=utf-8" || strings.Contains(r.Body.String(), "月云") {
+			t.Errorf("API %s: %d %s", path, r.Code, r.Body)
+		}
+	}
+	if r := get(files, "/files/releases/0.2.0/app-linux-amd64.deb"); r.Code != 200 || !bytes.Equal(r.Body.Bytes(), installer) {
+		t.Fatal(r.Code)
+	}
+	if r := get(files, "/"); r.Code != 200 || !strings.Contains(r.Body.String(), "/files/releases/0.2.0/app-win-x64.exe") {
+		t.Fatal(r.Code)
+	}
+	for _, path := range []string{"/v1/release", "/v1/policy", "/admin/", "/admin/status"} {
+		if r := get(files, path); r.Code != 404 {
+			t.Errorf("download domain %s: %d", path, r.Code)
+		}
+	}
+	request := httptest.NewRequest("POST", "/v1/telemetry", strings.NewReader(`{"events":[]}`))
+	recorder := httptest.NewRecorder()
+	files.ServeHTTP(recorder, request)
+	if recorder.Code != 405 {
+		t.Fatalf("download domain accepted telemetry: %d", recorder.Code)
+	}
+	if get(api, "/healthz").Body.String() != "ok\n" || get(files, "/healthz").Body.String() != "ok\n" {
+		t.Fatal("health checks")
 	}
 }

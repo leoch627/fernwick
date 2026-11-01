@@ -1,6 +1,6 @@
 name: Release
 # Tag push (git tag v0.2.0 && git push origin v0.2.0): build the brand from repository variables,
-# publish a GitHub Release, upload to R2 and register the version with the update endpoint.
+# publish a GitHub Release, upload the installers to the self-hosted endpoint and register the version.
 # Manual run: optionally override name/API for a one-off build; publishing to the endpoint is opt-in.
 on:
   push:

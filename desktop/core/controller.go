@@ -1199,11 +1199,12 @@ func (c *ClientController) checkUpdate(parent context.Context) error {
 	c.mu.Unlock()
 	return NewAppError("UPDATE_VERIFY_FAILED")
 }
+// openDownloadPage opens the first download domain, which also serves the download page.
 func (c *ClientController) openDownloadPage() error {
-	if len(c.deps.Build.UpdateFeedURLs) == 0 {
+	if len(c.deps.Build.TrustedUpdateOrigins) == 0 {
 		return NewAppError("CONFIGURATION_REQUIRED")
 	}
-	u, err := url.Parse(c.deps.Build.UpdateFeedURLs[0])
+	u, err := url.Parse(c.deps.Build.TrustedUpdateOrigins[0])
 	if err != nil {
 		return NewAppError("CONFIGURATION_REQUIRED")
 	}

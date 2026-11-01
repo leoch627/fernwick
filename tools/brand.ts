@@ -26,6 +26,8 @@ export const BrandSchema = z.object({
   website: https.optional(), renew: https.optional(), help: https.optional(),
   /** Update endpoint origin, or several domains of it in failover order (the first is the one CI publishes to). */
   endpoint: z.union([https, z.array(https).min(1).max(4)]),
+  /** Download domain(s) for the download page, installers, update archives and rule files, in failover order. Defaults to the endpoint. */
+  downloads: z.union([https, z.array(https).min(1).max(4)]).optional(),
   publicKey: pem,
 }).strict();
 export type Brand = z.infer<typeof BrandSchema>;
@@ -36,6 +38,7 @@ const unique = (values: string[]) => [...new Set(values)];
 export function brandConfig(input: unknown, base: Pick<BuildConfig, 'healthTargets' | 'hardLimits'>): BuildConfig {
   const brand = BrandSchema.parse(input);
   const endpoints = unique((Array.isArray(brand.endpoint) ? brand.endpoint : [brand.endpoint]).map(origin));
+  const downloads = brand.downloads ? unique((Array.isArray(brand.downloads) ? brand.downloads : [brand.downloads]).map(origin)) : endpoints;
   const website = brand.website ?? `${origin(brand.api[0]!)}/`;
   const api = brand.api.map(url => url.replace(/\/+$/, ''));
   return validateBuild({
@@ -44,8 +47,8 @@ export function brandConfig(input: unknown, base: Pick<BuildConfig, 'healthTarge
     adapterId: 'v2board-explicit-v1', deploymentVerified: true, subscriptionFormatId: 'v2ray-uri-base64-v1',
     apiEndpoints: api.map((baseUrl, i) => ({ id: i === 0 ? 'primary' : i === 1 ? 'backup' : `backup-${i}`, baseUrl, priority: (i + 1) * 10 })),
     trustedSubscriptionOrigins: unique([...api.map(origin), ...brand.subscriptionOrigins.map(origin)]),
-    trustedWebOrigins: unique([...api.map(origin), ...[website, brand.renew, brand.help].filter((v): v is string => !!v).map(origin), ...endpoints]),
-    trustedResourceOrigins: endpoints, trustedUpdateOrigins: endpoints,
+    trustedWebOrigins: unique([...api.map(origin), ...[website, brand.renew, brand.help].filter((v): v is string => !!v).map(origin), ...endpoints, ...downloads]),
+    trustedResourceOrigins: downloads, trustedUpdateOrigins: downloads,
     policyUrls: endpoints.map(e => `${e}/v1/policy`), updateFeedUrls: endpoints.map(e => `${e}/v1/release`),
     links: { website, renew: brand.renew ?? website, help: brand.help ?? website },
     // One key signs both; the purpose prefix in each signature keeps policy and release index apart.
@@ -64,6 +67,7 @@ function fromEnvironment(env: NodeJS.ProcessEnv) {
     api: [...list(env.BRAND_API_PRIMARY), ...list(env.BRAND_API_BACKUP)],
     subscriptionOrigins: list(env.BRAND_SUBSCRIPTION_ORIGINS),
     website: optional(env.BRAND_WEBSITE), endpoint: list(env.BRAND_ENDPOINT),
+    downloads: list(env.BRAND_DOWNLOADS).length ? list(env.BRAND_DOWNLOADS) : undefined,
     publicKey: env.BRAND_PUBLIC_KEY,
   };
 }
@@ -76,7 +80,7 @@ async function main() {
   const config = brandConfig(input, base);
   await mkdir(dirname(out!), { recursive: true });
   await writeFile(out!, JSON.stringify(config, null, 2) + '\n');
-  console.log(`Wrote ${out}: ${config.name} (${config.productId}), API ${config.apiEndpoints.map(e => e.baseUrl).join(' / ')}, updates ${config.updateFeedUrls.join(' / ')}`);
+  console.log(`Wrote ${out}: ${config.name} (${config.productId}), API ${config.apiEndpoints.map(e => e.baseUrl).join(' / ')}, updates ${config.updateFeedUrls.join(' / ')}, downloads ${config.trustedUpdateOrigins.join(' / ')}`);
 }
 if (process.argv[1]?.endsWith('brand.ts')) void main().catch(error => {
   console.error(error instanceof z.ZodError ? `Brand rejected:\n${error.issues.map(i => `  ${i.path.join('.') || '(root)'}: ${i.message}`).join('\n')}` : `Brand rejected: ${(error as Error).message}`);

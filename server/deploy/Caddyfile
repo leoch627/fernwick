@@ -1,10 +1,17 @@
-# Caddy obtains and renews the certificate itself. List every domain that points at this
-# server; the first one should match PUBLIC_ORIGIN in the systemd unit.
-dl.example.com, dl.example.net {
+# Caddy obtains and renews the certificates itself. API domains go to :8787, download
+# domains to :8788; the first of each should match PUBLIC_ORIGIN / DOWNLOAD_ORIGIN.
+api.example.com, api.example.net {
+	# CI uploads installers through the API's /admin/upload.
 	request_body {
 		max_size 2GB
 	}
 	reverse_proxy 127.0.0.1:8787 {
+		header_up X-Real-IP {remote_host}
+	}
+}
+
+get.example.com, get.example.net {
+	reverse_proxy 127.0.0.1:8788 {
 		header_up X-Real-IP {remote_host}
 	}
 }

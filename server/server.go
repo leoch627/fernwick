@@ -27,8 +27,11 @@ import (
 //	telemetry/<yyyy-mm-dd>.jsonl        client events, one per line
 //	reports/<code>.json                 user problem reports
 type Server struct {
-	data       string
+	data string
+	// origin is the API's public origin; downloads is where installers, update archives
+	// and rule files are fetched from, which may be a separate domain.
 	origin     string
+	downloads  string
 	signingKey string
 	key        ed25519.PrivateKey
 	trustProxy bool
@@ -37,20 +40,26 @@ type Server struct {
 	limits     *rateLimits
 }
 
-func NewServer(data, origin, signingKey string, trustProxy bool) (*Server, error) {
+// NewServer serves the API at origin and files at downloads; an empty downloads uses origin.
+func NewServer(data, origin, downloads, signingKey string, trustProxy bool) (*Server, error) {
 	key, err := parseSigningKey(signingKey)
 	if err != nil {
 		return nil, err
 	}
-	if !httpsURL(origin) && !strings.HasPrefix(origin, "http://127.0.0.1") && !strings.HasPrefix(origin, "http://localhost") {
-		return nil, errors.New("public origin must be an https URL")
+	if downloads == "" {
+		downloads = origin
+	}
+	for _, o := range []string{origin, downloads} {
+		if !httpsURL(o) && !strings.HasPrefix(o, "http://127.0.0.1") && !strings.HasPrefix(o, "http://localhost") {
+			return nil, errors.New("public origins must be https URLs")
+		}
 	}
 	for _, dir := range []string{"state", "files", "telemetry", "reports"} {
 		if err := os.MkdirAll(filepath.Join(data, dir), 0o750); err != nil {
 			return nil, err
 		}
 	}
-	return &Server{data: data, origin: strings.TrimRight(origin, "/"), signingKey: signingKey, key: key, trustProxy: trustProxy, now: time.Now, limits: newRateLimits()}, nil
+	return &Server{data: data, origin: strings.TrimRight(origin, "/"), downloads: strings.TrimRight(downloads, "/"), signingKey: signingKey, key: key, trustProxy: trustProxy, now: time.Now, limits: newRateLimits()}, nil
 }
 
 // ---- state ----
@@ -162,16 +171,32 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 	_ = json.NewEncoder(w).Encode(value)
 }
 
-func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+// ServeHTTP serves both roles from one listener.
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.route(w, r, true, true) }
+
+// API serves configuration, telemetry and administration only, and answers anything
+// else as an API would, so its domains do not look like a download site.
+func (s *Server) API() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { s.route(w, r, true, false) })
+}
+
+// Downloads serves the download page and published files only.
+func (s *Server) Downloads() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { s.route(w, r, false, true) })
+}
+
+func (s *Server) route(w http.ResponseWriter, r *http.Request, api, downloads bool) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+	path := r.URL.Path
+	read := r.Method == http.MethodGet || r.Method == http.MethodHead
 	switch {
-	case strings.HasPrefix(r.URL.Path, "/admin/"):
+	case path == "/healthz":
+		_, _ = io.WriteString(w, "ok\n")
+	case api && strings.HasPrefix(path, "/admin/"):
 		s.admin(w, r)
-	case r.URL.Path == "/v1/telemetry" || r.URL.Path == "/v1/report":
+	case api && (path == "/v1/telemetry" || path == "/v1/report"):
 		s.ingest(w, r)
-	case r.Method != http.MethodGet && r.Method != http.MethodHead:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-	case r.URL.Path == "/v1/release" || r.URL.Path == "/v1/policy":
+	case api && read && (path == "/v1/release" || path == "/v1/policy"):
 		var state struct {
 			Envelope string `json:"envelope"`
 		}
@@ -183,9 +208,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
 		_, _ = io.WriteString(w, state.Envelope)
-	case strings.HasPrefix(r.URL.Path, "/files/"):
-		s.serveFile(w, r, strings.TrimPrefix(r.URL.Path, "/files/"))
-	case r.URL.Path == "/" || r.URL.Path == "/download":
+	case downloads && read && strings.HasPrefix(path, "/files/"):
+		s.serveFile(w, r, strings.TrimPrefix(path, "/files/"))
+	case downloads && read && (path == "/" || path == "/download"):
 		var brand Brand
 		var release ReleaseState
 		hasBrand, _ := s.load("brand.json", &brand)
@@ -194,8 +219,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "public, max-age=60")
 		w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'")
 		_, _ = io.WriteString(w, downloadPage(optional(hasBrand, &brand), optional(hasRelease, &release)))
-	case r.URL.Path == "/healthz":
-		_, _ = io.WriteString(w, "ok\n")
+	case !read && !api:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	case api && !downloads:
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 	default:
 		http.NotFound(w, r)
 	}
@@ -369,7 +396,7 @@ func (s *Server) publishRelease(w http.ResponseWriter, r *http.Request) error {
 	if withdrawn == nil {
 		withdrawn = []string{}
 	}
-	release, err := s.signRelease(input.Brand, ReleaseState{Sequence: previous.Sequence, Version: input.Version, PublishedAt: iso(now), Artifacts: releaseArtifacts(s.origin, input.Version, input.Files), Downloads: downloads, WithdrawnIDs: withdrawn}, now)
+	release, err := s.signRelease(input.Brand, ReleaseState{Sequence: previous.Sequence, Version: input.Version, PublishedAt: iso(now), Artifacts: releaseArtifacts(s.downloads, input.Version, input.Files), Downloads: downloads, WithdrawnIDs: withdrawn}, now)
 	if err != nil {
 		return err
 	}
@@ -416,7 +443,7 @@ func (s *Server) publishRules(w http.ResponseWriter, r *http.Request) error {
 	}
 	now := s.now()
 	// The client binds a rule ID to one hash, so the ID is derived from the hash.
-	rules := &RuleResource{ID: "cn-rules-" + input.SHA256[:16], Version: nextSequence(version, now), URL: s.origin + "/files/" + input.Key, SHA256: input.SHA256, Bytes: input.Bytes}
+	rules := &RuleResource{ID: "cn-rules-" + input.SHA256[:16], Version: nextSequence(version, now), URL: s.downloads + "/files/" + input.Key, SHA256: input.SHA256, Bytes: input.Bytes}
 	policy, err := s.signPolicy(brand, optional(found, &previous), rules, now)
 	if err != nil {
 		return err

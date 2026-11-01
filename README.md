@@ -48,7 +48,8 @@ npm run test:packaging        # 安装器资源/恢复约束检查
 | `api` | API 地址数组，第一个为主，其余为备用 |
 | `subscriptionOrigins` | 可选，订阅链接域名与 API 不同时填写 |
 | `website` | 可选，官网/续费页，默认主 API 域名 |
-| `endpoint` | 自建端点地址，可以是数组：第一个是主域名（CI 发布到这里），其余是指向同一台服务器的备用域名 |
+| `endpoint` | 自建端点的 API 域名，可以是数组：第一个是主域名（CI 发布到这里），其余是指向同一台服务器的备用域名 |
+| `downloads` | 可选，下载域名（下载页、安装包、更新包、规则文件），可以是数组，默认同 `endpoint` |
 | `publicKey` | 签名公钥（`public.pem` 全文），见下文；CI 打包不用填，自动从 `SIGNING_KEY` 计算 |
 
 ```sh
@@ -73,7 +74,7 @@ python3 tools/package.py --target darwin-arm64
    gh secret set SIGNING_KEY < ~/keys/signing/private.pem
    ```
 2. 按 server/README.md 部署端点，把同一份 `private.pem` 放到服务器上。
-3. GitHub Variables 填品牌：`BRAND_ID`、`BRAND_NAME`、`BRAND_API_PRIMARY`、`BRAND_API_BACKUP`、`UPDATE_ENDPOINT`（多个域名用空格分隔，第一个为主），可选 `BRAND_APP_ID`、`BRAND_WEBSITE`、`BRAND_SUBSCRIPTION_ORIGINS`。
+3. GitHub Variables 填品牌：`BRAND_ID`、`BRAND_NAME`、`BRAND_API_PRIMARY`、`BRAND_API_BACKUP`、`UPDATE_ENDPOINT`（API 域名，多个用空格分隔，第一个为主）、`DOWNLOAD_ENDPOINT`（下载域名，同样写法），可选 `BRAND_APP_ID`、`BRAND_WEBSITE`、`BRAND_SUBSCRIPTION_ORIGINS`。
 
 端点接口：`/v1/release`（签名更新索引，每 6 小时重签）、`/v1/policy`（签名策略，携带规则更新）、`/files/...`（支持断点续传）、`/`（下载页，附未签名安装包的打开说明）、`/v1/telemetry`、`/v1/report`（客户端遥测和问题报告）、`/admin/`（按邮箱或问题编号查用户情况的页面）、`/admin/*`（CI 上传和发布）。
 

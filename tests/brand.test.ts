@@ -35,6 +35,14 @@ it('lists several endpoint domains in failover order', () => {
   expect(config.trustedResourceOrigins).toEqual(config.trustedUpdateOrigins);
 });
 
+it('serves files from separate download domains while the endpoint stays an API', () => {
+  const config = brandConfig({ ...brand(), endpoint: ['https://api.mooncloud.net', 'https://api.mooncloud.org'], downloads: ['https://get.mooncloud.net', 'https://get.mooncloud.org'] }, base);
+  expect(config.updateFeedUrls).toEqual(['https://api.mooncloud.net/v1/release', 'https://api.mooncloud.org/v1/release']);
+  expect(config.trustedUpdateOrigins).toEqual(['https://get.mooncloud.net', 'https://get.mooncloud.org']);
+  expect(config.trustedResourceOrigins).toEqual(config.trustedUpdateOrigins);
+  expect(config.trustedWebOrigins).toEqual(expect.arrayContaining(['https://get.mooncloud.net', 'https://api.mooncloud.net']));
+});
+
 it('derives system names from the stable id, not the display name', () => {
   const config = brandConfig({ ...brand(), name: '新名字' }, base);
   expect(helperSocket(config, 'linux')).toBe('/run/moon-cloud/helper.sock');

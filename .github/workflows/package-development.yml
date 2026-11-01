@@ -91,6 +91,7 @@ jobs:
           BRAND_WEBSITE: ${{ inputs.website || vars.BRAND_WEBSITE }}
           BRAND_SUBSCRIPTION_ORIGINS: ${{ vars.BRAND_SUBSCRIPTION_ORIGINS }}
           BRAND_ENDPOINT: ${{ vars.UPDATE_ENDPOINT }}
+          BRAND_DOWNLOADS: ${{ vars.DOWNLOAD_ENDPOINT }}
         run: |
           npm run brand -- --out work/build-config.json
           echo "STARRAIL_BUILD_CONFIG=work/build-config.json" >> "$GITHUB_ENV"

@@ -2,6 +2,7 @@
 """Verify Wails package contents and hashes without installing or running them."""
 import argparse
 import importlib.util
+import os
 from pathlib import Path
 import hashlib
 import plistlib
@@ -33,6 +34,10 @@ def inspect_tree(path, target, config, manifest):
     packager.verify_resources(resources, target, manifest)
     if (resources / 'app.asar').exists():
         raise ValueError('Obsolete Electron archive in Wails package')
+    # Windows reports every directory as mode 777: NTFS permissions are ACLs, which
+    # the installer sets under Program Files. The bits only mean something elsewhere.
+    if os.name == 'nt':
+        return
     for item in path.rglob('*'):
         if not item.is_symlink() and item.stat().st_mode & 0o002:
             raise ValueError('World-writable package entry: ' + str(item))

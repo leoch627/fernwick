@@ -4,10 +4,13 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-# Edit PUBLIC_ORIGIN; put the signing key in /etc/v2board-endpoint/signing.pem (mode 600, owned by root).
-Environment=PUBLIC_ORIGIN=https://dl.example.com
+# Edit both origins; put the signing key in /etc/v2board-endpoint/signing.pem (mode 600, owned by root).
+# The API (:8787) only serves configuration and telemetry; the download domain (:8788) serves
+# the download page and files. Drop -download-listen to serve both from one domain.
+Environment=PUBLIC_ORIGIN=https://api.example.com
+Environment=DOWNLOAD_ORIGIN=https://get.example.com
 LoadCredential=signing.pem:/etc/v2board-endpoint/signing.pem
-ExecStart=/usr/local/bin/v2board-endpoint -listen 127.0.0.1:8787 -data /var/lib/v2board-endpoint -key-file ${CREDENTIALS_DIRECTORY}/signing.pem
+ExecStart=/usr/local/bin/v2board-endpoint -listen 127.0.0.1:8787 -download-listen 127.0.0.1:8788 -data /var/lib/v2board-endpoint -key-file ${CREDENTIALS_DIRECTORY}/signing.pem
 DynamicUser=yes
 StateDirectory=v2board-endpoint
 Restart=always
