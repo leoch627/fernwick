@@ -10,11 +10,13 @@ type ConnectionState string
 
 // Candidate is one connection. Node is the user's node, or the best probed node when
 // Automatic; Pool holds further nodes for the core's automatic and AI balancers.
+// Tunnel picks the driver ("proxy" or "tun") and never reaches the network service.
 type Candidate struct {
 	Node            ProxyNode   `json:"node"`
 	Pool            []ProxyNode `json:"pool,omitempty"`
 	Automatic       bool        `json:"automatic,omitempty"`
 	Mode            string      `json:"mode"`
+	Tunnel          string      `json:"tunnel,omitempty"`
 	Rules           Rules       `json:"rules"`
 	AuthorizedUntil int64       `json:"authorizedUntil"`
 }
@@ -87,6 +89,36 @@ func NewNetworkController(driver NetworkDriver, changed func()) *NetworkControll
 	return &NetworkController{driver: driver, changed: changed, status: NetworkStatus{State: "Disconnected"}, preparationLimit: 10 * time.Second, attemptLimit: 12 * time.Second, transactionLimit: 15 * time.Second, cleanupLimit: 3 * time.Second}
 }
 func (n *NetworkController) Ready() bool { return n.driver.Verified() }
+
+// ReadyFor reports whether a connection through tunnel can start. Drivers without a
+// choice of tunnel answer with their own readiness.
+func (n *NetworkController) ReadyFor(tunnel string) bool {
+	if driver, ok := n.driver.(interface{ VerifiedFor(string) bool }); ok {
+		return driver.VerifiedFor(tunnel)
+	}
+	return n.driver.Verified()
+}
+
+// EnsureReadyFor installs or repairs what tunnel needs, when the driver can.
+func (n *NetworkController) EnsureReadyFor(ctx context.Context, tunnel string) error {
+	if driver, ok := n.driver.(interface {
+		EnsureReadyFor(context.Context, string) error
+	}); ok {
+		return driver.EnsureReadyFor(ctx, tunnel)
+	}
+	if driver, ok := n.driver.(interface{ EnsureReady(context.Context) error }); ok {
+		return driver.EnsureReady(ctx)
+	}
+	return nil
+}
+
+// ProxyPort is the loopback proxy port while connected in system proxy mode, else 0.
+func (n *NetworkController) ProxyPort() int {
+	if driver, ok := n.driver.(interface{ ProxyPort() int }); ok && n.View().State == "Connected" {
+		return driver.ProxyPort()
+	}
+	return 0
+}
 func (n *NetworkController) View() NetworkStatus {
 	n.mu.Lock()
 	defer n.mu.Unlock()
@@ -128,7 +160,7 @@ func (n *NetworkController) Connect(ctx context.Context, candidate Candidate, ga
 		n.mu.Unlock()
 		return waitNetwork(ctx, f)
 	}
-	if !n.driver.Verified() {
+	if !n.ReadyFor(candidate.Tunnel) {
 		code := ErrorCode("COMPONENTS_UNAVAILABLE")
 		n.status.LastError = &code
 		n.mu.Unlock()

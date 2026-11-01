@@ -81,11 +81,27 @@ type probeProcess struct {
 }
 
 func (c *CoreRuntime) launch(ctx context.Context, config map[string]any, check bool) (*probeProcess, error) {
+	return c.start(ctx, config, check, "probe-core", 2*1024*1024)
+}
+
+// maxProxyConfig matches the helper worker's limit; the configuration carries every rule.
+const maxProxyConfig = 32 * 1024 * 1024
+
+// launchProxy runs the system proxy core until ctx ends or the core exits. Installed
+// apps run it through the helper's unprivileged proxy-core worker, which also ends the
+// core if the app itself goes away.
+func (c *CoreRuntime) launchProxy(ctx context.Context, config map[string]any, check bool) (*probeProcess, error) {
+	if err := c.verify(); err != nil {
+		return nil, err
+	}
+	return c.start(ctx, config, check, "proxy-core", maxProxyConfig)
+}
+func (c *CoreRuntime) start(ctx context.Context, config map[string]any, check bool, worker string, limit int) (*probeProcess, error) {
 	if ctx.Err() != nil {
 		return nil, NewAppError("CANCELLED")
 	}
 	data, err := EncodeJSON(config)
-	if err != nil || len(data) > 2*1024*1024 {
+	if err != nil || len(data) > limit {
 		return nil, NewAppError("INVALID_INPUT")
 	}
 	program := c.Executable
@@ -95,7 +111,7 @@ func (c *CoreRuntime) launch(ctx context.Context, config map[string]any, check b
 	}
 	if c.helperPath != "" {
 		program = c.helperPath
-		args = []string{"probe-core", probeParentID()}
+		args = []string{worker, probeParentID()}
 		if check {
 			args = append(args, "--check")
 		}

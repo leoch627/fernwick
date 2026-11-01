@@ -47,6 +47,7 @@ type AppView struct {
 	Preferences        Preferences     `json:"preferences"`
 	Storage            string          `json:"storage"`
 	HelperReady        bool            `json:"helperReady"`
+	ProxyPort          int             `json:"proxyPort"`
 	Policy             string          `json:"policy"`
 	Announcement       *string         `json:"announcement"`
 	Update             string          `json:"update"`

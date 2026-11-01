@@ -42,6 +42,7 @@ func safeEnvironment() []string {
 func configureChild(c *exec.Cmd) {
 	c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: windows.CREATE_NEW_PROCESS_GROUP}
 }
+func configureWorkerChild(c *exec.Cmd) { configureChild(c) }
 func replaceFile(from, to string) error {
 	a, _ := windows.UTF16PtrFromString(from)
 	b, _ := windows.UTF16PtrFromString(to)

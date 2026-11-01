@@ -51,7 +51,7 @@ function remaining(expires: string | null, now: number, kind: string) {
 }
 const gb = (value: bigint) => `${Number(value * 10n / 1073741824n) / 10} GB`;
 
-type Action = 'nodes' | 'renew' | 'repair' | 'report' | 'connect';
+type Action = 'nodes' | 'renew' | 'repair' | 'report' | 'connect' | 'tun';
 /** Problems in the words a user understands, each with the one thing to try next. */
 const problems: Partial<Record<ErrorCode, { text: string; action?: Action }>> = {
   CONNECT_TIMEOUT: { text: '这条线路暂时连不上', action: 'nodes' },
@@ -64,13 +64,14 @@ const problems: Partial<Record<ErrorCode, { text: string; action?: Action }>> = 
   PERMISSION_REQUIRED: { text: '需要允许系统授权才能连接', action: 'connect' },
   COMPONENTS_UNAVAILABLE: { text: '网络组件需要修复', action: 'repair' },
   NETWORK_RECOVERY_REQUIRED: { text: '网络需要修复', action: 'repair' },
+  SYSTEM_PROXY_FAILED: { text: '没能设置系统代理', action: 'tun' },
   NETWORK_CONFLICT: { text: '其他加速软件正在占用网络，请先关闭它' },
   CONTROL_UNAVAILABLE: { text: '暂时连不上服务器，请检查网络', action: 'report' },
   SNAPSHOT_EXPIRED: { text: '线路信息太久没更新，请检查网络', action: 'report' },
   CLOCK_UNTRUSTED: { text: '电脑时间不准，请校正后重试' },
   CANCELLED: { text: '已取消' },
 };
-const actionLabels: Record<Action, string> = { nodes: '换个线路', renew: '去续费', repair: '修复', report: '上报问题', connect: '重新连接' };
+const actionLabels: Record<Action, string> = { nodes: '换个线路', renew: '去续费', repair: '修复', report: '上报问题', connect: '重新连接', tun: '改用 TUN 模式' };
 const problem = (code: ErrorCode) => problems[code] ?? { text: messages[code], action: 'report' as Action };
 
 function Sheet({ title, children, close }: { title: string; children: ReactNode; close(): void }) {
@@ -162,7 +163,7 @@ function SettingsSheet({ state, busy, report, close, run, prefs }: { state: AppV
           : download.status === 'available' || download.status === 'paused' || download.status === 'failed' ? <button className="secondary" onClick={() => void run({ type: 'download-update' })}>{state.manualUpdate ? '去下载' : '下载'}</button>
           : <button className="secondary" disabled={!!busy || download.status === 'downloading'} onClick={() => void run({ type: 'check-update' })}>检查</button>}
       </div>
-      <div className="row"><span><strong>修复网络组件</strong><small>{state.helperReady ? '组件正常' : '第一次连接时会自动安装'}</small></span><button className="secondary" disabled={!!busy} onClick={() => void run({ type: 'repair' })}>修复</button></div>
+      <div className="row"><span><strong>修复网络组件</strong><small>{state.preferences.tunnel === 'proxy' ? '系统代理模式用不到，TUN 模式才需要' : state.helperReady ? '组件正常' : '第一次连接时会自动安装'}</small></span><button className="secondary" disabled={!!busy} onClick={() => void run({ type: 'repair' })}>修复</button></div>
       {state.links.help && <button className="row" onClick={() => void run({ type: 'open-link', link: 'help' })}><span><strong>使用帮助</strong></span><Icon name="chevron" size={16}/></button>}
     </div>
     {state.loggedIn && <button className="danger" onClick={() => { close(); void run({ type: 'logout' }); }}>退出登录</button>}
@@ -170,7 +171,22 @@ function SettingsSheet({ state, busy, report, close, run, prefs }: { state: AppV
   </Sheet>;
 }
 
-function Home({ state, busy, run, open }: { state: AppView; busy: string | null; run(command: Command): Promise<boolean>; open(sheet: 'nodes' | 'settings', report?: boolean): void }) {
+/** How traffic reaches the line, and ad blocking: the two switches people actually flip. */
+function ModeCard({ state, working, prefs }: { state: AppView; working: boolean; prefs(change: Partial<Preferences>): void }) {
+  const tun = state.preferences.tunnel === 'tun';
+  const choose = (tunnel: Preferences['tunnel']) => { if (tunnel !== state.preferences.tunnel) prefs({ tunnel }); };
+  return <section className="card mode-card" aria-label="连接方式">
+    <div className="segmented" role="radiogroup" aria-label="连接方式">
+      <button role="radio" aria-checked={!tun} className={tun ? '' : 'on'} disabled={working} onClick={() => choose('proxy')}>系统代理</button>
+      <button role="radio" aria-checked={tun} className={tun ? 'on' : ''} disabled={working} onClick={() => choose('tun')}>TUN 模式</button>
+    </div>
+    <p className="muted">{tun ? '接管所有软件，包括游戏和命令行 · 第一次需要管理员授权'
+      : `浏览器和大多数软件走代理 · 不需要管理员授权${state.proxyPort ? ` · 本机端口 ${state.proxyPort}` : ''}`}</p>
+    <div className="row"><span><strong>广告拦截</strong></span><button role="switch" aria-checked={state.preferences.adBlock} aria-label="广告拦截" className={`toggle ${state.preferences.adBlock ? 'on' : ''}`} onClick={() => prefs({ adBlock: !state.preferences.adBlock })}/></div>
+  </section>;
+}
+
+function Home({ state, busy, run, open, prefs }: { state: AppView; busy: string | null; run(command: Command): Promise<boolean>; open(sheet: 'nodes' | 'settings', report?: boolean): void; prefs(change: Partial<Preferences>): void }) {
   const connected = state.connection === 'Connected';
   const working = ['Preparing', 'Connecting', 'Switching', 'Reconnecting', 'Disconnecting'].includes(state.connection) || busy === 'connect';
   const recovery = state.connection === 'RecoveryRequired';
@@ -187,7 +203,9 @@ function Home({ state, busy, run, open }: { state: AppView; busy: string | null;
   const act = (action: Action) => {
     if (action === 'nodes') open('nodes'); else if (action === 'report') open('settings', true);
     else if (action === 'renew') void run({ type: 'open-link', link: 'renew' });
-    else if (action === 'repair') void run({ type: 'repair' }); else void run({ type: 'connect' });
+    else if (action === 'repair') void run({ type: 'repair' });
+    else if (action === 'tun') void run({ type: 'preferences', preferences: { ...state.preferences, tunnel: 'tun' } }).then(ok => { if (ok) void run({ type: 'connect' }); });
+    else void run({ type: 'connect' });
   };
   const toggle = () => void run({ type: recovery ? 'repair' : connected || working ? 'disconnect' : 'connect' });
   return <main className="home">
@@ -196,7 +214,7 @@ function Home({ state, busy, run, open }: { state: AppView; busy: string | null;
       <button className="power-button" aria-label={connected || working ? '断开连接' : recovery ? '修复网络' : '连接'} onClick={toggle}><Icon name="power" size={48}/></button>
       <h1 aria-live="polite">{connected ? '已连接' : working ? (state.connection === 'Disconnecting' ? '正在断开…' : '正在连接…') : recovery ? '网络需要修复' : '未连接'}</h1>
       {issue ? <p className="problem" role="status">{issue.text}{issue.action && <button className="link" onClick={() => act(issue.action!)}>{actionLabels[issue.action]}</button>}</p>
-        : <p className="muted">{connected ? (state.preferences.mode === 'global' ? '全局代理' : '智能分流 · 国内网站不受影响') : working ? (state.helperReady ? '请稍候' : '第一次连接需要输入电脑密码授权') : '点击按钮开始'}</p>}
+        : <p className="muted">{connected ? (state.preferences.mode === 'global' ? '全局代理' : '智能分流 · 国内网站不受影响') : working ? (state.preferences.tunnel === 'tun' && !state.helperReady ? '第一次使用 TUN 需要管理员授权' : '请稍候') : '点击按钮开始'}</p>}
     </section>
     <button className="card node-card" onClick={() => open('nodes')}>
       <span className="flag">{shown ? flag(shown.region) : <Icon name="sparkle"/>}</span>
@@ -204,6 +222,7 @@ function Home({ state, busy, run, open }: { state: AppView; busy: string | null;
       {shown?.latency != null && <span className={`latency ${latencyClass(shown.latency)}`}>{Math.round(shown.latency)} ms</span>}
       <Icon name="chevron" size={18}/>
     </button>
+    <ModeCard state={state} working={working} prefs={prefs}/>
     {account && <section className={`card plan-card ${renewSoon ? 'warn' : ''}`} aria-label="套餐">
       <div className="plan-line"><strong>{left.text}</strong>{quota > 0n && state.showTrafficSummary && <span>已用 {gb(used)} / {gb(quota)}</span>}</div>
       {quota > 0n && state.showTrafficSummary && <div className="progress" role="progressbar" aria-label="流量用量" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${percent}%` }}/></div>}
@@ -235,7 +254,7 @@ function App() {
   if (!state) return <div className="loading"><BrandMark size={48}/><p>{toast ?? '正在打开…'}</p></div>;
   return <div className="app">
     {state.loggedIn && <header className="topbar"><span className="brand"><BrandMark size={24}/>{state.brand}</span>{state.demo && <span className="chip">预览</span>}<button className="icon-button" aria-label="设置" onClick={() => open('settings')}><Icon name="settings"/></button></header>}
-    {state.loggedIn ? <Home state={state} busy={busy} run={run} open={open}/> : <Login state={state} busy={busy} run={run}/>}
+    {state.loggedIn ? <Home state={state} busy={busy} run={run} open={open} prefs={prefs}/> : <Login state={state} busy={busy} run={run}/>}
     {sheet === 'nodes' && <NodeSheet state={state} close={() => setSheet(null)} run={run}/>}
     {sheet === 'settings' && <SettingsSheet state={state} busy={busy} report={report} close={() => setSheet(null)} run={run} prefs={prefs}/>}
     {toast && <div className="toast" role="alert"><span>{toast}</span><button className="icon-button" aria-label="关闭提示" onClick={() => setToast(null)}><Icon name="close" size={16}/></button></div>}

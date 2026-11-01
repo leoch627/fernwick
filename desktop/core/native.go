@@ -304,7 +304,9 @@ func (n *NativeDriver) repair(ctx context.Context) error {
 		if systemRoot == "" {
 			systemRoot = `C:\Windows`
 		}
-		script := `$p=Start-Process -FilePath $env:STARRAIL_HELPER -ArgumentList ('install --app "'+$env:STARRAIL_APP+'"') -Verb RunAs -Wait -PassThru; exit $p.ExitCode`
+		// The helper is a console program: without a hidden window the elevated install
+		// shows an empty console, and closing it kills the install halfway.
+		script := `$p=Start-Process -FilePath $env:STARRAIL_HELPER -ArgumentList ('install --app "'+$env:STARRAIL_APP+'"') -Verb RunAs -WindowStyle Hidden -Wait -PassThru; exit $p.ExitCode`
 		command = exec.CommandContext(installCtx, filepath.Join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"), "-NoProfile", "-NonInteractive", "-Command", script)
 		command.Env = append(os.Environ(), "STARRAIL_HELPER="+path, "STARRAIL_APP="+n.appRoot)
 	default:

@@ -20,7 +20,9 @@ GitHub Actions 的 package-development.yml 提供手动启动的四目标打包�
 - Windows NSIS 安装到系统目录，注册 <productId> LocalSystem 服务。每位用户的凭据仍保存在各自的数据目录。
 - macOS 将 app 放进 /Applications，首次连接或“修复”通过系统授权安装 launchd 服务；代码文件由 root 持有。
 
-实际连接才接管网络，GUI 不需要长期以管理员/root 运行。应用可执行文件 hash（覆盖内嵌 UI）、核心 hash 和构建 ID 固定在安装记录中，修复重建匹配记录。
+实际连接才接管网络，GUI 不需要长期以管理员/root 运行。只有 TUN 模式需要服务；默认的系统代理模式不安装服务，也不请求管理员权限。Windows 安装或修复服务时，提权的 helper 以隐藏窗口运行，不再出现空白命令行窗口（关闭它会中断安装）。
+
+helper 另有两个非特权工作模式，由应用以子进程启动并绑定父进程：`probe-core` 用于节点测速（15 秒上限），`proxy-core` 用于系统代理模式（随应用存活，只接受回环 mixed/socks 入站，配置上限 32 MB）。两者都校验核心哈希，核心与工作进程同进程组（Windows 为同一作业对象），应用结束时一起退出。应用可执行文件 hash（覆盖内嵌 UI）、核心 hash 和构建 ID 固定在安装记录中，修复重建匹配记录。
 
 ## 离线修复与卸载
 
