@@ -60,6 +60,42 @@ class PackagingContracts(unittest.TestCase):
         self.assertIn('helper.exe" uninstall', script)
         self.assertNotIn('isUpdated', script)
 
+    def test_installer_uses_the_app_icon_and_makes_shortcuts(self):
+        script = (ROOT / 'packaging/windows/installer.nsi').read_text()
+        for line in ['!define MUI_ICON "@ICON@"', '!define MUI_UNICON "@ICON@"', '!define MUI_WELCOMEFINISHPAGE_BITMAP "@WIZARD@"']:
+            self.assertIn(line, script)
+        self.assertIn('CreateShortcut "$DESKTOP\\@PRODUCT_NAME@.lnk"', script)
+        # Recorded only once the file exists, under a value the broken updates never wrote.
+        self.assertIn('${If} ${FileExists} "$DESKTOP\\@PRODUCT_NAME@.lnk"\n    WriteRegDWORD HKLM "${UNINSTALL_KEY}" "DesktopShortcutMade" 1', script)
+        self.assertNotIn('"DesktopShortcut" 1', script)
+
+    def test_icon_file_holds_every_size(self):
+        import struct
+        data = packager.ico_bytes(ROOT / 'resources/icon.png')
+        reserved, kind, count = struct.unpack('<HHH', data[:6])
+        self.assertEqual((reserved, kind, count), (0, 1, 7))
+        sizes = []
+        for i in range(count):
+            width, height, _, _, planes, bits, length, offset = struct.unpack('<BBBBHHII', data[6 + 16 * i:22 + 16 * i])
+            size = width or 256
+            sizes.append(size)
+            self.assertEqual((width, height, planes, bits), (size % 256, size % 256, 1, 32))
+            body = data[offset:offset + length]
+            self.assertEqual(len(body), length)
+            if size == 256:
+                self.assertTrue(body.startswith(b'\x89PNG'))
+            else:
+                self.assertEqual(struct.unpack('<Iii', body[:12]), (40, size, size * 2))
+                # Corners are transparent, the centre is the mark.
+                stride = size * 4
+                self.assertEqual(body[40 + 3], 0)
+                centre = 40 + (size // 2) * stride + (size // 2) * 4
+                self.assertEqual(body[centre + 3], 255)
+        self.assertEqual(sizes, [16, 24, 32, 48, 64, 128, 256])
+        bitmap = packager.wizard_bmp(ROOT / 'resources/icon.png')
+        self.assertEqual(bitmap[:2], b'BM')
+        self.assertEqual(struct.unpack('<iiHH', bitmap[18:30]), (164, 314, 1, 24))
+
 
 if __name__ == '__main__':
     unittest.main()
