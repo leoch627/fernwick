@@ -72,9 +72,22 @@ func machineLock() (io.Closer, error) {
 	}
 	return file, nil
 }
+
+// prepareSocketDir creates the socket's directory readable by everyone. The service
+// runs with umask 077, so MkdirAll alone leaves it 0700 and the app, running as the
+// user, cannot reach the socket however open the socket itself is.
+func prepareSocketDir(dir string) error {
+	if e := os.MkdirAll(dir, 0755); e != nil {
+		return e
+	}
+	if info, e := os.Lstat(dir); e != nil || !info.IsDir() {
+		return failure("PERMISSION_REQUIRED")
+	}
+	return os.Chmod(dir, 0755)
+}
 func listenIPC() (net.Listener, error) {
 	path := socketPath()
-	if e := os.MkdirAll(filepath.Dir(path), 0755); e != nil {
+	if e := prepareSocketDir(filepath.Dir(path)); e != nil {
 		return nil, e
 	}
 	if value, e := os.Lstat(path); e == nil {

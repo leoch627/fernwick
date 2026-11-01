@@ -39,7 +39,7 @@ func (s Session) Validate() error {
 	return invalidUnless(s.AccountID != "" && validEmail(s.Email) && boundedText(s.Token, 0, 8192) && s.Generation != "")
 }
 func (n ProxyNode) Validate() error {
-	return invalidUnless(sha256Pattern.MatchString(n.ID) && boundedText(n.Name, 0, 256) && boundedText(n.Group, 0, 256) && oneOf(n.Protocol, "vless", "vmess", "trojan", "shadowsocks", "unsupported") && boundedText(n.Host, 0, 253) && inRange(n.Port, 0, 65535) && boundedText(n.Credential, 0, 2048) && oneOf(n.Transport, "tcp", "ws") && oneOf(n.Security, "tls", "reality", "none") && oneOf(n.IPv6, "unknown", "verified") && sha256Pattern.MatchString(n.ConnectionFingerprint))
+	return invalidUnless(sha256Pattern.MatchString(n.ID) && boundedText(n.Name, 0, 256) && boundedText(n.Group, 0, 256) && oneOf(n.Protocol, "vless", "vmess", "trojan", "shadowsocks", "unsupported") && boundedText(n.Host, 0, 253) && inRange(n.Port, 0, 65535) && boundedText(n.Credential, 0, 2048) && oneOf(n.Transport, "tcp", "ws", "xhttp") && oneOf(n.Security, "tls", "reality", "none") && oneOf(n.IPv6, "unknown", "verified") && sha256Pattern.MatchString(n.ConnectionFingerprint))
 }
 func (s Snapshot) Validate() error {
 	if s.OpSeq > MaxSafeInteger || s.OpSeq < -MaxSafeInteger || len(s.Nodes) > 5000 || !inRange(s.MaxAgeAtCommitSec, 600, MaxSnapshotAgeSec) || s.QuarantinedNodeCount < 0 || !sha256Pattern.MatchString(s.ContentHash) || s.FullSyncCompletedAt > MaxSafeInteger || s.FullSyncCompletedAt < -MaxSafeInteger || s.UsableUntil > MaxSafeInteger || s.UsableUntil < -MaxSafeInteger || s.UsableUntil > s.FullSyncCompletedAt+int64(s.MaxAgeAtCommitSec)*1000 {

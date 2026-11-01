@@ -85,6 +85,27 @@ func TestCandidateValidate(t *testing.T) {
 			c.Node.Protocol, c.Node.Credential, c.Node.Security, c.Node.SNI, c.Node.Method = "shadowsocks", "password", "none", "", "rc4-md5"
 		}, "NO_COMPATIBLE_NODES"},
 		{"unknown protocol", func(c *Candidate) { c.Node.Protocol = "hysteria2" }, "NO_COMPATIBLE_NODES"},
+		{"vless ws tls", func(c *Candidate) { c.Node.Transport, c.Node.WSPath, c.Node.WSHost = "ws", "/ws", "cdn.example.com" }, ""},
+		{"vless ws tls ech", func(c *Candidate) {
+			c.Node.Transport, c.Node.WSPath, c.Node.WSHost, c.Node.ECH = "ws", "/ws", "cdn.example.com", "cloudflare-ech.com+https://1.1.1.1/dns-query"
+		}, ""},
+		{"ech with spaces", func(c *Candidate) {
+			c.Node.Transport, c.Node.WSPath, c.Node.WSHost, c.Node.ECH = "ws", "/ws", "cdn.example.com", "a b"
+		}, "NO_COMPATIBLE_NODES"},
+		{"vless ws reality", func(c *Candidate) {
+			c.Node.Security, c.Node.PublicKey, c.Node.Transport, c.Node.WSPath, c.Node.WSHost = "reality", testRealityKey, "ws", "/ws", "cdn.example.com"
+		}, "NO_COMPATIBLE_NODES"},
+		{"vless xhttp reality", func(c *Candidate) {
+			c.Node.Security, c.Node.PublicKey, c.Node.Transport, c.Node.WSPath, c.Node.Mode = "reality", testRealityKey, "xhttp", "/x", "auto"
+		}, ""},
+		{"xhttp vision", func(c *Candidate) {
+			c.Node.Security, c.Node.PublicKey, c.Node.Transport, c.Node.WSPath, c.Node.Mode, c.Node.Flow = "reality", testRealityKey, "xhttp", "/x", "auto", "xtls-rprx-vision"
+		}, "NO_COMPATIBLE_NODES"},
+		{"xhttp unknown mode", func(c *Candidate) { c.Node.Transport, c.Node.WSPath, c.Node.Mode = "xhttp", "/x", "bogus" }, "NO_COMPATIBLE_NODES"},
+		{"mode outside xhttp", func(c *Candidate) { c.Node.Mode = "auto" }, "NO_COMPATIBLE_NODES"},
+		{"shadowsocks 2022", func(c *Candidate) {
+			c.Node.Protocol, c.Node.Credential, c.Node.Security, c.Node.SNI, c.Node.Method = "shadowsocks", "c2VydmVyLWtleQ==:dXNlci1rZXk=", "none", "", "2022-blake3-aes-256-gcm"
+		}, ""},
 		{"rules schema", func(c *Candidate) { c.Rules.SchemaVersion = 1 }, "INVALID_INPUT"},
 		{"rule target", func(c *Candidate) { c.Rules.Sections = []RuleSection{{Target: "reject"}} }, "INVALID_INPUT"},
 		{"rule domain forms", func(c *Candidate) {

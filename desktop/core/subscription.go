@@ -1,6 +1,7 @@
 package core
 
 import (
+	"cmp"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -311,6 +312,11 @@ func connectionJSON(node ProxyNode, explicitFingerprint bool) string {
 		if !explicitFingerprint {
 			optional("fingerprint", node.Fingerprint)
 		}
+		// Absent for TCP nodes, so their IDs are unchanged.
+		optional("wsHost", node.WSHost)
+		optional("wsPath", node.WSPath)
+		optional("mode", node.Mode)
+		optional("ech", node.ECH)
 	}
 	b.WriteByte('}')
 	return b.String()
@@ -434,6 +440,10 @@ func canonicalURLHost(host string) string {
 	return addr.String()
 }
 
+// echValue is a base64 ECHConfigList or a DNS source for it, such as
+// "cloudflare-ech.com+https://1.1.1.1/dns-query"; Xray resolves either form.
+var echValue = regexp.MustCompile(`^[A-Za-z0-9+/=._:@-]+$`)
+
 func parseSubscriptionLine(line string, index int, options ParserOptions) (ProxyNode, error) {
 	node := ProxyNode{Group: "全部节点", Order: index, Protocol: "unsupported", Transport: "tcp", Security: "none", TCP: options.ConfirmedTCPUDP, UDP: options.ConfirmedTCPUDP, IPv6: "unknown", Source: options.Source}
 	if jsUTF16Length(line) > 16384 {
@@ -540,7 +550,7 @@ func parseSubscriptionLine(line string, index int, options ParserOptions) (Proxy
 		if err != nil {
 			return node, err
 		}
-		allowed := []string{"type", "security", "sni", "flow", "pbk", "sid", "fp", "encryption", "host", "path", "headerType", "quicSecurity", "serviceName", "insecure", "allowInsecure", "pcs", "peer"}
+		allowed := []string{"type", "security", "sni", "flow", "pbk", "sid", "fp", "encryption", "host", "path", "headerType", "quicSecurity", "serviceName", "insecure", "allowInsecure", "pcs", "peer", "mode", "ech"}
 		for key := range q {
 			if u.Scheme == "ss" || !slices.Contains(allowed, key) {
 				return node, invalidSubscription()
@@ -594,7 +604,7 @@ func parseSubscriptionLine(line string, index int, options ParserOptions) (Proxy
 			if err != nil {
 				return node, err
 			}
-			if !slices.Contains([]string{"chacha20-ietf-poly1305", "aes-128-gcm", "aes-256-gcm"}, method) {
+			if !slices.Contains([]string{"chacha20-ietf-poly1305", "aes-128-gcm", "aes-256-gcm", "2022-blake3-aes-128-gcm", "2022-blake3-aes-256-gcm", "2022-blake3-chacha20-poly1305"}, method) {
 				node.Incompatibility = nodeString("不支持的 Shadowsocks 加密方法")
 			}
 			capability = "shadowsocks-aead"
@@ -626,7 +636,9 @@ func parseSubscriptionLine(line string, index int, options ParserOptions) (Proxy
 				transport = "tcp"
 			}
 			encryption, hasEncryption := q["encryption"]
-			if transport != "tcp" || !slices.Contains([]string{"tls", "reality"}, security) || node.Protocol == "trojan" && security != "tls" || hasEncryption && encryption != "none" {
+			// VLESS also runs over WebSocket behind a CDN (TLS only) and over XHTTP (TLS or REALITY).
+			layered := node.Protocol == "vless" && (transport == "ws" && security == "tls" || transport == "xhttp")
+			if transport != "tcp" && !layered || !slices.Contains([]string{"tls", "reality"}, security) || node.Protocol == "trojan" && security != "tls" || hasEncryption && encryption != "none" {
 				node.Incompatibility = nodeString("不支持的传输或安全组合")
 			}
 			sni, err := subscriptionField(firstTruthy(q["sni"], q["peer"], node.Host), 256)
@@ -639,8 +651,38 @@ func parseSubscriptionLine(line string, index int, options ParserOptions) (Proxy
 				node.Incompatibility = nodeString("TLS serverName 字段冲突")
 			}
 			unsafe := false
-			for _, key := range []string{"host", "path", "serviceName", "pcs"} {
+			for _, key := range []string{"serviceName", "pcs"} {
 				unsafe = unsafe || q[key] != ""
+			}
+			if layered {
+				node.Transport = transport
+				path, err := subscriptionField(cmp.Or(q["path"], "/"), 2048)
+				if err != nil {
+					return node, err
+				}
+				node.WSPath = &path
+				host := q["host"]
+				if transport == "ws" {
+					host = cmp.Or(host, sni)
+				}
+				node.WSHost = &host
+				unsafe = unsafe || !strings.HasPrefix(path, "/") || host != "" && !subscriptionHost.MatchString(host)
+				if transport == "xhttp" {
+					mode := cmp.Or(q["mode"], "auto")
+					node.Mode = &mode
+					unsafe = unsafe || !slices.Contains([]string{"auto", "packet-up", "stream-up", "stream-one"}, mode)
+				}
+			} else {
+				unsafe = unsafe || q["host"] != "" || q["path"] != ""
+			}
+			unsafe = unsafe || q["mode"] != "" && transport != "xhttp"
+			if value, present := q["ech"]; present && value != "" {
+				ech, err := subscriptionField(value, 1024)
+				if err != nil {
+					return node, err
+				}
+				node.ECH = &ech
+				unsafe = unsafe || security != "tls" || !echValue.MatchString(ech)
 			}
 			for _, key := range []string{"headerType", "quicSecurity"} {
 				unsafe = unsafe || q[key] != "" && q[key] != "none"
@@ -651,7 +693,7 @@ func parseSubscriptionLine(line string, index int, options ParserOptions) (Proxy
 			if unsafe {
 				node.Incompatibility = nodeString("不支持的安全或传输参数")
 			}
-			if !slices.Contains([]string{"", "xtls-rprx-vision"}, *node.Flow) || node.Protocol == "trojan" && *node.Flow != "" {
+			if !slices.Contains([]string{"", "xtls-rprx-vision"}, *node.Flow) || *node.Flow != "" && (node.Protocol == "trojan" || node.Transport != "tcp") {
 				node.Incompatibility = nodeString("不支持的 flow")
 			}
 			if value, present := q["fp"]; present {

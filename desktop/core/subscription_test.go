@@ -3,6 +3,7 @@ package core
 import (
 	"encoding/base64"
 	"encoding/json"
+	"net/url"
 	"os"
 	"reflect"
 	"strings"
@@ -185,4 +186,62 @@ func TestSubscriptionBoundsUseUTF16AndBytes(t *testing.T) {
 	if _, err := ParseSubscription(strings.Repeat("x", 14*1024*1024+1), options); err == nil {
 		t.Error("overlarge response accepted")
 	}
+}
+
+func TestSubscriptionLayeredTransportsECHAndShadowsocks2022(t *testing.T) {
+	const id = "00000000-0000-4000-8000-000000000001"
+	key := strings.Repeat("A", 43)
+	cases := []struct {
+		name, uri       string
+		transport       string
+		path, host, ech string
+		compatible      bool
+	}{
+		{"vless ws tls", "vless://" + id + "@cdn.invalid:443?encryption=none&type=ws&host=edge.invalid&path=%2Fws&security=tls&sni=edge.invalid&fp=chrome#ws", "ws", "/ws", "edge.invalid", "", true},
+		{"ws host defaults to sni", "vless://" + id + "@cdn.invalid:443?type=ws&path=%2F&security=tls&sni=edge.invalid#ws", "ws", "/", "edge.invalid", "", true},
+		{"ws with ech", "vless://" + id + "@cdn.invalid:443?type=ws&host=edge.invalid&path=%2Fws&security=tls&sni=edge.invalid&ech=cloudflare-ech.com%2Bhttps%3A%2F%2F1.1.1.1%2Fdns-query#ech", "ws", "/ws", "edge.invalid", "cloudflare-ech.com+https://1.1.1.1/dns-query", true},
+		{"xhttp reality", "vless://" + id + "@node.invalid:443?encryption=none&type=xhttp&host=&path=%2Fx&headerType=none&quicSecurity=none&serviceName=&security=reality&fp=edge&insecure=0&sni=www.example.com&pbk=" + key + "&sid=ab&mode=auto#xhttp", "xhttp", "/x", "", "", true},
+		{"ws reality is not a thing", "vless://" + id + "@node.invalid:443?type=ws&path=%2F&security=reality&sni=www.example.com&pbk=" + key + "&sid=ab#bad", "tcp", "", "", "", false},
+		{"vision only over tcp", "vless://" + id + "@node.invalid:443?type=xhttp&path=%2Fx&security=reality&sni=www.example.com&pbk=" + key + "&sid=ab&flow=xtls-rprx-vision#bad", "xhttp", "/x", "", "", false},
+		{"unknown xhttp mode", "vless://" + id + "@node.invalid:443?type=xhttp&path=%2Fx&security=reality&sni=www.example.com&pbk=" + key + "&sid=ab&mode=bogus#bad", "xhttp", "/x", "", "", false},
+		{"ech needs tls", "vless://" + id + "@node.invalid:443?type=tcp&security=reality&sni=www.example.com&pbk=" + key + "&sid=ab&ech=AEX%2B#bad", "tcp", "", "", "AEX+", false},
+		{"path on plain tcp", "vless://" + id + "@node.invalid:443?type=tcp&path=%2Fx&security=tls&sni=node.invalid#bad", "tcp", "", "", "", false},
+		{"trojan ws stays unsupported", "trojan://secret@node.invalid:443?type=ws&path=%2F&security=tls&sni=node.invalid#bad", "tcp", "", "", "", false},
+		{"shadowsocks 2022", "ss://2022-blake3-aes-256-gcm:" + url.QueryEscape("c2VydmVyLWtleQ==:dXNlci1rZXk=") + "@node.invalid:443#ss2022", "tcp", "", "", "", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			parsed, err := ParseSubscription(tc.uri, subscriptionTestOptions())
+			if err != nil || len(parsed.Nodes) != 1 {
+				t.Fatalf("parse: %v %+v", err, parsed)
+			}
+			n := parsed.Nodes[0]
+			if n.Compatible != tc.compatible || n.Transport != tc.transport || deref(n.WSPath) != tc.path || deref(n.WSHost) != tc.host || deref(n.ECH) != tc.ech {
+				t.Fatalf("compatible=%v (%v) transport=%s path=%q host=%q ech=%q", n.Compatible, deref(n.Incompatibility), n.Transport, deref(n.WSPath), deref(n.WSHost), deref(n.ECH))
+			}
+			if !n.Compatible {
+				return
+			}
+			outbound, err := CompileOutbound(n)
+			if err != nil {
+				t.Fatal(err)
+			}
+			stream := outbound["streamSettings"].(map[string]any)
+			if tc.transport == "xhttp" && stream["xhttpSettings"].(map[string]any)["mode"] != "auto" || tc.ech != "" && stream["tlsSettings"].(map[string]any)["echConfigList"] != tc.ech {
+				t.Fatalf("stream = %v", stream)
+			}
+		})
+	}
+	// TCP nodes keep their IDs: the new fields only enter the fingerprint when present.
+	before, _ := ParseSubscription(subscriptionTestURI, subscriptionTestOptions())
+	if before.Nodes[0].WSPath != nil || before.Nodes[0].Mode != nil || before.Nodes[0].ECH != nil {
+		t.Fatal("tcp node gained layered fields")
+	}
+}
+
+func deref(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }

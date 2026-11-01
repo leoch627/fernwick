@@ -110,19 +110,42 @@ func TestProbeHTTPSAuthenticatesChecksCertificateStatusAndBody(t *testing.T) {
 	target := HealthTarget{URL: server.URL, Status: 200, BodySHA256: hex.EncodeToString(sum[:]), FailureDomain: "test"}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	if err := probeHTTPSWithTLS(ctx, auth, target, &tls.Config{RootCAs: pool}); err != nil {
+	if _, err := probeHTTPSWithTLS(ctx, auth, target, &tls.Config{RootCAs: pool}); err != nil {
 		t.Fatal(err)
 	}
 	if host := <-seen; host != u.Hostname() {
 		t.Fatal(host)
 	}
 	target.BodySHA256 = strings.Repeat("0", 64)
-	if err := probeHTTPSWithTLS(ctx, auth, target, &tls.Config{RootCAs: pool}); CodeOf(err) != "CONNECT_TIMEOUT" {
+	if _, err := probeHTTPSWithTLS(ctx, auth, target, &tls.Config{RootCAs: pool}); CodeOf(err) != "CONNECT_TIMEOUT" {
 		t.Fatal(err)
 	}
 	target.Status = 204
-	if err := probeHTTPSWithTLS(ctx, auth, target, &tls.Config{RootCAs: pool}); err == nil {
+	if _, err := probeHTTPSWithTLS(ctx, auth, target, &tls.Config{RootCAs: pool}); err == nil {
 		t.Fatal("unexpected status accepted")
+	}
+}
+func TestProbeTimesOneRoundTripOnAReusedConnection(t *testing.T) {
+	requests, connections := 0, map[string]bool{}
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		connections[r.RemoteAddr] = true
+		if requests == 1 {
+			time.Sleep(300 * time.Millisecond) // the handshake-heavy first exchange
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	u, _ := url.Parse(server.URL)
+	auth, _ := probeTestSOCKS(t, u.Host)
+	pool := x509.NewCertPool()
+	pool.AddCert(server.Certificate())
+	sum := sha256.Sum256(nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	took, err := probeHTTPSWithTLS(ctx, auth, HealthTarget{URL: server.URL, Status: 204, BodySHA256: hex.EncodeToString(sum[:])}, &tls.Config{RootCAs: pool})
+	if err != nil || requests != 2 || len(connections) != 1 || took >= 300*time.Millisecond {
+		t.Fatalf("took %v err %v requests %d connections %d", took, err, requests, len(connections))
 	}
 }
 func TestProbeHTTPSRejectsUntrustedTLS(t *testing.T) {
@@ -147,7 +170,7 @@ func TestProbeHTTPSRejectsOversizeResponse(t *testing.T) {
 	sum := sha256.Sum256([]byte(body))
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	if err := probeHTTPSWithTLS(ctx, auth, HealthTarget{URL: server.URL, Status: 200, BodySHA256: hex.EncodeToString(sum[:])}, &tls.Config{RootCAs: pool}); err == nil {
+	if _, err := probeHTTPSWithTLS(ctx, auth, HealthTarget{URL: server.URL, Status: 200, BodySHA256: hex.EncodeToString(sum[:])}, &tls.Config{RootCAs: pool}); err == nil {
 		t.Fatal("oversized response accepted")
 	}
 }
