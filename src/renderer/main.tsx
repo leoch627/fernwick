@@ -10,6 +10,8 @@ declare global { interface Window { starrail?: ClientBridge; } }
 const bridge = window.starrail ?? (isWails() ? wailsBridge() : previewBridge());
 /** Windows draws the app name and icon in its own title bar; the page does not repeat them. */
 const nativeTitle = /Windows NT/.test(navigator.userAgent);
+// Only Apple's systems draw flag emoji; elsewhere the bundled flag font does (style.css).
+if (!/Macintosh|Mac OS X|iPhone|iPad/.test(navigator.userAgent)) document.documentElement.classList.add('country-flags');
 
 // One window, three things on it: connect, pick a node, see the plan. Everything else
 // lives in the settings sheet. Most users never open it.

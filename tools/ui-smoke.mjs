@@ -149,7 +149,14 @@ try {
   await windows.getByRole('region', { name: '推荐更新' }).getByRole('button', { name: '立即更新' }).waitFor();
   assert.equal(await windows.getByRole('button', { name: '稍后提醒' }).count(), 0);
   await windows.screenshot({ path: 'work/preview-windows.png' });
+  // Windows has no flag glyphs of its own; the bundled flag font draws them.
+  assert.equal(await windows.evaluate(() => document.documentElement.classList.contains('country-flags')), true);
+  await windows.getByRole('button', { name: /^线路/ }).click();
+  await windows.getByRole('heading', { name: '选择线路' }).waitFor();
+  assert.equal(await windows.evaluate(async () => { await document.fonts.load('20px "Country Flags"', '\u{1F1EF}\u{1F1F5}'); return document.fonts.check('20px "Country Flags"', '\u{1F1EF}\u{1F1F5}'); }), true);
+  await windows.screenshot({ path: 'work/preview-windows-flags.png' });
   await windows.close();
+  assert.equal(await page.evaluate(() => document.documentElement.classList.contains('country-flags')), true);
   assert.equal(await page.locator('header.topbar').getByText(fixture.brand).count(), 1);
 
   assert.deepEqual(failures, []);

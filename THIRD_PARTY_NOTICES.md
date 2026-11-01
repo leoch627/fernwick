@@ -11,6 +11,7 @@ This project has no declared open-source license for its original application co
 | node-semver | Release version comparison | ISC |
 | TypeScript | Type checking | Apache-2.0 |
 | Vite / Vitest / esbuild / tsx | Development and build | MIT (see exact installed packages) |
+| Twemoji Country Flags font (country-flag-emoji-polyfill 0.1.10) | Country flag emoji where the system draws none (Windows, Linux) | Font build MIT (Copyright (c) 2022 TalkJS); flag artwork from Twemoji, Copyright Twitter, Inc. and other contributors, CC-BY-4.0 (https://creativecommons.org/licenses/by/4.0/), unmodified |
 | go-winres | Windows application icon, manifest and version resources at build time | MIT |
 | Playwright Core | Browser preview tests | Apache-2.0 |
 | Go / golang.org/x/sys | Desktop/helper toolchain and OS interfaces | BSD-3-Clause; bundled license in licenses/golang-x-sys-BSD.txt |

@@ -1,5 +1,10 @@
 @import './tokens.css';
+/* Windows draws no country flags: its emoji font shows the two letters instead. Twemoji's
+   flags (country-flag-emoji-polyfill 0.1.10, CC-BY-4.0 artwork) fill in for exactly those
+   code points, on every platform but Apple's, which has flags of its own. */
+@font-face{font-family:"Country Flags";src:url(./fonts/TwemojiCountryFlags.woff2) format("woff2");unicode-range:U+1F1E6-1F1FF,U+1F3F4,U+E0062-E0063,U+E0065,U+E0067,U+E006C,U+E006E,U+E0073-E0074,U+E0077,U+E007F;font-display:block}
 :root{--green:#2e9d63;--green-tint:#e7f6ee;--red:#c8463c;--amber:#b7791f;--radius:16px;font:15px/1.5 system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+:root.country-flags{font-family:"Country Flags",system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
 :root[data-theme=dark]{--green:#55c98a;--green-tint:#1d3328;--red:#ef7a70;--amber:#e3b05c}
 @media(prefers-color-scheme:dark){:root[data-theme=system]{--green:#55c98a;--green-tint:#1d3328;--red:#ef7a70;--amber:#e3b05c}}
 *{box-sizing:border-box}
