@@ -182,9 +182,14 @@ type Preferences struct {
 	LaunchAtLogin bool    `json:"launchAtLogin"`
 	CloseBehavior string  `json:"closeBehavior"`
 	Theme         string  `json:"theme"`
+	// Tunnel is how traffic reaches the core: "proxy" sets the system proxy and needs no
+	// administrator rights; "tun" captures every app through the network service.
+	// Files written before these fields existed load with the defaults.
+	Tunnel  string `json:"tunnel" default:"\"proxy\""`
+	AdBlock bool   `json:"adBlock" default:"true"`
 }
 
-var DefaultPreferences = Preferences{Mode: "rule", CloseBehavior: "tray", Theme: "system"}
+var DefaultPreferences = Preferences{Mode: "rule", CloseBehavior: "tray", Theme: "system", Tunnel: "proxy", AdBlock: true}
 
 // Command is decoded with ParseCommand, which enforces its discriminated shape.
 type Command struct {
@@ -403,5 +408,5 @@ func (p Policy) Validate() error {
 	return nil
 }
 func (p Preferences) Validate() error {
-	return invalidUnless(oneOf(p.Mode, "rule", "global") && nullableCheck(p.NodeID, textField) && oneOf(p.CloseBehavior, "tray", "ask") && oneOf(p.Theme, "light", "dark", "system"))
+	return invalidUnless(oneOf(p.Mode, "rule", "global") && nullableCheck(p.NodeID, textField) && oneOf(p.CloseBehavior, "tray", "ask") && oneOf(p.Theme, "light", "dark", "system") && oneOf(p.Tunnel, "proxy", "tun"))
 }

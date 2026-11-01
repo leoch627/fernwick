@@ -153,6 +153,15 @@ func main() {
 		}
 		return
 	}
+	if (len(args) == 2 || len(args) == 3) && args[0] == "proxy-core" {
+		if len(args) == 3 && args[2] != "--check" {
+			os.Exit(1)
+		}
+		if e := proxyWorker(args[1], len(args) == 3); e != nil {
+			os.Exit(1)
+		}
+		return
+	}
 	if len(args) == 1 && args[0] == "version" {
 		fmt.Printf("%s helper %s protocol %d build %s\n", build.DisplayName, build.Version, protocolVersion, build.BuildID)
 		return

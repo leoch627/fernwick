@@ -45,6 +45,17 @@ try {
   await page.getByRole('heading', { name: '选择线路' }).waitFor({ state: 'detached' });
   await page.getByText('Singapore 01', { exact: true }).waitFor();
 
+  // Home: system proxy by default; TUN and ad blocking are one click away.
+  assert.equal(await page.getByRole('radio', { name: '系统代理' }).getAttribute('aria-checked'), 'true');
+  await page.getByRole('radio', { name: 'TUN 模式' }).click();
+  assert.equal(await page.getByRole('radio', { name: 'TUN 模式' }).getAttribute('aria-checked'), 'true');
+  await page.getByText(/第一次需要管理员授权/).waitFor();
+  assert.equal(await page.getByRole('switch', { name: '广告拦截' }).getAttribute('aria-checked'), 'true');
+  await page.getByRole('switch', { name: '广告拦截' }).click();
+  assert.equal(await page.getByRole('switch', { name: '广告拦截' }).getAttribute('aria-checked'), 'false');
+  await page.getByRole('radio', { name: '系统代理' }).click();
+  await page.getByText(/不需要管理员授权/).waitFor();
+
   // Settings: global mode is a switch, and without an endpoint a report falls back to a file.
   await page.getByRole('button', { name: '设置' }).click();
   await page.getByRole('switch', { name: '全局代理' }).click();
@@ -97,6 +108,20 @@ try {
   assert.deepEqual((await other.evaluate(() => window.__commands)).filter(value => value !== 'state'), ['install-update', 'report']);
   await other.close();
 
+  // Connected in system proxy mode shows the local port; a system proxy failure offers TUN.
+  const proxied = await browser.newPage({ viewport: { width: 420, height: 700 } });
+  proxied.on('pageerror', error => failures.push(error.message));
+  await proxied.addInitScript(fakeBridge, { ...fixture, connection: 'Connected', proxyPort: 7890 });
+  await proxied.goto('http://127.0.0.1:5173/');
+  await proxied.getByText(/本机端口 7890/).waitFor();
+  assert.equal(await proxied.getByRole('radio', { name: '系统代理' }).isDisabled(), false);
+  await proxied.evaluate(() => window.__set({ connection: 'Disconnected', proxyPort: 0, error: 'SYSTEM_PROXY_FAILED' }));
+  await proxied.getByRole('status').filter({ hasText: '没能设置系统代理' }).waitFor();
+  await proxied.getByRole('status').getByRole('button', { name: '改用 TUN 模式' }).click();
+  await proxied.waitForFunction(() => window.__commands.includes('connect'));
+  assert.deepEqual((await proxied.evaluate(() => window.__commands)).filter(value => value !== 'state'), ['preferences', 'connect']);
+  await proxied.close();
+
   assert.deepEqual(failures, []);
-  console.log('UI smoke passed: connection refusal with next step, grouped node selection, settings switches, report fallback, dark and narrow layouts, login, text-only announcements, renewal warning, one-click update and report code; no page errors.');
+  console.log('UI smoke passed: connection refusal with next step, grouped node selection, tunnel and ad blocking switches, system proxy port and fallback, settings switches, report fallback, dark and narrow layouts, login, text-only announcements, renewal warning, one-click update and report code; no page errors.');
 } finally { await browser.close(); await server.close(); }

@@ -12,6 +12,7 @@ export const messages = {
   PERMISSION_REQUIRED: '需要系统网络权限', NETWORK_CONFLICT: '另一会话正在接管网络',
   COMPONENTS_UNAVAILABLE: '网络组件不可用，请安装完整客户端或修复组件',
   CONNECT_TIMEOUT: '连接未成功', NETWORK_RECOVERY_REQUIRED: '网络恢复未完成，请修复',
+  SYSTEM_PROXY_FAILED: '系统代理设置未成功',
   CLOCK_UNTRUSTED: '时间状态异常，请校正系统时间后在线刷新',
   CONFIGURATION_REQUIRED: '尚未配置并确认真实面板合同',
   POLICY_INVALID: '运营策略未通过验证，保留此前有效设置',

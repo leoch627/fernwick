@@ -67,7 +67,7 @@ export class NativeDriver implements NetworkDriver {
         if (process.platform === 'linux') await execute('/usr/bin/pkexec', [helper, 'install', '--app', this.appRoot], { timeout: 180000, maxBuffer: 4096 });
         else if (process.platform === 'darwin') { const quote = (value: string) => "'" + value.replaceAll("'", "'\\''") + "'"; const command = `${quote(helper)} install --app ${quote(this.appRoot)}`; await execute('/usr/bin/osascript', ['-e', `do shell script ${JSON.stringify(command)} with administrator privileges`], { timeout: 180000, maxBuffer: 4096 }); }
         else if (process.platform === 'win32') {
-          const script = `$p=Start-Process -FilePath $env:STARRAIL_HELPER -ArgumentList ('install --app "'+$env:STARRAIL_APP+'"') -Verb RunAs -Wait -PassThru; exit $p.ExitCode`;
+          const script = `$p=Start-Process -FilePath $env:STARRAIL_HELPER -ArgumentList ('install --app "'+$env:STARRAIL_APP+'"') -Verb RunAs -WindowStyle Hidden -Wait -PassThru; exit $p.ExitCode`;
           await execute(join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'), ['-NoProfile', '-NonInteractive', '-Command', script], { env: { ...process.env, STARRAIL_HELPER: helper, STARRAIL_APP: this.appRoot }, windowsHide: true, timeout: 180000, maxBuffer: 4096 });
         } else throw new Error('platform');
       } catch { throw new AppError('PERMISSION_REQUIRED'); }

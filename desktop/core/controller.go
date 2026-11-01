@@ -499,7 +499,7 @@ func (c *ClientController) View() AppView {
 	defer c.mu.Unlock()
 	now := c.clock.Now()
 	gate := c.gateLocked()
-	view := AppView{Brand: c.deps.Build.Name, Version: c.deps.Version, Environment: c.deps.Build.Environment, Demo: c.deps.Demo, LoggedIn: c.session != nil, Connection: network.State, SelectedNode: c.preferences.NodeID, ActualNode: c.actualNode, Sync: c.syncStatus, Nodes: []NodeView{}, Preferences: c.preferences, Storage: storage, HelperReady: c.network.Ready(), Policy: "使用内置设置", Update: c.updateStatus, ManualUpdate: c.manualUpdateLocked(), PendingRenewal: c.renewalUntil > now, Download: download, Rules: rules, ShowTrafficSummary: true, Links: ViewLinks{c.linkLocked("website", p) != nil, c.linkLocked("renew", p) != nil, c.linkLocked("help", p) != nil}, Report: c.report, ReportAvailable: c.deps.Telemetry.Enabled(), Now: now}
+	view := AppView{Brand: c.deps.Build.Name, Version: c.deps.Version, Environment: c.deps.Build.Environment, Demo: c.deps.Demo, LoggedIn: c.session != nil, Connection: network.State, SelectedNode: c.preferences.NodeID, ActualNode: c.actualNode, Sync: c.syncStatus, Nodes: []NodeView{}, Preferences: c.preferences, Storage: storage, HelperReady: c.network.Ready(), ProxyPort: c.network.ProxyPort(), Policy: "使用内置设置", Update: c.updateStatus, ManualUpdate: c.manualUpdateLocked(), PendingRenewal: c.renewalUntil > now, Download: download, Rules: rules, ShowTrafficSummary: true, Links: ViewLinks{c.linkLocked("website", p) != nil, c.linkLocked("renew", p) != nil, c.linkLocked("help", p) != nil}, Report: c.report, ReportAvailable: c.deps.Telemetry.Enabled(), Now: now}
 	if c.failure != "" {
 		e := c.failure
 		view.Error = &e
@@ -920,16 +920,15 @@ func (c *ClientController) connect(ctx context.Context) error {
 	policyGeneration := c.policy.Generation()
 	networkGeneration := c.network.View().Generation
 	nodes := append([]ProxyNode{}, c.snapshot.Nodes...)
-	manual, current := c.preferences.NodeID, c.actualNode
+	manual, current, tunnel := c.preferences.NodeID, c.actualNode, c.preferences.Tunnel
 	c.mu.Unlock()
-	if !c.network.Ready() {
-		if driver, ok := c.deps.NetworkDriver.(interface{ EnsureReady(context.Context) error }); ok {
-			if err := driver.EnsureReady(ctx); err != nil {
-				return err
-			}
+	// Only TUN needs the network service; system proxy mode never asks for a password.
+	if !c.network.ReadyFor(tunnel) {
+		if err := c.network.EnsureReadyFor(ctx, tunnel); err != nil {
+			return err
 		}
 	}
-	if !c.network.Ready() {
+	if !c.network.ReadyFor(tunnel) {
 		return NewAppError("COMPONENTS_UNAVAILABLE")
 	}
 	fresh := func() bool {
@@ -953,15 +952,18 @@ func (c *ClientController) connect(ctx context.Context) error {
 		c.mu.Unlock()
 		return NewAppError("CANCELLED")
 	}
-	mode, until := c.preferences.Mode, c.snapshot.UsableUntil
+	mode, until, adBlock := c.preferences.Mode, c.snapshot.UsableUntil, c.preferences.AdBlock
 	c.mu.Unlock()
 	rules := EmptyRules()
 	if c.deps.Resources != nil {
 		rules = c.deps.Resources.Rules()
 	}
+	if !adBlock {
+		rules = rules.WithoutTarget("block")
+	}
 	automatic := manual == nil
 	pool := ConnectionPool(nodes, node, automatic, c.policy.Active())
-	err = c.network.Connect(ctx, Candidate{Node: node, Pool: pool, Automatic: automatic, Mode: mode, Rules: rules, AuthorizedUntil: until}, func() bool {
+	err = c.network.Connect(ctx, Candidate{Node: node, Pool: pool, Automatic: automatic, Mode: mode, Tunnel: tunnel, Rules: rules, AuthorizedUntil: until}, func() bool {
 		c.mu.Lock()
 		intentCurrent := c.intentGeneration == userIntent
 		c.mu.Unlock()
@@ -1337,13 +1339,20 @@ func (c *ClientController) execute(ctx context.Context, cmd Command) error {
 	case "report":
 		return c.sendReport(ctx, cmd.Note)
 	case "repair":
+		c.mu.Lock()
+		tunnel := c.preferences.Tunnel
+		c.mu.Unlock()
 		driver, ok := c.deps.NetworkDriver.(interface{ Repair(context.Context) error })
-		if !ok {
+		if !ok && tunnel == "tun" {
 			return NewAppError("COMPONENTS_UNAVAILABLE")
 		}
+		// Disconnecting restores the system proxy and network settings. Only TUN mode
+		// goes on to reinstall the network service, which asks for a password.
 		_ = c.network.Disconnect(ctx)
-		if err := driver.Repair(ctx); err != nil {
-			return err
+		if ok && tunnel == "tun" {
+			if err := driver.Repair(ctx); err != nil {
+				return err
+			}
 		}
 		if err := c.network.Disconnect(ctx); err != nil {
 			return err
@@ -1411,7 +1420,7 @@ func (c *ClientController) execute(ctx context.Context, cmd Command) error {
 				return err
 			}
 		}
-		reconnect := (change.Mode != before.Mode || selectedID(change.NodeID) != selectedID(before.NodeID)) && c.network.View().DesiredConnected
+		reconnect := (change.Mode != before.Mode || change.Tunnel != before.Tunnel || change.AdBlock != before.AdBlock || selectedID(change.NodeID) != selectedID(before.NodeID)) && c.network.View().DesiredConnected
 		if reconnect {
 			if err := c.network.Disconnect(ctx); err != nil {
 				return err
@@ -1669,7 +1678,10 @@ func (c *ClientController) NativeFailure(ctx context.Context, code ErrorCode) er
 			return err
 		}
 	}
-	if c.network.Ready() && c.sessionCurrent(session) && c.network.View().Generation == generation && c.gate() == "" && !c.maintenance(c.now()) {
+	c.mu.Lock()
+	tunnel := c.preferences.Tunnel
+	c.mu.Unlock()
+	if c.network.ReadyFor(tunnel) && c.sessionCurrent(session) && c.network.View().Generation == generation && c.gate() == "" && !c.maintenance(c.now()) {
 		recovery.err = c.connect(ctx)
 		return recovery.err
 	}
@@ -1717,7 +1729,7 @@ func (c *ClientController) Stop(ctx context.Context) error {
 func (c *ClientController) recordConnect(err error, took time.Duration) {
 	network := c.network.View()
 	c.mu.Lock()
-	fields := map[string]any{"ok": err == nil, "ms": took.Milliseconds(), "mode": c.preferences.Mode, "automatic": c.preferences.NodeID == nil, "stage": network.Stage, "helper": c.network.Ready()}
+	fields := map[string]any{"ok": err == nil, "ms": took.Milliseconds(), "mode": c.preferences.Mode, "tunnel": c.preferences.Tunnel, "adBlock": c.preferences.AdBlock, "automatic": c.preferences.NodeID == nil, "stage": network.Stage, "helper": c.network.Ready()}
 	if err != nil {
 		fields["code"] = string(CodeOf(err))
 	}

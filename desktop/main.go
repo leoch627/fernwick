@@ -331,7 +331,18 @@ func run() error {
 			go s.controller.NativeFailure(ctx, code)
 		}
 	})
-	var driver core.NetworkDriver = native
+	probeManifest := manifest
+	if !production {
+		probeManifest.Components = slices.DeleteFunc(append([]core.NativeComponent{}, manifest.Components...), func(component core.NativeComponent) bool { return component.Type == "helper" })
+	}
+	coreRuntime, _ := core.LoadCoreRuntime(filepath.Join(resources, "native"), probeManifest)
+	// System proxy mode runs the core as the user; TUN mode goes through the network service.
+	proxy := core.NewProxyDriver(coreRuntime, core.NewSystemProxy(), filepath.Join(dataDir, "system-proxy.json"), build.HealthTargets, func(code core.ErrorCode) {
+		if s.controller != nil {
+			go s.controller.NativeFailure(ctx, code)
+		}
+	})
+	var driver core.NetworkDriver = core.NewTunnelDriver(proxy, native)
 	// Events go straight out (not through the helper): reports can exceed its control body limit.
 	telemetry := core.NewTelemetry(build, filepath.Join(dataDir, "telemetry.json"), core.NewDirectHTTPSTransportTimeout(30*time.Second), func() core.TelemetryInfo {
 		info := core.TelemetryInfo{Version: strings.TrimSpace(string(version)), Platform: runtime.GOOS, Arch: runtime.GOARCH}
@@ -365,11 +376,6 @@ func run() error {
 	if saved, e := reminderStore.Load(); e == nil && saved != nil {
 		_ = reminders.Restore(*saved)
 	}
-	probeManifest := manifest
-	if !production {
-		probeManifest.Components = slices.DeleteFunc(append([]core.NativeComponent{}, manifest.Components...), func(component core.NativeComponent) bool { return component.Type == "helper" })
-	}
-	coreRuntime, _ := core.LoadCoreRuntime(filepath.Join(resources, "native"), probeManifest)
 	deps := core.ControllerDeps{
 		Build: build, Version: strings.TrimSpace(string(version)), Panel: panel, Demo: demo, NetworkDriver: driver, Installer: shellInstaller{native, s.app.Quit}, HTTP: transport,
 		Secure:       core.NewSecureStore[core.Persisted](filepath.Join(dataDir, "session.v2.enc"), key),

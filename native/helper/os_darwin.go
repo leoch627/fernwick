@@ -26,6 +26,10 @@ func signalContext() (context.Context, context.CancelFunc) {
 	return signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 }
 func configureChild(c *exec.Cmd) { c.SysProcAttr = &syscall.SysProcAttr{Setpgid: true} }
+
+// configureWorkerChild keeps an unprivileged worker's core in the worker's process
+// group, so the application's signal to that group reaches the core as well.
+func configureWorkerChild(*exec.Cmd) {}
 func processBirth(pid int) (string, error) {
 	p, e := unix.SysctlKinfoProc("kern.proc.pid", pid)
 	if e != nil {

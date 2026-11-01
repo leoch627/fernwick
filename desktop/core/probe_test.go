@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
@@ -110,19 +111,42 @@ func TestProbeHTTPSAuthenticatesChecksCertificateStatusAndBody(t *testing.T) {
 	target := HealthTarget{URL: server.URL, Status: 200, BodySHA256: hex.EncodeToString(sum[:]), FailureDomain: "test"}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	if err := probeHTTPSWithTLS(ctx, auth, target, &tls.Config{RootCAs: pool}); err != nil {
+	if _, err := probeHTTPSWithTLS(ctx, auth, target, &tls.Config{RootCAs: pool}); err != nil {
 		t.Fatal(err)
 	}
 	if host := <-seen; host != u.Hostname() {
 		t.Fatal(host)
 	}
 	target.BodySHA256 = strings.Repeat("0", 64)
-	if err := probeHTTPSWithTLS(ctx, auth, target, &tls.Config{RootCAs: pool}); CodeOf(err) != "CONNECT_TIMEOUT" {
+	if _, err := probeHTTPSWithTLS(ctx, auth, target, &tls.Config{RootCAs: pool}); CodeOf(err) != "CONNECT_TIMEOUT" {
 		t.Fatal(err)
 	}
 	target.Status = 204
-	if err := probeHTTPSWithTLS(ctx, auth, target, &tls.Config{RootCAs: pool}); err == nil {
+	if _, err := probeHTTPSWithTLS(ctx, auth, target, &tls.Config{RootCAs: pool}); err == nil {
 		t.Fatal("unexpected status accepted")
+	}
+}
+func TestProbeTimesOneRoundTripOnAReusedConnection(t *testing.T) {
+	requests, connections := 0, map[string]bool{}
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		connections[r.RemoteAddr] = true
+		if requests == 1 {
+			time.Sleep(300 * time.Millisecond) // the handshake-heavy first exchange
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	u, _ := url.Parse(server.URL)
+	auth, _ := probeTestSOCKS(t, u.Host)
+	pool := x509.NewCertPool()
+	pool.AddCert(server.Certificate())
+	sum := sha256.Sum256(nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	took, err := probeHTTPSWithTLS(ctx, auth, HealthTarget{URL: server.URL, Status: 204, BodySHA256: hex.EncodeToString(sum[:])}, &tls.Config{RootCAs: pool})
+	if err != nil || requests != 2 || len(connections) != 1 || took >= 300*time.Millisecond {
+		t.Fatalf("took %v err %v requests %d connections %d", took, err, requests, len(connections))
 	}
 }
 func TestProbeHTTPSRejectsUntrustedTLS(t *testing.T) {
@@ -147,7 +171,7 @@ func TestProbeHTTPSRejectsOversizeResponse(t *testing.T) {
 	sum := sha256.Sum256([]byte(body))
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	if err := probeHTTPSWithTLS(ctx, auth, HealthTarget{URL: server.URL, Status: 200, BodySHA256: hex.EncodeToString(sum[:])}, &tls.Config{RootCAs: pool}); err == nil {
+	if _, err := probeHTTPSWithTLS(ctx, auth, HealthTarget{URL: server.URL, Status: 200, BodySHA256: hex.EncodeToString(sum[:])}, &tls.Config{RootCAs: pool}); err == nil {
 		t.Fatal("oversized response accepted")
 	}
 }
@@ -278,6 +302,136 @@ func TestCoreSmoke(t *testing.T) {
 		}
 	}
 	t.Run("encrypted-loopback", func(t *testing.T) { testCoreEncryptedLoopback(t, core) })
+	t.Run("system-proxy", func(t *testing.T) { testSystemProxySmoke(t, core) })
+	t.Run("system-proxy-node-shapes", func(t *testing.T) { testSystemProxyNodeShapes(t, core) })
+}
+
+// testSystemProxyNodeShapes has the pinned core accept a system proxy pool holding the
+// layered transports and ciphers the parser supports, with the bundled rules.
+func testSystemProxyNodeShapes(t *testing.T, core *CoreRuntime) {
+	id, key := "00000000-0000-4000-8000-000000000001", "abcdefghijklmnopqrstuvwxyzABCDEFGHIJ0123456"
+	nodes := []ProxyNode{}
+	for _, uri := range []string{
+		"vless://" + id + "@hk.example.com:443?security=tls&type=tcp&sni=hk.example.com#tcp",
+		"vless://" + id + "@cdn.example.com:443?type=ws&host=edge.example.com&path=%2Fws&security=tls&sni=edge.example.com&ech=cloudflare-ech.com%2Bhttps%3A%2F%2F1.1.1.1%2Fdns-query#ws-ech",
+		"vless://" + id + "@de.example.com:443?encryption=none&type=xhttp&path=%2Fx&security=reality&fp=edge&sni=www.example.com&pbk=" + key + "&sid=ab&mode=auto#xhttp",
+		"ss://2022-blake3-aes-256-gcm:" + url.QueryEscape("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=") + "@tw.example.com:443#ss2022",
+	} {
+		nodes = append(nodes, proxyTestNode(t, uri))
+	}
+	raw, err := os.ReadFile("../../resources/rules/baseline.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rules Rules
+	if err = DecodeStrict(raw, &rules, 64*1024*1024); err != nil {
+		t.Fatal(err)
+	}
+	config, err := CompileSystemProxy(Candidate{Node: nodes[0], Pool: nodes[1:], Automatic: true, Mode: "rule", Tunnel: "proxy", Rules: rules}, proxyTestPorts())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if outbounds := config["outbounds"].([]any); len(outbounds) != len(nodes)+3 {
+		t.Fatalf("a node was left out: %d outbounds", len(outbounds))
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	check, err := core.launchProxy(ctx, config, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-check.done
+	if check.err != nil {
+		t.Fatalf("core rejected the system proxy pool: %v", check.err)
+	}
+}
+
+// testSystemProxySmoke connects in system proxy mode with the bundled rules through a
+// local Shadowsocks node, then checks the loopback port, the journal and the restore.
+func testSystemProxySmoke(t *testing.T, core *CoreRuntime) {
+	web := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(204) }))
+	defer web.Close()
+	roots := x509.NewCertPool()
+	roots.AddCert(web.Certificate())
+	core.probeTLS = &tls.Config{RootCAs: roots}
+	defer func() { core.probeTLS = nil }()
+	port, err := availableProbePort()
+	if err != nil {
+		t.Fatal(err)
+	}
+	password := "ephemeral-loopback-password-123456789"
+	serverConfig := map[string]any{"log": map[string]any{"loglevel": "none", "access": "none", "error": "none"}, "inbounds": []any{map[string]any{"protocol": "shadowsocks", "listen": "127.0.0.1", "port": port, "settings": map[string]any{"method": "aes-128-gcm", "password": password, "network": "tcp,udp"}}}, "outbounds": []any{map[string]any{"protocol": "freedom", "settings": map[string]any{"finalRules": []any{map[string]any{"action": "allow", "ip": []string{"127.0.0.1/32"}}}}}}}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	server, err := core.launch(ctx, serverConfig, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer server.stop()
+	if err = waitProbeListener(ctx, port, server.done); err != nil {
+		t.Fatal(err)
+	}
+	node := proxyTestNode(t, "ss://"+base64.RawURLEncoding.EncodeToString([]byte("aes-128-gcm:"+password))+"@127.0.0.1:"+strconv.Itoa(port)+"#local")
+	raw, err := os.ReadFile("../../resources/rules/baseline.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rules Rules
+	if err = DecodeStrict(raw, &rules, 64*1024*1024); err != nil {
+		t.Fatal(err)
+	}
+	empty := sha256.Sum256(nil)
+	targets := []HealthTarget{{URL: web.URL + "/health", Status: 204, BodySHA256: hex.EncodeToString(empty[:]), FailureDomain: "one"}, {URL: web.URL + "/second", Status: 204, BodySHA256: hex.EncodeToString(empty[:]), FailureDomain: "two"}}
+	journal := filepath.Join(t.TempDir(), "system-proxy.json")
+	system := &recordingSystemProxy{}
+	driver := NewProxyDriver(core, system, journal, targets, nil)
+	driver.preferred = 0
+	network := NewNetworkController(driver, nil)
+	candidate := Candidate{Node: node, Mode: "rule", Tunnel: "proxy", Rules: rules, AuthorizedUntil: time.Now().Add(time.Hour).UnixMilli()}
+	if err = network.Connect(ctx, candidate, nil); err != nil {
+		t.Fatalf("connect: %v (stage %s)", err, network.View().Stage)
+	}
+	local := driver.Port()
+	if network.View().State != "Connected" || local == 0 || !reflect.DeepEqual(system.history(), []string{"snapshot", "apply"}) {
+		t.Fatalf("connected state %+v port %d calls %v", network.View(), local, system.history())
+	}
+	if _, err = os.Stat(journal); err != nil {
+		t.Fatal("journal missing while the system proxy is set")
+	}
+	proxyURL, _ := url.Parse("http://127.0.0.1:" + strconv.Itoa(local))
+	client := &http.Client{Timeout: 5 * time.Second, Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL), TLSClientConfig: &tls.Config{RootCAs: roots}}}
+	response, err := client.Get(web.URL + "/through-proxy")
+	if err != nil || response.StatusCode != 204 {
+		t.Fatalf("HTTP proxy port: %v %v", response, err)
+	}
+	response.Body.Close()
+	client.CloseIdleConnections()
+	if err = network.Disconnect(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if calls := system.history(); calls[len(calls)-1] != "restore" || string(system.saved) != `{"previous":true}` {
+		t.Fatalf("restore: %v %s", calls, system.saved)
+	}
+	if _, err = os.Stat(journal); !os.IsNotExist(err) {
+		t.Fatal("journal kept after disconnect")
+	}
+	if connection, err := net.DialTimeout("tcp", "127.0.0.1:"+strconv.Itoa(local), 300*time.Millisecond); err == nil {
+		connection.Close()
+		t.Fatal("proxy port still open after disconnect")
+	}
+	// A failed proof never touches the system proxy.
+	before := len(system.history())
+	for i := range targets {
+		targets[i].Status = 200
+	}
+	if err = network.Connect(ctx, candidate, nil); CodeOf(err) != "CONNECT_TIMEOUT" {
+		t.Fatalf("unproven path connected: %v", err)
+	}
+	for _, call := range system.history()[before:] {
+		if call == "apply" {
+			t.Fatal("system proxy set before the path was proven")
+		}
+	}
 }
 
 func testCoreEncryptedLoopback(t *testing.T, core *CoreRuntime) {

@@ -141,6 +141,7 @@ func CompileOutbound(node ProxyNode) (map[string]any, error) {
 	if node.Security == "tls" {
 		tls := map[string]any{"allowInsecure": false, "fingerprint": defaultNodeString(node.Fingerprint, DefaultTLSFingerprint)}
 		optionalMapString(tls, "serverName", node.SNI)
+		optionalMapString(tls, "echConfigList", node.ECH)
 		stream["tlsSettings"] = tls
 	}
 	if node.Security == "reality" {
@@ -156,6 +157,13 @@ func CompileOutbound(node ProxyNode) (map[string]any, error) {
 		ws := map[string]any{"headers": headers}
 		optionalMapString(ws, "path", node.WSPath)
 		stream["wsSettings"] = ws
+	}
+	if node.Transport == "xhttp" {
+		xhttp := map[string]any{}
+		optionalMapString(xhttp, "path", node.WSPath)
+		optionalMapString(xhttp, "host", node.WSHost)
+		optionalMapString(xhttp, "mode", node.Mode)
+		stream["xhttpSettings"] = xhttp
 	}
 	var settings map[string]any
 	if node.Protocol == "vless" || node.Protocol == "vmess" {

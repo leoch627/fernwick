@@ -21,6 +21,8 @@ WebView 只收到脱敏 AppView；token、订阅 URL、节点凭据和原始配�
 
 | 资源 | 所有者 |
 | --- | --- |
+| 系统代理模式的 Xray 与回环代理端口 | 应用（经 helper 的非特权 proxy-core 工作进程） |
+| 系统代理设置与恢复日志 system-proxy.json | Go 协调器（ProxyDriver，当前用户权限） |
 | TUN 接口 | 固定版本 Xray |
 | Linux 策略路由、per-link resolved、nftables | systemd helper |
 | macOS split routes、DNS 比较恢复、PF anchor | launchd helper |
@@ -44,6 +46,8 @@ Go 单元/竞态测试、TypeScript 兼容对照、浏览器预览测试和产�
 Wails 外壳只加载内嵌资源，开发构建允许显式启用本机 Vite。生产 CSP 不包含开发 WebSocket。关闭到托盘会销毁 WebView 窗口，再次打开时重建；没有窗口时无需持续向 WebView 发送状态。系统钥匙串保存 32 字节数据密钥，会话以 AES-256-GCM 写入 session.v2.enc；钥匙串不可用时只留内存，有密文但无法解密时锁定。
 
 自建端点（server/）提供签名的更新索引、运营策略、规则与安装包文件、下载页，并接收遥测和问题报告。客户端按构建配置中的端点顺序请求，规则与更新包在主域名失败时按相同路径换备用域名，内容仍按签名和哈希校验。遥测由 Go 协调器排队（本地文件，最多 1000 条），每几分钟批量发送；面板请求经观察器记录域名可达性，只记主机名。问题报告在应用进程内做网络自检（系统 DNS 与 DoH 对比、TCP/TLS/HTTPS、节点 TCP），不经过原生服务。
+
+连接方式由偏好 tunnel 决定，TunnelDriver 把每次连接交给 ProxyDriver（"proxy"，默认）或 NativeDriver（"tun"），断开和启动清理两者都做。系统代理模式不经过原生服务：应用在 Go 端编译配置（127.0.0.1 上无认证的 HTTP/SOCKS mixed 端口，优先 7890，另有带随机凭据的健康检查 SOCKS 端口），路由、DNS 分流与负载均衡与 TUN 配置一致；规则模式用 IPIfNonMatch 并以地址规则收尾，名单外的域名解析后按地址分流。打包版通过 helper 的 proxy-core 工作进程运行核心：只接受回环 mixed/socks 入站和固定协议出站，校验核心哈希，应用退出即结束核心。经健康检查端口取到健康目标后，先写恢复日志再设置系统代理；断开、核心退出和下次启动时按日志恢复原设置，恢复失败保留日志并显示需要修复。修复命令在系统代理模式只做恢复，不安装原生服务。广告拦截关闭时，协调器在两种模式下都去掉 block 段。
 
 连接时原生服务收到用户节点和节点池：自动模式下 Xray 用 observatory 与 leastPing 在节点池中选路，AI 分段走只含合格地区节点的负载均衡。节点池中每个节点的地址都在准备阶段经物理网卡解析并加入绕行路由。
 

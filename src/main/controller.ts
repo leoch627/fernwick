@@ -117,7 +117,7 @@ export class ClientController {
         const saved = this.probeResults.get(n.id), result = saved?.fingerprint === n.connectionFingerprint ? saved : null;
         return { id: n.id, name: n.name, group: active?.nodeOperations.find(o => o.nodeId === n.id)?.group ?? n.group, region: n.region, protocol: n.protocol, compatible: eligible(n, active, false), reason: active?.nodeOperations.find(o => o.nodeId === n.id)?.disabledForConnection ? '运营暂时停用' : n.incompatibility, latency: result?.latency ?? null, probe: result?.state ?? 'untested' };
       }),
-      preferences: { ...this.preferences }, storage: this.deps.secure.mode, helperReady: this.network.ready,
+      preferences: { ...this.preferences }, storage: this.deps.secure.mode, helperReady: this.network.ready, proxyPort: 0,
       policy: active ? `已验证策略 v${active.policyVersion}` : '使用内置设置', announcement: active?.ui.announcement?.text ?? null,
       update: this.updateStatus, manualUpdate: this.manualUpdate, pendingRenewal: this.renewalUntil > this.clock.now(),
       download: this.deps.download?.view ?? { status: 'idle', version: null, received: 0, total: 0, error: null },

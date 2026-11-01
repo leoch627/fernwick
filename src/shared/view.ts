@@ -10,7 +10,8 @@ export interface AppView {
   sync: 'Idle' | 'Syncing' | 'Fresh' | 'UsingValidCache' | 'NeedsLogin' | 'Denied' | 'Unavailable';
   lastSync: number | null; usableUntil: number | null; error: ErrorCode | null;
   nodes: NodeView[]; preferences: Preferences; storage: 'encrypted' | 'memory' | 'locked';
-  helperReady: boolean; policy: string; announcement: string | null; update: string; manualUpdate: boolean; pendingRenewal: boolean;
+  /** Loopback HTTP/SOCKS port while connected in system proxy mode, else 0. */
+  helperReady: boolean; proxyPort: number; policy: string; announcement: string | null; update: string; manualUpdate: boolean; pendingRenewal: boolean;
   download: DownloadView; rules: string; showTrafficSummary: boolean;
   links: { website: boolean; renew: boolean; help: boolean };
   /** Problem report: the code is what the user gives to support. */
