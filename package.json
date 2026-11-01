@@ -1,6 +1,6 @@
 {
   "name": "v2board-xray-client",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "V2Board + Xray 桌面客户端（开发版本）",
   "license": "UNLICENSED",
