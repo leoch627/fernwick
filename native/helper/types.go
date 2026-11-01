@@ -34,8 +34,12 @@ type Node struct {
 	PublicKey   string `json:"publicKey,omitempty"`
 	ShortID     string `json:"shortId,omitempty"`
 	Fingerprint string `json:"fingerprint,omitempty"`
-	WSPath      string `json:"wsPath,omitempty"`
-	WSHost      string `json:"wsHost,omitempty"`
+	// WSPath and WSHost are the path and Host header for WebSocket and XHTTP.
+	WSPath string `json:"wsPath,omitempty"`
+	WSHost string `json:"wsHost,omitempty"`
+	// Mode is the XHTTP mode; ECH a TLS Encrypted Client Hello config or its DNS source.
+	Mode string `json:"mode,omitempty"`
+	ECH  string `json:"ech,omitempty"`
 	// AI marks nodes whose exit region AI services accept (not mainland China, Hong Kong or Macao).
 	AI bool `json:"ai,omitempty"`
 }
@@ -230,6 +234,9 @@ const maxPool = 63
 var targets = []string{"direct", "proxy", "ai", "block"}
 var keywordPattern = regexp.MustCompile(`^[a-z0-9.-]{1,253}$`)
 
+// echPattern is a base64 ECHConfigList or a DNS source such as "example.com+https://1.1.1.1/dns-query".
+var echPattern = regexp.MustCompile(`^[A-Za-z0-9+/=._:@-]+$`)
+
 func (c *Candidate) validate() error {
 	if c == nil || c.Mode != "rule" && c.Mode != "global" || c.AuthorizedUntil <= time.Now().UnixMilli() || c.AuthorizedUntil > time.Now().Add(maxAuthorization).UnixMilli()+2000 || len(c.Pool) > maxPool {
 		return failure("INVALID_INPUT")
@@ -245,7 +252,7 @@ func (c *Candidate) validate() error {
 	return c.Rules.validate()
 }
 func (n *Node) validate() error {
-	if !host(n.Host) || n.Port < 1 || n.Port > 65535 || len(n.Credential) < 1 || len(n.Credential) > 2048 || !contains([]string{"tcp", "ws"}, n.Transport) {
+	if !host(n.Host) || n.Port < 1 || n.Port > 65535 || len(n.Credential) < 1 || len(n.Credential) > 2048 || !contains([]string{"tcp", "ws", "xhttp"}, n.Transport) {
 		return failure("INVALID_INPUT")
 	}
 	if n.Fingerprint == "" {
@@ -262,7 +269,8 @@ func (n *Node) validate() error {
 		if !uuidPattern.MatchString(n.Credential) || !contains([]string{"tls", "reality"}, n.Security) {
 			return failure("NO_COMPATIBLE_NODES")
 		}
-		if n.Security == "reality" && (n.Transport != "tcp" || !realityKeyPattern.MatchString(n.PublicKey) || !shortIDPattern.MatchString(n.ShortID) || !contains([]string{"", "xtls-rprx-vision"}, n.Flow)) {
+		// REALITY runs over TCP or XHTTP, TLS also over WebSocket; Vision needs plain TCP.
+		if n.Security == "reality" && (n.Transport == "ws" || !realityKeyPattern.MatchString(n.PublicKey) || !shortIDPattern.MatchString(n.ShortID) || !contains([]string{"", "xtls-rprx-vision"}, n.Flow) || n.Flow != "" && n.Transport != "tcp") {
 			return failure("NO_COMPATIBLE_NODES")
 		}
 		if n.Security == "tls" && n.Flow != "" {
@@ -277,13 +285,19 @@ func (n *Node) validate() error {
 			return failure("NO_COMPATIBLE_NODES")
 		}
 	case "shadowsocks":
-		if n.Transport != "tcp" || n.Security != "none" || !contains([]string{"aes-128-gcm", "aes-256-gcm", "chacha20-ietf-poly1305"}, n.Method) {
+		if n.Transport != "tcp" || n.Security != "none" || !contains([]string{"aes-128-gcm", "aes-256-gcm", "chacha20-ietf-poly1305", "2022-blake3-aes-128-gcm", "2022-blake3-aes-256-gcm", "2022-blake3-chacha20-poly1305"}, n.Method) {
 			return failure("NO_COMPATIBLE_NODES")
 		}
 	default:
 		return failure("NO_COMPATIBLE_NODES")
 	}
 	if n.Transport == "ws" && (!strings.HasPrefix(n.WSPath, "/") || len(n.WSPath) > 2048 || strings.ContainsAny(n.WSPath, "\r\n\x00") || !host(n.WSHost)) {
+		return failure("NO_COMPATIBLE_NODES")
+	}
+	if n.Transport == "xhttp" && (n.Protocol != "vless" || !strings.HasPrefix(n.WSPath, "/") || len(n.WSPath) > 2048 || strings.ContainsAny(n.WSPath, "\r\n\x00") || n.WSHost != "" && !host(n.WSHost) || !contains([]string{"auto", "packet-up", "stream-up", "stream-one"}, n.Mode)) {
+		return failure("NO_COMPATIBLE_NODES")
+	}
+	if n.Transport != "xhttp" && n.Mode != "" || n.ECH != "" && (n.Security != "tls" || len(n.ECH) > 1024 || !echPattern.MatchString(n.ECH)) {
 		return failure("NO_COMPATIBLE_NODES")
 	}
 	return nil

@@ -334,7 +334,7 @@ func (n *NativeDriver) SetAuthorizedUntil(deadline int64) {
 // nativeNode is the helper's frozen node shape; only these fields cross the IPC boundary.
 func nativeNode(node ProxyNode) map[string]any {
 	fields := map[string]any{"protocol": node.Protocol, "host": node.Host, "port": node.Port, "credential": node.Credential, "transport": node.Transport, "security": node.Security, "ai": AICapable(node)}
-	for key, value := range map[string]*string{"method": node.Method, "sni": node.SNI, "flow": node.Flow, "publicKey": node.PublicKey, "shortId": node.ShortID, "fingerprint": node.Fingerprint, "wsPath": node.WSPath, "wsHost": node.WSHost} {
+	for key, value := range map[string]*string{"method": node.Method, "sni": node.SNI, "flow": node.Flow, "publicKey": node.PublicKey, "shortId": node.ShortID, "fingerprint": node.Fingerprint, "wsPath": node.WSPath, "wsHost": node.WSHost, "mode": node.Mode, "ech": node.ECH} {
 		if value != nil {
 			fields[key] = *value
 		}

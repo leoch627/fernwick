@@ -234,15 +234,14 @@ func (c *CoreRuntime) Probe(ctx context.Context, node ProxyNode, targets []Healt
 		return ProbeResult{}, err
 	}
 	for _, target := range targets {
-		attempt, cancel := context.WithTimeout(ctx, min(2*time.Second, budget.Remaining()))
-		started := time.Now()
-		err := probeHTTPSWithTLS(attempt, auth, target, c.probeTLS)
+		attempt, cancel := context.WithTimeout(ctx, min(3*time.Second, budget.Remaining()))
+		took, err := probeHTTPSWithTLS(attempt, auth, target, c.probeTLS)
 		cancel()
 		if ctx.Err() != nil {
 			return ProbeResult{}, NewAppError("CANCELLED")
 		}
 		if err == nil {
-			latency := float64(time.Since(started).Round(time.Millisecond) / time.Millisecond)
+			latency := float64(took.Round(time.Millisecond) / time.Millisecond)
 			return ProbeResult{Healthy: true, LatencyMs: &latency}, nil
 		}
 	}
@@ -319,16 +318,24 @@ func waitProbeListener(ctx context.Context, port int, done <-chan struct{}) erro
 // ProbeHTTPS authenticates to the isolated loopback SOCKS port and performs a
 // certificate-verified request through it. It never falls back to direct HTTP.
 func ProbeHTTPS(ctx context.Context, auth ProbeAuth, target HealthTarget) error {
-	return probeHTTPSWithTLS(ctx, auth, target, nil)
+	_, err := probeHTTPSWithTLS(ctx, auth, target, nil)
+	return err
 }
-func probeHTTPSWithTLS(ctx context.Context, auth ProbeAuth, target HealthTarget, roots *tls.Config) error {
+
+// probeHTTPSWithTLS checks the target through the node and returns the time of a
+// second request on the same connection: one round trip user → node → target and
+// back, as Mihomo's unified delay reports, without the TCP, TLS and REALITY
+// handshakes that only happen once. If the second request fails the node still
+// worked, and the whole first exchange is reported instead.
+func probeHTTPSWithTLS(ctx context.Context, auth ProbeAuth, target HealthTarget, roots *tls.Config) (time.Duration, error) {
+	started := time.Now()
 	u, err := url.Parse(target.URL)
 	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.Fragment != "" || u.RawQuery != "" {
-		return NewAppError("CONFIGURATION_REQUIRED")
+		return 0, NewAppError("CONFIGURATION_REQUIRED")
 	}
 	connection, err := (&net.Dialer{}).DialContext(ctx, "tcp4", net.JoinHostPort("127.0.0.1", strconv.Itoa(auth.Port)))
 	if err != nil {
-		return probeError(ctx)
+		return 0, probeError(ctx)
 	}
 	defer connection.Close()
 	stop := context.AfterFunc(ctx, func() { _ = connection.Close() })
@@ -337,7 +344,7 @@ func probeHTTPSWithTLS(ctx context.Context, auth ProbeAuth, target HealthTarget,
 		_ = connection.SetDeadline(deadline)
 	}
 	if err = socksHandshake(connection, auth, u); err != nil {
-		return probeError(ctx)
+		return 0, probeError(ctx)
 	}
 	config := &tls.Config{ServerName: u.Hostname(), MinVersion: tls.VersionTLS12, NextProtos: []string{"http/1.1"}}
 	if roots != nil {
@@ -346,33 +353,44 @@ func probeHTTPSWithTLS(ctx context.Context, auth ProbeAuth, target HealthTarget,
 	secure := tls.Client(connection, config)
 	defer secure.Close()
 	if err = secure.HandshakeContext(ctx); err != nil {
-		return probeError(ctx)
+		return 0, probeError(ctx)
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
-	if err != nil {
-		return NewAppError("CONFIGURATION_REQUIRED")
+	reader := bufio.NewReaderSize(io.LimitReader(secure, 256*1024), 16*1024)
+	exchange := func() error {
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+		if err != nil {
+			return NewAppError("CONFIGURATION_REQUIRED")
+		}
+		request.Header.Set("User-Agent", "v2board-client-health/0.1")
+		request.Header.Set("Accept-Encoding", "identity")
+		request.Header.Set("Cache-Control", "no-store")
+		if err = request.Write(secure); err != nil {
+			return probeError(ctx)
+		}
+		response, err := http.ReadResponse(reader, request)
+		if err != nil {
+			return probeError(ctx)
+		}
+		defer response.Body.Close()
+		if response.StatusCode != target.Status {
+			return NewAppError("CONNECT_TIMEOUT")
+		}
+		hash := sha256.New()
+		count, err := io.Copy(hash, io.LimitReader(response.Body, 65537))
+		if err != nil || count > 65536 || hex.EncodeToString(hash.Sum(nil)) != target.BodySHA256 {
+			return probeError(ctx)
+		}
+		return nil
 	}
-	request.Header.Set("User-Agent", "v2board-client-health/0.1")
-	request.Header.Set("Accept-Encoding", "identity")
-	request.Header.Set("Cache-Control", "no-store")
-	request.Close = true
-	if err = request.Write(secure); err != nil {
-		return probeError(ctx)
+	if err = exchange(); err != nil {
+		return 0, err
 	}
-	response, err := http.ReadResponse(bufio.NewReaderSize(io.LimitReader(secure, 128*1024), 16*1024), request)
-	if err != nil {
-		return probeError(ctx)
+	first := time.Since(started)
+	again := time.Now()
+	if exchange() != nil {
+		return first, nil
 	}
-	defer response.Body.Close()
-	if response.StatusCode != target.Status {
-		return NewAppError("CONNECT_TIMEOUT")
-	}
-	hash := sha256.New()
-	count, err := io.Copy(hash, io.LimitReader(response.Body, 65537))
-	if err != nil || count > 65536 || hex.EncodeToString(hash.Sum(nil)) != target.BodySHA256 {
-		return probeError(ctx)
-	}
-	return nil
+	return time.Since(again), nil
 }
 func probeError(ctx context.Context) error {
 	if ctx.Err() != nil {

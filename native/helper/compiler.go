@@ -24,13 +24,20 @@ func tunDNS() string {
 func compileOutbound(n Node, address, tag string, sock object) object {
 	stream := object{"network": n.Transport, "security": n.Security, "sockopt": sock}
 	if n.Security == "tls" {
-		stream["tlsSettings"] = object{"serverName": n.SNI, "allowInsecure": false, "fingerprint": n.Fingerprint}
+		tls := object{"serverName": n.SNI, "allowInsecure": false, "fingerprint": n.Fingerprint}
+		if n.ECH != "" {
+			tls["echConfigList"] = n.ECH
+		}
+		stream["tlsSettings"] = tls
 	}
 	if n.Security == "reality" {
 		stream["realitySettings"] = object{"serverName": n.SNI, "fingerprint": n.Fingerprint, "publicKey": n.PublicKey, "shortId": n.ShortID}
 	}
 	if n.Transport == "ws" {
 		stream["wsSettings"] = object{"path": n.WSPath, "headers": object{"Host": n.WSHost}}
+	}
+	if n.Transport == "xhttp" {
+		stream["xhttpSettings"] = object{"path": n.WSPath, "host": n.WSHost, "mode": n.Mode}
 	}
 	var settings object
 	if n.Protocol == "vless" || n.Protocol == "vmess" {
