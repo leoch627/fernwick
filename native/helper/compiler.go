@@ -1,6 +1,9 @@
 package main
 
-import "runtime"
+import (
+	"net"
+	"runtime"
+)
 
 type object = map[string]any
 
@@ -23,11 +26,88 @@ func tunName() string {
 	}
 	return "vbtun0"
 }
-func tunDNS() string {
-	if runtime.GOOS == "darwin" {
+
+// The TUN's resolver: on macOS the far end of the point-to-point link Xray sets up from
+// the first gateway prefix, elsewhere the address after the gateway, inside its /30.
+func tunDNS() string { return tunDNSFor(runtime.GOOS) }
+func tunDNSFor(goos string) string {
+	if goos == "darwin" {
 		return "172.19.0.1"
 	}
 	return "172.19.0.2"
+}
+
+// coreOwnsRoutes reports whether Xray itself routes the system into the TUN, as v2rayN
+// runs it on Windows and macOS: Xray adds the routes (autoSystemRoutingTable), binds
+// its own connections to the interface of the default route (autoOutboundsInterface
+// "auto") and moves them when that interface changes, so a network change needs no
+// reconnection. On Linux the helper routes by policy and marks the core's traffic.
+func coreOwnsRoutes(goos string) bool { return goos == "windows" || goos == "darwin" }
+
+// hasGlobalIPv6 reports whether any interface that is up has a global unicast IPv6
+// address (2000::/3). Only then is IPv6 routed into the TUN; without one, IPv6 has
+// nowhere to go and a ::/0 route would only make programs try it first.
+func hasGlobalIPv6() bool {
+	interfaces, e := net.Interfaces()
+	if e != nil {
+		return true
+	}
+	for _, iface := range interfaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 || iface.Name == tunName() {
+			continue
+		}
+		addresses, _ := iface.Addrs()
+		for _, address := range addresses {
+			if prefix, ok := address.(*net.IPNet); ok && prefix.IP.To4() == nil && len(prefix.IP) == net.IPv6len && prefix.IP[0]&0xe0 == 0x20 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// tunSettings is the TUN inbound for goos.
+func tunSettings(goos string, j Journal) object {
+	tun := object{"name": j.Tun, "desc": ruleTag() + " TUN", "mtu": 1500}
+	if !coreOwnsRoutes(goos) {
+		tun["gateway"] = []string{"172.19.0.1/30", "fdfe:dcba:9876::1/126"}
+		tun["autoSystemRoutingTable"] = []string{}
+		tun["autoOutboundsInterface"] = j.Interface.Name
+		tun["autoSystemDnsToGateway"] = false
+		return tun
+	}
+	gateway, routes := []string{"172.19.0.1/30"}, []string{"0.0.0.0/0"}
+	if j.RouteIPv6 {
+		// macOS takes only the IPv4 prefix for the utun and routes IPv6 by interface.
+		if goos == "windows" {
+			gateway = append(gateway, "fdfe:dcba:9876::1/126")
+		}
+		routes = append(routes, "::/0")
+	}
+	tun["gateway"] = gateway
+	tun["autoSystemRoutingTable"] = routes
+	tun["autoOutboundsInterface"] = "auto"
+	if goos == "windows" {
+		// Windows applies dns to the adapter. The filters keep every other program's
+		// DNS inside the TUN, and an IP version without a route to it (IPv6 on an
+		// IPv4-only network) from leaving outside it. macOS DNS is set by the helper.
+		tun["dns"] = []string{tunDNSFor(goos)}
+		tun["autoSystemWfpBlockLeak"] = []string{"dns", "misconfigtun"}
+	}
+	return tun
+}
+
+// outboundSockopt binds proxy and direct connections outside the TUN. Where the core
+// owns the routes it binds them itself, following the default route.
+func outboundSockopt(goos string, j Journal) object {
+	sock := object{"domainStrategy": "UseIP"}
+	if !coreOwnsRoutes(goos) {
+		sock["interface"] = j.Interface.Name
+		if goos == "linux" {
+			sock["mark"] = mark
+		}
+	}
+	return sock
 }
 func compileOutbound(n Node, address, tag string, sock object) object {
 	stream := object{"network": n.Transport, "security": n.Security, "sockopt": sock}
@@ -88,11 +168,9 @@ func route(rule object, target object) object {
 	return rule
 }
 
-func compileCore(c Candidate, j Journal) []byte {
-	sock := object{"interface": j.Interface.Name, "domainStrategy": "UseIP"}
-	if runtime.GOOS == "linux" {
-		sock["mark"] = mark
-	}
+func compileCore(c Candidate, j Journal) []byte { return compileCoreFor(runtime.GOOS, c, j) }
+func compileCoreFor(goos string, c Candidate, j Journal) []byte {
+	sock := outboundSockopt(goos, j)
 	nodes := []Node{c.Node}
 	outbounds := []object{compileOutbound(c.Node, j.NodeAddress, nodeTag(c.Node, 0), sock)}
 	for i, n := range c.Pool {
@@ -127,7 +205,13 @@ func compileCore(c Candidate, j Journal) []byte {
 	}
 	targets := map[string]object{"direct": {"outboundTag": "direct"}, "block": {"outboundTag": "block"}, "proxy": primary, "ai": ai}
 
-	routes := []object{{"type": "field", "inboundTag": []string{"dns-direct"}, "outboundTag": "direct"}, route(object{"type": "field", "inboundTag": []string{"dns-proxy"}}, primary), {"type": "field", "port": "53", "network": "tcp,udp", "outboundTag": "dns-out"}, {"type": "field", "ip": lan, "outboundTag": "direct"}}
+	routes := []object{{"type": "field", "inboundTag": []string{"dns-direct"}, "outboundTag": "direct"}, route(object{"type": "field", "inboundTag": []string{"dns-proxy"}}, primary), {"type": "field", "port": "53", "network": "tcp,udp", "outboundTag": "dns-out"}}
+	if coreOwnsRoutes(goos) {
+		// With every route leading to the TUN, the local network's chatter arrives too:
+		// NetBIOS, mDNS and multicast stay off the node (v2rayN's TUN rules).
+		routes = append(routes, object{"type": "field", "network": "udp", "port": "135,137-139,5353", "outboundTag": "block"}, object{"type": "field", "ip": []string{"224.0.0.0/3", "ff00::/8"}, "outboundTag": "block"})
+	}
+	routes = append(routes, object{"type": "field", "ip": lan, "outboundTag": "direct"})
 	// Each section's domains get a resolver for its exit: direct domains ask a mainland
 	// resolver for nearby CDN addresses, everything else is resolved abroad through the
 	// proxy. Xray consults matching servers in configuration order, so the first matching
@@ -158,13 +242,7 @@ func compileCore(c Candidate, j Journal) []byte {
 	} else {
 		dns = append(dns, object{"address": "https://1.1.1.1/dns-query", "tag": "dns-proxy", "skipFallback": false, "finalQuery": true})
 	}
-	tun := object{"name": j.Tun, "desc": ruleTag() + " TUN", "mtu": 1500, "gateway": []string{"172.19.0.1/30", "fdfe:dcba:9876::1/126"}, "autoSystemRoutingTable": []string{}, "autoOutboundsInterface": j.Interface.Name, "autoSystemDnsToGateway": false}
-	// Windows Xray owns its adapter's routes, DNS and dynamic WFP filters. Other platforms use helper-owned routing/DNS.
-	if runtime.GOOS == "windows" {
-		tun["autoSystemRoutingTable"] = []string{"0.0.0.0/0", "::/0"}
-		tun["dns"] = []string{tunDNS()}
-		tun["autoSystemWfpBlockLeak"] = []string{"dns", "misconfigtun"}
-	}
+	tun := tunSettings(goos, j)
 	outbounds = append(outbounds, object{"tag": "direct", "protocol": "freedom", "settings": object{"domainStrategy": "UseIPv4v6", "finalRules": []object{{"action": "allow", "ip": lan}}}, "streamSettings": object{"sockopt": sock}}, object{"tag": "dns-out", "protocol": "dns", "settings": object{"rules": []object{{"action": "hijack", "qType": "1,28"}, {"action": "return", "rCode": 5}}}}, object{"tag": "block", "protocol": "blackhole"})
 	routing := object{"domainStrategy": "AsIs", "rules": routes}
 	config := object{"log": object{"loglevel": "none", "access": "none", "error": "none"}, "inbounds": []object{{"tag": "tun", "protocol": "tun", "settings": tun, "sniffing": object{"enabled": true, "destOverride": []string{"http", "tls", "quic"}, "routeOnly": true}}}, "outbounds": outbounds, "dns": object{"tag": "dns-proxy", "queryStrategy": "UseIP", "disableFallbackIfMatch": true, "useSystemHosts": false, "servers": dns}, "routing": routing}

@@ -47,9 +47,9 @@ Windows 管理员 PowerShell：
 & "$env:ProgramFiles\StarRail Network Service\helper.exe" uninstall
 ```
 
-repair 停止服务、按日志恢复所属资源并重启；卸载先恢复网络。Windows 当前执行的 helper 登记为重启后删除，不删除用户凭据目录或其他 VPN 资源。
+repair 停止服务、按日志恢复所属资源并重启；排查连接问题时查看状态目录中的 helper.log 和 core.log（macOS `/Library/Application Support/<productId>/`，Windows `%ProgramData%\<productId>\`，Linux `/var/lib/<productId>/`）；卸载先恢复网络。Windows 当前执行的 helper 登记为重启后删除，不删除用户凭据目录或其他 VPN 资源。
 
-连接事务使用单调时钟截止，失败时清理最多占用剩余的 3 秒，且为撤销临时防火墙保护保留独立时间。清理失败保留恢复日志并显示 RecoveryRequired；服务按 1、2、4 秒递增至最多 30 秒的间隔重试清理，不重新启动代理或建立阻断。常规断开及启动遗留清理使用 5 秒预算。以上时限为实现约束，实机验收留给用户执行。
+连接事务使用单调时钟截止，失败时清理最多占用剩余的 3 秒，Linux 为撤销过渡保护保留独立时间（Windows/macOS 由 Xray 持有路由，没有过渡保护）。清理失败保留恢复日志并显示 RecoveryRequired；服务按 1、2、4 秒递增至最多 30 秒的间隔重试清理，不重新启动代理或建立阻断。常规断开及启动遗留清理使用 5 秒预算。以上时限为实现约束，实机验收留给用户执行。
 
 ## 原生签名顺序
 

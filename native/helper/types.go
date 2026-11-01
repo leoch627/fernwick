@@ -146,6 +146,7 @@ type Journal struct {
 	Phase           string    `json:"phase"`
 	Interface       Interface `json:"interface"`
 	Tun             string    `json:"tun"`
+	RouteIPv6       bool      `json:"routeIpv6,omitempty"`
 	NodeAddress     string    `json:"nodeAddress"`
 	PoolAddresses   []string  `json:"poolAddresses,omitempty"`
 	Bypass          []string  `json:"bypass"`

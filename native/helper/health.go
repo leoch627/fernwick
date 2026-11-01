@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 )
@@ -216,25 +215,50 @@ func boundedHTTP(ctx context.Context, target HealthTarget) bool {
 	sum := sha256.Sum256(data)
 	return e == nil && len(data) <= 65536 && response.StatusCode == target.Status && hex.EncodeToString(sum[:]) == target.BodySHA256
 }
+
+// udpDNS asks the TUN's resolver, again every half second: the first query can reach
+// the TUN before the core reads from it, and a lost UDP packet is not an answer.
 func udpDNS(ctx context.Context) bool {
+	for ctx.Err() == nil {
+		if udpDNSOnce(ctx, 500*time.Millisecond) {
+			return true
+		}
+	}
+	return false
+}
+func udpDNSOnce(ctx context.Context, wait time.Duration) bool {
 	connection, e := (&net.Dialer{}).DialContext(ctx, "udp", net.JoinHostPort(tunDNS(), "53"))
 	if e != nil {
+		select {
+		case <-ctx.Done():
+		case <-time.After(wait):
+		}
 		return false
 	}
 	defer connection.Close()
-	deadline, _ := ctx.Deadline()
+	deadline := time.Now().Add(wait)
+	if limit, ok := ctx.Deadline(); ok && limit.Before(deadline) {
+		deadline = limit
+	}
 	_ = connection.SetDeadline(deadline)
 	query := dnsQuestion("example.com", 1)
 	if _, e = connection.Write(query); e != nil {
+		select {
+		case <-ctx.Done():
+		case <-time.After(time.Until(deadline)):
+		}
 		return false
 	}
 	data := make([]byte, 4096)
-	n, e := connection.Read(data)
-	if e != nil {
-		return false
+	for {
+		n, e := connection.Read(data)
+		if e != nil {
+			return false
+		}
+		if _, e = dnsAnswers(data[:n], query); e == nil {
+			return true
+		}
 	}
-	_, e = dnsAnswers(data[:n], query)
-	return e == nil
 }
 func stunUDP(ctx context.Context) bool {
 	connection, e := (&net.Dialer{}).DialContext(ctx, "udp4", "162.159.207.0:3478")
@@ -282,24 +306,49 @@ func ipv6HTTPS(ctx context.Context) bool {
 func probeDataPath(parent context.Context, j *Journal) (Proof, error) {
 	ctx, cancel := context.WithTimeout(parent, 6*time.Second)
 	defer cancel()
-	var result Proof
-	var wait sync.WaitGroup
-	wait.Add(4)
+	type outcome struct {
+		kind string
+		ok   bool
+	}
+	results := make(chan outcome, 4)
 	go func() {
-		defer wait.Done()
+		ok := false
 		for _, target := range build.HealthTargets {
 			if boundedHTTP(ctx, target) {
-				result.TCP = true
+				ok = true
 				break
 			}
 		}
+		results <- outcome{"tcp", ok}
 	}()
-	go func() { defer wait.Done(); result.DNS = udpDNS(ctx) }()
-	go func() { defer wait.Done(); result.UDP = stunUDP(ctx) }()
-	go func() { defer wait.Done(); result.IPv6 = ipv6HTTPS(ctx) }()
-	wait.Wait()
+	go func() { results <- outcome{"dns", udpDNS(ctx)} }()
+	go func() { results <- outcome{"udp", stunUDP(ctx)} }()
+	go func() { results <- outcome{"ipv6", ipv6HTTPS(ctx)} }()
 	// UDP and IPv6 depend on the node and the user's ISP; many working nodes have
-	// neither. They are reported for diagnostics but only TCP and DNS gate a connection.
+	// neither. They are reported for diagnostics but only TCP and DNS gate a connection,
+	// so once both hold the others get one more second rather than the full budget.
+	var result Proof
+	var grace <-chan time.Time
+	for pending := 4; pending > 0; pending-- {
+		select {
+		case r := <-results:
+			switch r.kind {
+			case "tcp":
+				result.TCP = r.ok
+			case "dns":
+				result.DNS = r.ok
+			case "udp":
+				result.UDP = r.ok
+			case "ipv6":
+				result.IPv6 = r.ok
+			}
+			if result.TCP && result.DNS && grace == nil {
+				grace = time.After(time.Second)
+			}
+		case <-grace:
+			return result, nil
+		}
+	}
 	if !result.TCP || !result.DNS {
 		return result, failure("CONNECT_TIMEOUT")
 	}

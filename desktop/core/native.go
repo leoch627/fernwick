@@ -377,6 +377,7 @@ func (n *NativeDriver) Prepare(ctx context.Context, candidate Candidate) (string
 func (n *NativeDriver) heartbeat(ctx context.Context, ticket string) {
 	ticker := time.NewTicker(750 * time.Millisecond)
 	defer ticker.Stop()
+	missed := 0
 	for {
 		select {
 		case <-ctx.Done():
@@ -390,20 +391,57 @@ func (n *NativeDriver) heartbeat(ctx context.Context, ticket string) {
 				return
 			}
 			reply, err := n.rpc(ctx, "heartbeat", map[string]any{"ticket": ticket, "authorizedUntil": deadline})
-			if err != nil || !reply.Owned || reply.State == "Disconnected" || reply.State == "RecoveryRequired" {
-				n.mu.Lock()
-				report := !n.closing && n.ticket == ticket && ctx.Err() == nil
-				if report {
-					n.verified = false
-				}
-				n.mu.Unlock()
-				if report {
-					n.failed("NETWORK_RECOVERY_REQUIRED")
-				}
-				return
+			if err == nil && reply.Owned && reply.State != "Disconnected" && reply.State != "RecoveryRequired" {
+				missed = 0
+				continue
 			}
+			code := heartbeatFailure(reply, err)
+			// A heartbeat that does not get through is not yet a lost connection: the
+			// service gives up only after three seconds without one.
+			if code == "" {
+				if missed++; missed < 3 {
+					continue
+				}
+				code = "NETWORK_RECOVERY_REQUIRED"
+			}
+			if code == "ENDED" {
+				// The service ended the connection itself (the core exited, the
+				// authorization ran out, the network went away) and has put the
+				// network back, unless it says that recovery is still to be done.
+				code = "CONNECT_TIMEOUT"
+				if status, err := n.rpc(ctx, "status", nil); err == nil && status.State == "RecoveryRequired" {
+					code = "NETWORK_RECOVERY_REQUIRED"
+				}
+			}
+			n.mu.Lock()
+			report := !n.closing && n.ticket == ticket && ctx.Err() == nil
+			if report && code == "NETWORK_RECOVERY_REQUIRED" {
+				n.verified = false
+			}
+			n.mu.Unlock()
+			if report {
+				n.failed(code)
+			}
+			return
 		}
 	}
+}
+
+// heartbeatFailure classifies a failed heartbeat: "" when the service was not reached
+// (worth another try), "ENDED" when it no longer holds this connection, or the code to
+// report.
+func heartbeatFailure(reply nativeReply, err error) ErrorCode {
+	if err != nil {
+		// The service answers NETWORK_CONFLICT to a ticket it no longer holds.
+		if CodeOf(err) == "NETWORK_CONFLICT" {
+			return "ENDED"
+		}
+		return ""
+	}
+	if reply.State == "RecoveryRequired" {
+		return "NETWORK_RECOVERY_REQUIRED"
+	}
+	return "ENDED"
 }
 func (n *NativeDriver) Protect(ctx context.Context, ticket string, _ time.Time) error {
 	_, err := n.rpc(ctx, "protect", map[string]any{"ticket": ticket})

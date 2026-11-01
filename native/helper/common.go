@@ -169,22 +169,95 @@ func copyFile(source, destination string, mode os.FileMode) error {
 	}
 	return replaceFile(tmp, destination)
 }
+
+// run runs a system tool. The caller's context bounds it; ten seconds is only a ceiling
+// for a tool that hangs, as a cold system (Windows' first PowerShell or a busy configd)
+// can take several seconds for what normally takes a fraction of one.
 func run(ctx context.Context, program string, input []byte, args ...string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	command := exec.CommandContext(ctx, program, args...)
 	command.Stdin = bytes.NewReader(input)
 	command.Env = safeEnvironment()
 	command.WaitDelay = 200 * time.Millisecond
 	configureChild(command)
-	var output limitedBuffer
+	var output, diagnostics limitedBuffer
 	command.Stdout = &output
-	command.Stderr = io.Discard
+	command.Stderr = &diagnostics
 	e := command.Run()
 	if e != nil {
+		logEvent("%s %s: %v: %s", filepath.Base(program), clip(strings.Join(args, " "), 160), e, clip(strings.TrimSpace(diagnostics.String()), 400))
 		return nil, failure("NETWORK_RECOVERY_REQUIRED")
 	}
 	return output.Bytes(), nil
+}
+func clip(value string, limit int) string {
+	if len(value) <= limit {
+		return value
+	}
+	return value[:limit] + "…"
+}
+
+// The service's own log, for whoever has to find out why a connection failed on a real
+// machine. It records failed steps and system tools, never nodes, credentials or
+// traffic, and keeps the previous file when it grows past 512 KB.
+var eventLog sync.Mutex
+
+func logEvent(format string, values ...any) {
+	eventLog.Lock()
+	defer eventLog.Unlock()
+	path := filepath.Join(stateRoot(), "helper.log")
+	if info, e := os.Stat(path); e == nil && info.Size() > 512*1024 {
+		_ = os.Rename(path, path+".1")
+	}
+	f, e := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+	if e != nil {
+		return
+	}
+	defer f.Close()
+	_, _ = fmt.Fprintf(f, "%s %s\n", time.Now().Format(time.RFC3339), fmt.Sprintf(format, values...))
+}
+
+// coreLog collects what the core prints (its version, and why it did not start) in
+// core.log, replaced at every start and capped at 256 KB.
+func coreLog() io.WriteCloser {
+	f, e := os.OpenFile(filepath.Join(stateRoot(), "core.log"), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
+	if e != nil {
+		return nopWriteCloser{}
+	}
+	return &cappedFile{file: f, left: 256 * 1024}
+}
+
+type nopWriteCloser struct{}
+
+func (nopWriteCloser) Write(p []byte) (int, error) { return len(p), nil }
+func (nopWriteCloser) Close() error                { return nil }
+
+type cappedFile struct {
+	mu   sync.Mutex
+	file *os.File
+	left int
+}
+
+func (c *cappedFile) Write(p []byte) (int, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.file != nil && c.left > 0 {
+		chunk := p[:min(len(p), c.left)]
+		written, _ := c.file.Write(chunk)
+		c.left -= written
+	}
+	return len(p), nil
+}
+func (c *cappedFile) Close() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.file == nil {
+		return nil
+	}
+	e := c.file.Close()
+	c.file = nil
+	return e
 }
 
 type limitedBuffer struct{ bytes.Buffer }
@@ -296,4 +369,7 @@ func ensureSameInstallation() error {
 	}
 	return checkCore()
 }
-func logCode(code string) { fmt.Fprintln(os.Stderr, serviceID()+"-helper:", cleanError(failure(code))) }
+func logCode(code string) {
+	fmt.Fprintln(os.Stderr, serviceID()+"-helper:", cleanError(failure(code)))
+	logEvent("%s", cleanError(failure(code)))
+}

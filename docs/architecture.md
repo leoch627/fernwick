@@ -10,7 +10,7 @@ flowchart LR
   M --> N[原生服务客户端]
   N -->|进程校验与签名握手| H[系统网络服务]
   H --> C[固定 Xray TUN 核心]
-  H --> O[系统路由、DNS、过渡保护]
+  H --> O[系统 DNS、Linux 路由与过渡保护]
   H --> A[固定来源的物理 HTTPS 控制通道]
   D --> U[独立更新与恢复进程]
 ```
@@ -25,9 +25,10 @@ WebView 只收到脱敏 AppView；token、订阅 URL、节点凭据和原始配�
 | 系统代理设置与恢复日志 system-proxy.json | Go 协调器（ProxyDriver，当前用户权限） |
 | TUN 接口 | 固定版本 Xray |
 | Linux 策略路由、per-link resolved、nftables | systemd helper |
-| macOS split routes、DNS 比较恢复、PF anchor | launchd helper |
-| Windows 适配器路由/DNS/动态 WFP | Xray Windows TUN |
-| Windows 临时防火墙 | Windows helper service |
+| macOS 系统路由、出站绑定默认路由网卡 | Xray TUN（autoSystemRoutingTable、autoOutboundsInterface auto） |
+| macOS 主网络服务 DNS 及比较恢复 | launchd helper |
+| Windows 适配器路由/DNS/动态 WFP、出站绑定默认路由网卡 | Xray Windows TUN |
+| Windows 遗留 Wintun 适配器清理（pnputil） | Windows helper service |
 | 应用会话与连接意图 | Go 协调器 |
 | 安装备份、平台安装器、中断恢复 | 独立更新进程 |
 
@@ -51,3 +52,4 @@ Wails 外壳只加载内嵌资源，开发构建允许显式启用本机 Vite。
 
 连接时原生服务收到用户节点和节点池：自动模式下 Xray 用 observatory 与 leastPing 在节点池中选路，AI 分段走只含合格地区节点的负载均衡。节点池中每个节点的地址都在准备阶段经物理网卡解析并加入绕行路由。
 
+Windows 与 macOS 的 TUN 按 v2rayN 的方式运行：路由由 Xray 自己添加和移除，Xray 自身连接绑定到默认路由所在网卡并随网络切换自动跟随，因此网络变化不再断开重连，也没有防火墙/PF 过渡保护（核心路由生效前流量照常直连）。连接前移除本产品遗留的 Wintun 适配器（与 v2rayN 相同，按网卡名 MD5 推导设备 GUID）。服务在状态目录写 helper.log（失败的步骤与系统命令，不含节点与流量）和 core.log（核心启动输出），用于实机排查。

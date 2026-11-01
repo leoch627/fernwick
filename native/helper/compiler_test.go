@@ -278,14 +278,73 @@ func TestCompileCoreProtocols(t *testing.T) {
 	}
 }
 
+func compileFor(t *testing.T, goos string, j Journal) coreConfig {
+	t.Helper()
+	var out coreConfig
+	if e := json.Unmarshal(compileCoreFor(goos, validCandidate(), j), &out); e != nil {
+		t.Fatal(e)
+	}
+	return out
+}
+
 func TestCompileCorePlatformTun(t *testing.T) {
 	tun := compile(t, validCandidate()).Inbounds[0]["settings"].(map[string]any)
 	routes := tun["autoSystemRoutingTable"].([]any)
-	if runtime.GOOS == "windows" {
-		if len(routes) != 2 || tun["autoSystemWfpBlockLeak"] == nil {
-			t.Errorf("windows tun does not own routes and leak protection: %v", tun)
+	if coreOwnsRoutes(runtime.GOOS) != (len(routes) > 0) {
+		t.Errorf("%s tun routes = %v", runtime.GOOS, routes)
+	}
+}
+
+// Windows and macOS run the TUN as v2rayN does: the core routes the system into it and
+// keeps its own connections on the default route's interface, whichever that is.
+func TestCompileCoreCoreOwnedRouting(t *testing.T) {
+	for _, goos := range []string{"windows", "darwin"} {
+		for _, ipv6 := range []bool{false, true} {
+			j := Journal{Interface: Interface{Name: "en0"}, Tun: "utun50", RouteIPv6: ipv6, NodeAddress: "203.0.113.10"}
+			cfg := compileFor(t, goos, j)
+			tun := cfg.Inbounds[0]["settings"].(map[string]any)
+			want := []any{"0.0.0.0/0"}
+			if ipv6 {
+				want = append(want, "::/0")
+			}
+			if routes := tun["autoSystemRoutingTable"].([]any); len(routes) != len(want) || routes[0] != want[0] || len(want) == 2 && routes[1] != want[1] {
+				t.Errorf("%s ipv6=%t routes = %v", goos, ipv6, routes)
+			}
+			if tun["autoOutboundsInterface"] != "auto" {
+				t.Errorf("%s: core does not follow the default route: %v", goos, tun["autoOutboundsInterface"])
+			}
+			gateway := tun["gateway"].([]any)
+			if gateway[0] != "172.19.0.1/30" || goos == "darwin" && len(gateway) != 1 || goos == "windows" && len(gateway) != map[bool]int{false: 1, true: 2}[ipv6] {
+				t.Errorf("%s ipv6=%t gateway = %v", goos, ipv6, gateway)
+			}
+			if goos == "windows" {
+				if dns := tun["dns"].([]any); len(dns) != 1 || dns[0] != "172.19.0.2" || tun["autoSystemWfpBlockLeak"] == nil {
+					t.Errorf("windows DNS stays outside the TUN: %v", tun)
+				}
+			} else if tun["dns"] != nil || tun["autoSystemWfpBlockLeak"] != nil {
+				t.Errorf("darwin tun has Windows-only settings: %v", tun)
+			}
+			for _, out := range cfg.Outbounds {
+				if sock, _ := out.StreamSettings["sockopt"].(map[string]any); sock != nil && (sock["interface"] != nil || sock["mark"] != nil) {
+					t.Errorf("%s: %s is pinned to an interface the core no longer follows: %v", goos, out.Tag, sock)
+				}
+			}
+			blocked := false
+			for _, rule := range cfg.Routing.Rules {
+				if rule["outboundTag"] == "block" && rule["ip"] != nil && rule["ip"].([]any)[0] == "224.0.0.0/3" {
+					blocked = true
+				}
+			}
+			if !blocked {
+				t.Errorf("%s: multicast is sent to the node", goos)
+			}
 		}
-	} else if len(routes) != 0 {
-		t.Errorf("helper-owned routing also configured in xray: %v", routes)
+	}
+	linux := compileFor(t, "linux", Journal{Interface: Interface{Name: "eth0"}, Tun: "vbtun0", NodeAddress: "203.0.113.10"})
+	if sock := linux.Outbounds[0].StreamSettings["sockopt"].(map[string]any); sock["interface"] != "eth0" || sock["mark"] == nil {
+		t.Errorf("linux proxy is not bound and marked: %v", sock)
+	}
+	if tun := linux.Inbounds[0]["settings"].(map[string]any); len(tun["autoSystemRoutingTable"].([]any)) != 0 {
+		t.Errorf("linux core also routes: %v", tun)
 	}
 }

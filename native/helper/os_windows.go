@@ -3,9 +3,8 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
+	"crypto/md5"
 	"fmt"
 	winio "github.com/Microsoft/go-winio"
 	"golang.org/x/sys/windows"
@@ -13,7 +12,6 @@ import (
 	"golang.org/x/sys/windows/svc/mgr"
 	"io"
 	"net"
-	"net/netip"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -270,62 +268,121 @@ func terminateOrphan(j *Journal) error {
 func powershell(ctx context.Context, script string, value any) ([]byte, error) {
 	return run(ctx, filepath.Join(windowsDirectory(), "WindowsPowerShell", "v1.0", "powershell.exe"), jsonBytes(value), "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", `$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; [Console]::OutputEncoding=[Text.UTF8Encoding]::new(); $v=[Console]::In.ReadToEnd()|ConvertFrom-Json; `+script)
 }
-func discoverInterface(ctx context.Context) (Interface, error) {
-	data, e := powershell(ctx, `$r=Get-NetRoute -DestinationPrefix '0.0.0.0/0' | Where-Object {$_.InterfaceAlias -ne $v.tun} | Sort-Object RouteMetric | Select-Object -First 1; if(!$r){throw 'route'}; $a=Get-NetIPAddress -InterfaceIndex $r.InterfaceIndex; @{name=$r.InterfaceAlias;index=[int]$r.InterfaceIndex;gateway=$r.NextHop;addresses=@($a.IPAddress)}|ConvertTo-Json -Compress`, object{"tun": tunName()})
+
+// adapters lists the network adapters with their gateways, as the net package does.
+func adapters() ([]*windows.IpAdapterAddresses, error) {
+	size := uint32(16 * 1024)
+	for range 4 {
+		buffer := make([]byte, size)
+		first := (*windows.IpAdapterAddresses)(unsafe.Pointer(&buffer[0]))
+		e := windows.GetAdaptersAddresses(windows.AF_UNSPEC, windows.GAA_FLAG_INCLUDE_GATEWAYS|windows.GAA_FLAG_SKIP_ANYCAST|windows.GAA_FLAG_SKIP_MULTICAST, 0, first, &size)
+		if e == nil {
+			var out []*windows.IpAdapterAddresses
+			for a := first; a != nil; a = a.Next {
+				out = append(out, a)
+			}
+			return out, nil
+		}
+		if e != windows.ERROR_BUFFER_OVERFLOW {
+			return nil, e
+		}
+	}
+	return nil, windows.ERROR_BUFFER_OVERFLOW
+}
+
+// discoverInterface finds the adapter of the IPv4 default route with the lowest metric,
+// leaving out the TUN, through the IP Helper API: PowerShell's network cmdlets take
+// seconds to load on a cold system, which a connection cannot wait for.
+func discoverInterface(context.Context) (Interface, error) {
+	list, e := adapters()
 	if e != nil {
-		return Interface{}, e
+		return Interface{}, failure("CONNECT_TIMEOUT")
 	}
-	var physical Interface
-	e = json.Unmarshal(bytes.TrimPrefix(data, []byte{239, 187, 191}), &physical)
-	return physical, e
-}
-func platformPrepare(ctx context.Context, j *Journal) error {
-	_, e := powershell(ctx, `if(Get-NetAdapter -Name $v.tun -ErrorAction SilentlyContinue){throw 'conflict'}; if(!(Test-Path -LiteralPath $v.dll)){throw 'driver'}`, object{"dll": filepath.Join(helperRoot(), "wintun.dll"), "tun": tunName()})
-	return e
-}
-func subtractPrefix(root, except netip.Prefix) []netip.Prefix {
-	if !root.Overlaps(except) {
-		return []netip.Prefix{root}
-	}
-	if except.Bits() <= root.Bits() {
-		return nil
-	}
-	bits := root.Bits() + 1
-	left := netip.PrefixFrom(root.Addr(), bits)
-	bytes := root.Addr().AsSlice()
-	bytes[root.Bits()/8] |= byte(1 << uint(7-root.Bits()%8))
-	rightAddr, _ := netip.AddrFromSlice(bytes)
-	right := netip.PrefixFrom(rightAddr, bits)
-	return append(subtractPrefix(left, except), subtractPrefix(right, except)...)
-}
-func blockedAddresses(j *Journal) []string {
-	prefixes := []netip.Prefix{netip.MustParsePrefix("0.0.0.0/0"), netip.MustParsePrefix("::/0")}
-	for _, raw := range append(append([]string{}, append(lan, "ff02::/16")...), j.Bypass...) {
-		p, e := netip.ParsePrefix(raw)
-		if e != nil {
-			a, e := netip.ParseAddr(raw)
-			if e != nil {
+	var best *windows.IpAdapterAddresses
+	gateway := ""
+	for _, a := range list {
+		if a.OperStatus != windows.IfOperStatusUp || a.IfType == windows.IF_TYPE_SOFTWARE_LOOPBACK || windows.UTF16PtrToString(a.FriendlyName) == tunName() {
+			continue
+		}
+		for g := a.FirstGatewayAddress; g != nil; g = g.Next {
+			ip := g.Address.IP()
+			if ip.To4() == nil || ip.IsUnspecified() {
 				continue
 			}
-			p = netip.PrefixFrom(a, a.BitLen())
+			if best == nil || a.Ipv4Metric < best.Ipv4Metric {
+				best, gateway = a, ip.String()
+			}
+			break
 		}
-		var next []netip.Prefix
-		for _, current := range prefixes {
-			next = append(next, subtractPrefix(current, p)...)
+	}
+	if best == nil {
+		return Interface{}, failure("CONNECT_TIMEOUT")
+	}
+	out := Interface{Name: windows.UTF16PtrToString(best.FriendlyName), Index: int(best.IfIndex), Gateway: gateway}
+	for u := best.FirstUnicastAddress; u != nil; u = u.Next {
+		if ip := u.Address.IP(); ip != nil {
+			out.Addresses = append(out.Addresses, ip.String())
 		}
-		prefixes = next
 	}
-	out := []string{}
-	for _, p := range prefixes {
-		out = append(out, p.String())
+	return out, nil
+}
+
+// removeTunAdapter removes this product's Wintun adapter when one is left behind, as
+// v2rayN does before it starts a TUN: the core is ended, not asked to stop, and an
+// adapter that outlives it would keep the routes and DNS the core gave it. Wintun
+// names the device after the GUID Xray derives from the adapter name. Best effort:
+// pnputil can remove devices from Windows 10 2004 on, and Xray reuses an adapter of
+// its name anyway.
+func removeTunAdapter(ctx context.Context, name string) {
+	list, e := adapters()
+	if e != nil {
+		return
 	}
-	return out
+	for _, a := range list {
+		if windows.UTF16PtrToString(a.FriendlyName) != name || !strings.Contains(windows.UTF16PtrToString(a.Description), ruleTag()) {
+			continue
+		}
+		_, _ = run(ctx, filepath.Join(windowsDirectory(), "pnputil.exe"), nil, "/remove-device", `SWD\Wintun\`+wintunGUID(name))
+		return
+	}
 }
-func platformProtect(ctx context.Context, j *Journal) error {
-	_, e := powershell(ctx, `New-NetFirewallRule -Name ($v.tag+'.'+$v.id) -DisplayName ($v.tag+' connection transition') -Group ($v.tag+'.'+$v.id) -Direction Outbound -Action Block -Enabled True -Profile Any -InterfaceAlias $v.interface -RemoteAddress $v.blocked | Out-Null`, object{"id": j.ID, "tag": ruleTag(), "interface": j.Interface.Name, "blocked": blockedAddresses(j)})
-	return e
+func wintunGUID(name string) string {
+	sum := md5.Sum([]byte(name))
+	return (*windows.GUID)(unsafe.Pointer(&sum[0])).String()
 }
-func platformApply(context.Context, *Journal) error { return nil } // Xray owns adapter routes, DNS and dynamic WFP filters on Windows.
+func platformPrepare(ctx context.Context, j *Journal) error {
+	if _, e := os.Stat(filepath.Join(helperRoot(), "wintun.dll")); e != nil {
+		return failure("COMPONENTS_UNAVAILABLE")
+	}
+	removeTunAdapter(ctx, j.Tun)
+	return nil
+}
+
+// Xray owns the TUN's routes, DNS and leak filters (coreOwnsRoutes); nothing guards the
+// transition, as with v2rayN.
+func platformProtect(context.Context, *Journal) error { return nil }
+
+// platformApply waits until the core's routes lead to the TUN, so the probe that follows
+// tests the TUN and not the network around it.
+func platformApply(ctx context.Context, j *Journal) error {
+	for {
+		if tun, e := net.InterfaceByName(j.Tun); e == nil {
+			var index uint32
+			if windows.GetBestInterfaceEx(&windows.SockaddrInet4{Addr: [4]byte{1, 1, 1, 1}}, &index) == nil && int(index) == tun.Index {
+				return nil
+			}
+		}
+		select {
+		case <-ctx.Done():
+			logEvent("start: the core's routes to %s did not appear in time", j.Tun)
+			return errCancelled
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
+}
+
+// Only a connection made by an earlier version guarded its transition, with a firewall
+// rule that recovery still removes.
 func platformUnprotect(ctx context.Context, j *Journal) error {
 	if !j.Protection {
 		return nil
@@ -333,13 +390,17 @@ func platformUnprotect(ctx context.Context, j *Journal) error {
 	_, e := powershell(ctx, `Get-NetFirewallRule -Group ($v.tag+'.'+$v.id) -ErrorAction SilentlyContinue | Remove-NetFirewallRule`, object{"id": j.ID, "tag": ruleTag()})
 	return e
 }
+
+// The core has been ended before recovery runs; with its adapter its routes, DNS and
+// filters are gone.
 func platformRecover(ctx context.Context, j *Journal) error {
-	_, e := powershell(ctx, `$a=Get-NetAdapter -Name $v.tun -ErrorAction SilentlyContinue; if($a -and $a.InterfaceDescription -like ('*'+$v.tag+'*')){Get-NetRoute -InterfaceIndex $a.ifIndex -ErrorAction SilentlyContinue | Where-Object {$_.DestinationPrefix -in @('0.0.0.0/0','::/0')} | Remove-NetRoute -Confirm:$false; Set-DnsClientServerAddress -InterfaceIndex $a.ifIndex -ResetServerAddresses}; Get-NetFirewallRule -Group ($v.tag+'.'+$v.id) -ErrorAction SilentlyContinue | Remove-NetFirewallRule`, object{"id": j.ID, "tag": ruleTag(), "tun": tunName()})
-	if e == nil {
-		j.Protection = false
-	}
-	return e
+	removeTunAdapter(ctx, j.Tun)
+	return nil
 }
+
+// Xray follows the default route itself (coreOwnsRoutes): a network change needs no
+// reconnection.
+func (s *service) monitorNetwork(context.Context) {}
 func fileOwner(path string, p Peer) error {
 	stat, e := os.Lstat(path)
 	if e != nil || !stat.Mode().IsRegular() {
@@ -456,15 +517,4 @@ func startDetached(path string, args ...string) error {
 		return e
 	}
 	return command.Process.Release()
-}
-func platformNetworkFingerprint(ctx context.Context, p Interface) (string, error) {
-	data, e := powershell(ctx, `$r=@(Get-NetRoute | Where-Object {$_.DestinationPrefix -in @('0.0.0.0/0','::/0') -and $_.InterfaceAlias -ne $v.tun} | Sort-Object InterfaceIndex,DestinationPrefix,NextHop | Select-Object InterfaceIndex,DestinationPrefix,NextHop,RouteMetric);$d=@(Get-DnsClientServerAddress | Where-Object {$_.InterfaceAlias -ne $v.tun} | Sort-Object InterfaceIndex,AddressFamily | Select-Object InterfaceIndex,AddressFamily,ServerAddresses);@{routes=$r;dns=$d}|ConvertTo-Json -Depth 5 -Compress`, object{"tun": tunName()})
-	if e != nil {
-		return "", e
-	}
-	var value any
-	if e = json.Unmarshal(data, &value); e != nil {
-		return "", e
-	}
-	return stringHash(string(jsonBytes(value))), nil
 }
