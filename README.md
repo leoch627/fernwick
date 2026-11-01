@@ -1,6 +1,6 @@
 # V2Board 桌面客户端
 
-Wails v3 + Go + React + Xray 的 V2Board 桌面客户端，支持 Windows 11 x64、macOS 14+（Apple 芯片 / Intel）和 Ubuntu 24.04 x64。面向中国大陆网络下的普通用户：下载、安装、打开、选线路、连接，其余全部自动。机场名称、主备 API 都在打包时提供，同一份代码可以给不同机场出包。配套的自建端点（`server/`，一个 Go 程序）负责自动更新、远程规则、安装包下载页和遥测。
+Wails v3 + Go + React + Xray 的 V2Board 桌面客户端，支持 Windows 10（1809 及以上）/ Windows 11 x64、macOS 14+（Apple 芯片 / Intel）和 Ubuntu 24.04 x64。面向中国大陆网络下的普通用户：下载、安装、打开、选线路、连接，其余全部自动。机场名称、主备 API 都在打包时提供，同一份代码可以给不同机场出包。配套的自建端点（`server/`，一个 Go 程序）负责自动更新、远程规则、安装包下载页和遥测。
 
 - 一个窗口：登录、连接按钮、线路、套餐；其余放在设置里。出错时给一句人话和下一步按钮
 - Xray 随包，规则随包，连接时不从 GitHub / Cloudflare 下载任何东西
@@ -10,8 +10,11 @@ Wails v3 + Go + React + Xray 的 V2Board 桌面客户端，支持 Windows 11 x64
 - 遥测：连接结果、失败步骤、错误码、各域名可达性，带用户邮箱；「上报问题」附网络自检并给出 6 位问题编号
 - 两种连接方式：默认「系统代理」由应用以当前用户身份运行 Xray 并设置系统代理（Windows WinINet、macOS networksetup、GNOME gsettings），不需要管理员权限，断开、崩溃或断电后按日志恢复原设置；「TUN 模式」接管所有软件
 - 首页切换连接方式与广告拦截；关闭广告拦截时去掉规则里的拦截段
+- 安装包：Windows 安装器为中文界面，建桌面与开始菜单快捷方式，装完可直接打开；macOS DMG 带背景和拖放指引（`dmgbuild`，背景源文件 `packaging/macos/dmg-background.html`，改完运行 `node tools/render-dmg-background.mjs`）
 - Go 原生服务（systemd / launchd / Windows 服务）接管 TUN、路由、DNS，崩溃与断电后可恢复；只有 TUN 模式需要它
-- 签名更新索引与签名策略（Ed25519），远程规则更新，断点续传下载
+- 签名更新索引与签名策略（Ed25519），远程规则更新，断点续传下载；新版本在首页「推荐更新」一键安装并自动重启
+- 外观跟随系统：亮色为三月七配色（樱粉 + 天蓝），暗色为黑塔配色（深紫 + 薰衣草），设置里也可以固定亮色或暗色
+- 分流模式下，规则没列到的域名先问国内 DNS（223.5.5.5），结果是国内地址才采用，否则走代理问 1.1.1.1；直连优先 IPv4
 
 ## 开发
 
@@ -92,7 +95,8 @@ git tag v0.2.0 && git push origin v0.2.0
 - **规则更新**：Actions → Update endpoint → `rules`，或等每周一自动运行，会用最新的 v2fly geosite/geoip 按 `tools/import-rules.py` 里的分段顺序生成规则并下发。客户端约 15 分钟内拉到新规则，正在连接的会自动按新规则重连。分段顺序和去向在脚本开头，改分流就改那里。随包规则用 `python3 tools/import-rules.py build` 按 `resources/rules/manifest.json` 里固定的数据版本重新生成。
 - **自定义规则**：编辑 `config/rules-extra.json` 并提交到 main，会自动重新发布规则（需要已部署端点）。`proxyDomains` 强制走代理，`blockedDomains` 屏蔽，`directDomains` 额外直连；这三项都匹配域名及其子域名，`directFullDomains` 只匹配完整域名，`directIPs` 写 IP 或 CIDR。它们排在所有生成规则之前，优先级：屏蔽 > 强制代理 > 直连。只对远程规则生效，随包规则不受影响。
 - **端点程序**：Actions → Update endpoint → `build` 编译 Linux amd64/arm64 二进制，下载后按 server/README.md 替换。
-- **代码签名**：CI 目前不做 Windows/macOS 代码签名。客户端在这两个平台检测到新版本时会打开下载页，由用户手动安装；Linux 可以在客户端内直接更新。以后接入 Windows 证书或 Apple Developer ID 签名公证后，这两个平台也能在客户端内更新：打包脚本直接从签好的安装包读出证书 Subject / Team ID 写进更新索引，不需要另外填写。
+- **客户端内更新**：客户端打开时和每隔几小时（策略 `update.checkIntervalSec`）检查签名更新索引，有新版本就在首页显示「推荐更新」，用户点「立即更新」后自动下载、校验、安装并重新打开，三个平台都不用再去下载页（设置里可关掉「自动检查更新」）。安装路径：网络服务在运行时由它以管理员身份静默安装（Windows、Linux 随安装包装好服务；macOS 用过 TUN 模式后才有）；没有服务时 macOS 以用户身份替换 `.app`（应用归 root 所有时弹一次管理员授权），Windows 弹一次 UAC 运行安装器，Linux 用 pkexec 跑 dpkg。安装完由一个后台小脚本等新版本就位后带 `--updated` 重新打开应用。0.2.2 及更早的 Windows/macOS 客户端还是旧逻辑（打开下载页），需要手动装一次新版，之后就是客户端内更新。
+- **代码签名**：CI 目前不做 Windows/macOS 代码签名。未签名的安装包写成 `signatureIdentity: "unsigned"`，网络服务只凭 Ed25519 签名的更新索引和其中的 SHA-256 校验安装（与 Linux 相同），macOS 另外用 `codesign --verify` 检查解压结果；签名密钥（`SIGNING_KEY`）因此是更新的唯一信任根，务必只放在 GitHub Secrets 和端点服务器上。以后接入 Windows 证书或 Apple Developer ID 签名公证后，打包脚本直接从签好的安装包读出证书 Subject / Team ID 写进更新索引，网络服务会额外核对，不需要另外填写。
 
 ## 目录
 

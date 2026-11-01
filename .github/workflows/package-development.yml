@@ -66,6 +66,10 @@ jobs:
       - name: Windows installer compiler
         if: runner.os == 'Windows'
         run: choco install nsis --no-progress -y
+      # Lays out the DMG window (background, icon positions) without scripting Finder.
+      - name: macOS disk image builder
+        if: runner.os == 'macOS'
+        run: python -m pip install dmgbuild==1.6.7
       # The embedded public key comes from the Worker's own private key, so the two cannot drift apart.
       # Runs before npm ci so no installed package shares a step with the secret.
       - name: Public key

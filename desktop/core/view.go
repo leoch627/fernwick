@@ -30,36 +30,39 @@ type ViewLinks struct {
 	Help    bool `json:"help"`
 }
 type AppView struct {
-	Brand              string          `json:"brand"`
-	Version            string          `json:"version"`
-	Environment        string          `json:"environment"`
-	Demo               bool            `json:"demo"`
-	LoggedIn           bool            `json:"loggedIn"`
-	Account            *AccountView    `json:"account"`
-	Connection         ConnectionState `json:"connection"`
-	SelectedNode       *string         `json:"selectedNode"`
-	ActualNode         *string         `json:"actualNode"`
-	Sync               string          `json:"sync"`
-	LastSync           *int64          `json:"lastSync"`
-	UsableUntil        *int64          `json:"usableUntil"`
-	Error              *ErrorCode      `json:"error"`
-	Nodes              []NodeView      `json:"nodes"`
-	Preferences        Preferences     `json:"preferences"`
-	Storage            string          `json:"storage"`
-	HelperReady        bool            `json:"helperReady"`
-	ProxyPort          int             `json:"proxyPort"`
-	Policy             string          `json:"policy"`
-	Announcement       *string         `json:"announcement"`
-	Update             string          `json:"update"`
-	ManualUpdate       bool            `json:"manualUpdate"`
-	PendingRenewal     bool            `json:"pendingRenewal"`
-	Download           DownloadView    `json:"download"`
-	Rules              string          `json:"rules"`
-	ShowTrafficSummary bool            `json:"showTrafficSummary"`
-	Links              ViewLinks       `json:"links"`
-	Report             ReportView      `json:"report"`
-	ReportAvailable    bool            `json:"reportAvailable"`
-	Now                int64           `json:"now"`
+	Brand        string          `json:"brand"`
+	Version      string          `json:"version"`
+	Environment  string          `json:"environment"`
+	Demo         bool            `json:"demo"`
+	LoggedIn     bool            `json:"loggedIn"`
+	Account      *AccountView    `json:"account"`
+	Connection   ConnectionState `json:"connection"`
+	SelectedNode *string         `json:"selectedNode"`
+	ActualNode   *string         `json:"actualNode"`
+	Sync         string          `json:"sync"`
+	LastSync     *int64          `json:"lastSync"`
+	UsableUntil  *int64          `json:"usableUntil"`
+	Error        *ErrorCode      `json:"error"`
+	Nodes        []NodeView      `json:"nodes"`
+	Preferences  Preferences     `json:"preferences"`
+	Storage      string          `json:"storage"`
+	HelperReady  bool            `json:"helperReady"`
+	ProxyPort    int             `json:"proxyPort"`
+	Policy       string          `json:"policy"`
+	Announcement *string         `json:"announcement"`
+	Update       string          `json:"update"`
+	ManualUpdate bool            `json:"manualUpdate"`
+	// Installing: the user asked to update; the download (if any) and installation run
+	// on their own and the app restarts into the new version.
+	Installing         bool         `json:"installing"`
+	PendingRenewal     bool         `json:"pendingRenewal"`
+	Download           DownloadView `json:"download"`
+	Rules              string       `json:"rules"`
+	ShowTrafficSummary bool         `json:"showTrafficSummary"`
+	Links              ViewLinks    `json:"links"`
+	Report             ReportView   `json:"report"`
+	ReportAvailable    bool         `json:"reportAvailable"`
+	Now                int64        `json:"now"`
 }
 
 // ReportView is the state of the user's problem report: idle, sending, sent (with the

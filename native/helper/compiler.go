@@ -1,11 +1,43 @@
 package main
 
-import "runtime"
+import (
+	"net"
+	"runtime"
+)
 
 type object = map[string]any
 
 var lan = []string{"127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16", "::1/128", "fc00::/7", "fe80::/10"}
 
+// mainlandAddresses mirrors desktop/core MainlandAddresses: the public ranges the rules
+// send direct, without reserved ranges a broken or poisoned resolver might return.
+func mainlandAddresses(rules Rules) []string {
+	var reserved []*net.IPNet
+	for _, cidr := range []string{"0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16", "172.16.0.0/12", "192.168.0.0/16", "224.0.0.0/3", "::/8", "fc00::/7", "fe80::/10", "ff00::/8"} {
+		_, network, _ := net.ParseCIDR(cidr)
+		reserved = append(reserved, network)
+	}
+	out := []string{}
+	for _, section := range rules.Sections {
+		if section.Target != "direct" {
+			continue
+		}
+	next:
+		for _, cidr := range section.IPs {
+			ip, _, e := net.ParseCIDR(cidr)
+			if e != nil {
+				continue
+			}
+			for _, network := range reserved {
+				if network.Contains(ip) {
+					continue next
+				}
+			}
+			out = append(out, cidr)
+		}
+	}
+	return out
+}
 func tunName() string {
 	if runtime.GOOS == "darwin" {
 		return "utun50"
@@ -143,6 +175,11 @@ func compileCore(c Candidate, j Journal) []byte {
 		}
 	}
 	routes = append(routes, route(object{"type": "field", "network": "tcp,udp"}, primary))
+	// Unlisted names: mainland resolver first, kept only for a mainland answer (see
+	// desktop/core/proxyconfig.go); otherwise resolved abroad through the proxy.
+	if mainland := mainlandAddresses(c.Rules); c.Mode == "rule" && len(mainland) > 0 {
+		dns = append(dns, object{"address": "https://223.5.5.5/dns-query", "tag": "dns-direct", "expectIPs": mainland, "skipFallback": false})
+	}
 	dns = append(dns, object{"address": "https://1.1.1.1/dns-query", "tag": "dns-proxy", "skipFallback": false, "finalQuery": true})
 	tun := object{"name": j.Tun, "desc": ruleTag() + " TUN", "mtu": 1500, "gateway": []string{"172.19.0.1/30", "fdfe:dcba:9876::1/126"}, "autoSystemRoutingTable": []string{}, "autoOutboundsInterface": j.Interface.Name, "autoSystemDnsToGateway": false}
 	// Windows Xray owns its adapter's routes, DNS and dynamic WFP filters. Other platforms use helper-owned routing/DNS.
@@ -151,7 +188,7 @@ func compileCore(c Candidate, j Journal) []byte {
 		tun["dns"] = []string{tunDNS()}
 		tun["autoSystemWfpBlockLeak"] = []string{"dns", "misconfigtun"}
 	}
-	outbounds = append(outbounds, object{"tag": "direct", "protocol": "freedom", "settings": object{"domainStrategy": "UseIP", "finalRules": []object{{"action": "allow", "ip": lan}}}, "streamSettings": object{"sockopt": sock}}, object{"tag": "dns-out", "protocol": "dns", "settings": object{"rules": []object{{"action": "hijack", "qType": "1,28"}, {"action": "return", "rCode": 5}}}}, object{"tag": "block", "protocol": "blackhole"})
+	outbounds = append(outbounds, object{"tag": "direct", "protocol": "freedom", "settings": object{"domainStrategy": "UseIPv4v6", "finalRules": []object{{"action": "allow", "ip": lan}}}, "streamSettings": object{"sockopt": sock}}, object{"tag": "dns-out", "protocol": "dns", "settings": object{"rules": []object{{"action": "hijack", "qType": "1,28"}, {"action": "return", "rCode": 5}}}}, object{"tag": "block", "protocol": "blackhole"})
 	routing := object{"domainStrategy": "AsIs", "rules": routes}
 	config := object{"log": object{"loglevel": "none", "access": "none", "error": "none"}, "inbounds": []object{{"tag": "tun", "protocol": "tun", "settings": tun, "sniffing": object{"enabled": true, "destOverride": []string{"http", "tls", "quic"}, "routeOnly": true}}}, "outbounds": outbounds, "dns": object{"tag": "dns-proxy", "queryStrategy": "UseIP", "disableFallbackIfMatch": true, "useSystemHosts": false, "servers": dns}, "routing": routing}
 	if len(balancers) > 0 {

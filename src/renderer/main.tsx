@@ -8,6 +8,8 @@ import { isWails, wailsBridge } from './wails';
 import './style.css';
 declare global { interface Window { starrail?: ClientBridge; } }
 const bridge = window.starrail ?? (isWails() ? wailsBridge() : previewBridge());
+/** Windows draws the app name and icon in its own title bar; the page does not repeat them. */
+const nativeTitle = /Windows NT/.test(navigator.userAgent);
 
 // One window, three things on it: connect, pick a node, see the plan. Everything else
 // lives in the settings sheet. Most users never open it.
@@ -23,11 +25,13 @@ function Icon({ name, size = 20 }: { name: string; size?: number }) {
     search: <><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></>,
     sparkle: <path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5z"/>,
     info: <><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10h.01"/></>,
+    update: <><circle cx="12" cy="12" r="9"/><path d="M12 16.5v-9m-4 4 4-4 4 4"/></>,
   };
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name] ?? paths.info}</svg>;
 }
 function BrandMark({ size = 32 }: { size?: number }) {
-  return <svg width={size} height={size} viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="12" fill="#6958df"/><path d="m21 7 2.5 10L34 20l-10.5 3L21 33l-3-10L8 20l10-3z" fill="white"/></svg>;
+  // Drawn in the theme's two accents: pink to sky blue (三月七), lavender to violet (黑塔).
+  return <svg width={size} height={size} viewBox="0 0 40 40" aria-hidden="true"><defs><linearGradient id="brand-mark" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style={{ stopColor: 'var(--accent-2)' }}/><stop offset="1" style={{ stopColor: 'var(--accent)' }}/></linearGradient></defs><rect width="40" height="40" rx="12" fill="url(#brand-mark)"/><path d="m21 7 2.5 10L34 20l-10.5 3L21 33l-3-10L8 20l10-3z" style={{ fill: 'var(--on-accent)' }}/></svg>;
 }
 
 const regions: Record<string, string> = {
@@ -150,6 +154,13 @@ function SettingsSheet({ state, busy, report, close, run, prefs }: { state: AppV
   const download = state.download;
   return <Sheet title="设置" close={close}>
     <div className="group">
+      <div className="row appearance"><span><strong>外观</strong><small>亮色为三月七配色，暗色为黑塔配色</small></span>
+        <div className="segmented" role="radiogroup" aria-label="外观">
+          {([['system', '跟随系统'], ['light', '亮色'], ['dark', '暗色']] as const).map(([theme, name]) => <button key={theme} role="radio" aria-checked={state.preferences.theme === theme} className={state.preferences.theme === theme ? 'on' : ''} onClick={() => prefs({ theme })}>{name}</button>)}
+        </div>
+      </div>
+    </div>
+    <div className="group">
       <div className="row"><span><strong>开机自动启动</strong></span><button role="switch" aria-checked={state.preferences.launchAtLogin} aria-label="开机自动启动" className={`toggle ${state.preferences.launchAtLogin ? 'on' : ''}`} onClick={() => prefs({ launchAtLogin: !state.preferences.launchAtLogin })}/></div>
       <div className="row"><span><strong>全局代理</strong><small>一般不用打开。个别网站打不开时可以试试</small></span><button role="switch" aria-checked={state.preferences.mode === 'global'} aria-label="全局代理" className={`toggle ${state.preferences.mode === 'global' ? 'on' : ''}`} onClick={() => prefs({ mode: state.preferences.mode === 'global' ? 'rule' : 'global' })}/></div>
     </div>
@@ -158,10 +169,10 @@ function SettingsSheet({ state, busy, report, close, run, prefs }: { state: AppV
       {reporting && <ReportPanel state={state} run={run}/>}
     </div>
     <div className="group">
-      <div className="row"><span><strong>检查更新</strong><small>{download.status === 'downloading' ? `正在下载 ${Math.round(download.received / Math.max(1, download.total) * 100)}%` : download.status === 'ready' ? `新版本 ${download.version} 已下载` : state.update}</small></span>
-        {download.status === 'ready' ? <button className="secondary" onClick={() => void run({ type: 'install-update' })}>重启更新</button>
-          : download.status === 'available' || download.status === 'paused' || download.status === 'failed' ? <button className="secondary" onClick={() => void run({ type: 'download-update' })}>{state.manualUpdate ? '去下载' : '下载'}</button>
-          : <button className="secondary" disabled={!!busy || download.status === 'downloading'} onClick={() => void run({ type: 'check-update' })}>检查</button>}
+      <div className="row"><span><strong>自动检查更新</strong><small>打开时和每隔几小时检查一次，有新版本会显示在首页</small></span><button role="switch" aria-checked={state.preferences.autoUpdate} aria-label="自动检查更新" className={`toggle ${state.preferences.autoUpdate ? 'on' : ''}`} onClick={() => prefs({ autoUpdate: !state.preferences.autoUpdate })}/></div>
+      <div className="row"><span><strong>检查更新</strong><small>{state.installing ? (download.status === 'downloading' ? `正在下载 ${Math.round(download.received / Math.max(1, download.total) * 100)}%` : '正在安装，完成后自动重新打开') : download.status === 'ready' ? `新版本 ${download.version} 已下载` : state.update}</small></span>
+        {download.version && download.status !== 'idle' && !state.installing ? <button className="secondary" onClick={() => void run({ type: 'install-update' })}>{state.manualUpdate ? '去下载' : '立即更新'}</button>
+          : <button className="secondary" disabled={!!busy || state.installing || download.status === 'downloading'} onClick={() => void run({ type: 'check-update' })}>检查</button>}
       </div>
       <div className="row"><span><strong>修复网络组件</strong><small>{state.preferences.tunnel === 'proxy' ? '系统代理模式用不到，TUN 模式才需要' : state.helperReady ? '组件正常' : '第一次连接时会自动安装'}</small></span><button className="secondary" disabled={!!busy} onClick={() => void run({ type: 'repair' })}>修复</button></div>
       {state.links.help && <button className="row" onClick={() => void run({ type: 'open-link', link: 'help' })}><span><strong>使用帮助</strong></span><Icon name="chevron" size={16}/></button>}
@@ -183,6 +194,32 @@ function ModeCard({ state, working, prefs }: { state: AppView; working: boolean;
     <p className="muted">{tun ? '接管所有软件，包括游戏和命令行 · 第一次需要管理员授权'
       : `浏览器和大多数软件走代理 · 不需要管理员授权${state.proxyPort ? ` · 本机端口 ${state.proxyPort}` : ''}`}</p>
     <div className="row"><span><strong>广告拦截</strong></span><button role="switch" aria-checked={state.preferences.adBlock} aria-label="广告拦截" className={`toggle ${state.preferences.adBlock ? 'on' : ''}`} onClick={() => prefs({ adBlock: !state.preferences.adBlock })}/></div>
+  </section>;
+}
+
+/** Clash Party style: a new version shows on the home screen and installs in one click. */
+function UpdateCard({ state, run }: { state: AppView; run(command: Command): Promise<boolean> }) {
+  const [later, setLater] = useState<string | null>(null);
+  const { status, version, received, total, error } = state.download;
+  if (!version || status === 'idle' || (later === version && !state.installing)) return null;
+  const percent = Math.min(100, Math.round(received / Math.max(1, total) * 100));
+  const downloading = status === 'downloading';
+  const detail = state.manualUpdate ? '这个安装位置不能自动更新，请从官网下载'
+    : state.installing ? (downloading ? `正在下载 ${percent}%` : '正在安装，完成后会自动重新打开')
+    : status === 'failed' ? error ?? '下载没有完成，可以重试'
+    : status === 'ready' ? '已下载，更新时会短暂断开连接'
+    : '不用重新下载安装包，更新后自动重新打开';
+  return <section className="card update-card" aria-label="推荐更新">
+    <span className="update-icon"><Icon name="update"/></span>
+    <span className="update-text">
+      <span className="update-title"><span className="update-badge">推荐更新</span><strong>新版本 {version}</strong></span>
+      <small aria-live="polite">{detail}</small>
+      {state.installing && <span className="progress" role="progressbar" aria-label="更新进度" aria-valuenow={downloading ? percent : 100} aria-valuemin={0} aria-valuemax={100}><span className={downloading ? '' : 'indeterminate'} style={{ width: `${downloading ? percent : 100}%` }}/></span>}
+    </span>
+    {!state.installing && <>
+      <button className="primary small" onClick={() => void run({ type: 'install-update' })}>{state.manualUpdate ? '去下载' : status === 'failed' ? '重试' : '立即更新'}</button>
+      <button className="icon-button" aria-label="稍后提醒" title="稍后提醒" onClick={() => setLater(version)}><Icon name="close" size={16}/></button>
+    </>}
   </section>;
 }
 
@@ -209,6 +246,7 @@ function Home({ state, busy, run, open, prefs }: { state: AppView; busy: string 
   };
   const toggle = () => void run({ type: recovery ? 'repair' : connected || working ? 'disconnect' : 'connect' });
   return <main className="home">
+    <UpdateCard state={state} run={run}/>
     {state.announcement && <p className="announcement" role="note">{state.announcement}</p>}
     <section className={`power ${connected ? 'on' : working ? 'working' : ''}`}>
       <button className="power-button" aria-label={connected || working ? '断开连接' : recovery ? '修复网络' : '连接'} onClick={toggle}><Icon name="power" size={48}/></button>
@@ -230,7 +268,6 @@ function Home({ state, busy, run, open, prefs }: { state: AppView; busy: string 
         {state.links.renew && <button className={renewSoon ? 'primary small' : 'link'} onClick={() => void run({ type: 'open-link', link: 'renew' })}>续费</button>}</div>
       {state.pendingRenewal && <button className="link" onClick={() => void run({ type: 'renewal-return' })}>已经续费？点这里刷新</button>}
     </section>}
-    {state.download.status === 'ready' && <button className="update-pill" onClick={() => void run({ type: 'install-update' })}>新版本已下载 · 点击重启更新</button>}
   </main>;
 }
 
@@ -253,7 +290,7 @@ function App() {
   const open = (next: 'nodes' | 'settings', reportOpen = false) => { setReport(reportOpen); setSheet(next); };
   if (!state) return <div className="loading"><BrandMark size={48}/><p>{toast ?? '正在打开…'}</p></div>;
   return <div className="app">
-    {state.loggedIn && <header className="topbar"><span className="brand"><BrandMark size={24}/>{state.brand}</span>{state.demo && <span className="chip">预览</span>}<button className="icon-button" aria-label="设置" onClick={() => open('settings')}><Icon name="settings"/></button></header>}
+    {state.loggedIn && <header className={`topbar ${nativeTitle ? 'compact' : ''}`}>{!nativeTitle && <span className="brand"><BrandMark size={24}/>{state.brand}</span>}{state.demo && <span className="chip">预览</span>}<button className="icon-button" aria-label="设置" onClick={() => open('settings')}><Icon name="settings"/></button></header>}
     {state.loggedIn ? <Home state={state} busy={busy} run={run} open={open} prefs={prefs}/> : <Login state={state} busy={busy} run={run}/>}
     {sheet === 'nodes' && <NodeSheet state={state} close={() => setSheet(null)} run={run}/>}
     {sheet === 'settings' && <SettingsSheet state={state} busy={busy} report={report} close={() => setSheet(null)} run={run} prefs={prefs}/>}

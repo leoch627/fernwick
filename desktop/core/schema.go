@@ -187,9 +187,12 @@ type Preferences struct {
 	// Files written before these fields existed load with the defaults.
 	Tunnel  string `json:"tunnel" default:"\"proxy\""`
 	AdBlock bool   `json:"adBlock" default:"true"`
+	// AutoUpdate checks for new versions at start and every few hours (Settings →
+	// 自动检查更新). Installing always waits for the user.
+	AutoUpdate bool `json:"autoUpdate" default:"true"`
 }
 
-var DefaultPreferences = Preferences{Mode: "rule", CloseBehavior: "tray", Theme: "system", Tunnel: "proxy", AdBlock: true}
+var DefaultPreferences = Preferences{Mode: "rule", CloseBehavior: "tray", Theme: "system", Tunnel: "proxy", AdBlock: true, AutoUpdate: true}
 
 // Command is decoded with ParseCommand, which enforces its discriminated shape.
 type Command struct {

@@ -1,0 +1,39 @@
+<!doctype html>
+<!-- Source of dmg-background.png / dmg-background@2x.png (node tools/render-dmg-background.mjs).
+     660×420 is the DMG window; tools/package.py puts the app icon at (170, 190) and the
+     Applications link at (490, 190), 112 px icons with Finder's labels below, inside the wells. Brand-neutral:
+     one background serves every brand built from this repository. -->
+<html lang="zh-CN"><head><meta charset="utf-8">
+<style>
+  html, body { margin: 0; width: 660px; height: 420px; overflow: hidden; }
+  body {
+    font-family: "PingFang SC", "Noto Sans CJK SC", "WenQuanYi Zen Hei", system-ui, sans-serif;
+    background:
+      radial-gradient(ellipse 380px 210px at 330px 205px, rgb(255 255 255 / .96), rgb(255 255 255 / 0) 72%),
+      linear-gradient(120deg, #eaf5fd 0%, #f9f8fd 48%, #fdedf4 100%);
+    color: #2b2d42; position: relative; -webkit-font-smoothing: antialiased;
+  }
+  h1 { position: absolute; top: 36px; left: 0; right: 0; margin: 0; text-align: center; font-size: 21px; font-weight: 600; letter-spacing: .5px; }
+  .sub { position: absolute; top: 70px; left: 0; right: 0; text-align: center; font-size: 12.5px; color: #8a8ca0; letter-spacing: .3px; }
+  .well { position: absolute; top: 116px; width: 156px; height: 180px; border-radius: 30px; background: rgb(255 255 255 / .55); border: 1.5px dashed rgb(210 79 132 / .28); }
+  .well.app { left: 92px; border-color: rgb(61 154 214 / .32); } .well.apps { left: 412px; }
+  svg.arrow { position: absolute; left: 256px; top: 166px; }
+  .tips { position: absolute; left: 40px; right: 40px; bottom: 22px; padding: 11px 16px; border-radius: 14px; background: rgb(255 255 255 / .82); border: 1px solid #f1e3ec; box-shadow: 0 6px 18px rgb(160 70 120 / .06); font-size: 11.5px; line-height: 19px; color: #5f6276; }
+  .tips p { margin: 0; display: flex; gap: 8px; align-items: baseline; }
+  .tips b { flex: none; width: 16px; height: 16px; border-radius: 50%; background: #fde7f0; color: #d24f84; font-size: 10.5px; line-height: 16px; text-align: center; font-weight: 700; transform: translateY(2px); }
+</style></head>
+<body>
+  <h1>拖到「应用程序」即可完成安装</h1>
+  <div class="sub">Drag to Applications to install</div>
+  <div class="well app"></div>
+  <div class="well apps"></div>
+  <svg class="arrow" width="148" height="48" viewBox="0 0 148 48" aria-hidden="true">
+    <defs><linearGradient id="g" gradientUnits="userSpaceOnUse" x1="10" y1="24" x2="124" y2="24"><stop offset="0" stop-color="#6fc3ef"/><stop offset="1" stop-color="#e2669a"/></linearGradient></defs>
+    <path d="M10 24 H124" stroke="url(#g)" stroke-width="5" stroke-linecap="round" stroke-dasharray="1 12"/>
+    <path d="M114 11 L131 24 L114 37" fill="none" stroke="#d24f84" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+  <div class="tips">
+    <p><b>1</b><span>首次打开如提示“无法验证开发者”：打开 系统设置 → 隐私与安全性，点“仍要打开”。</span></p>
+    <p><b>2</b><span>旧版本覆盖不了时，先把旧版拖到废纸篓再拖入。以后在客户端内一键更新。</span></p>
+  </div>
+</body></html>

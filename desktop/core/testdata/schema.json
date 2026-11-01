@@ -430,55 +430,55 @@
     {
       "name": "preferences default",
       "schema": "preferences",
-      "raw": "{\"mode\":\"rule\",\"nodeId\":null,\"autoConnect\":false,\"launchAtLogin\":false,\"closeBehavior\":\"tray\",\"theme\":\"system\",\"tunnel\":\"proxy\",\"adBlock\":true}",
+      "raw": "{\"mode\":\"rule\",\"nodeId\":null,\"autoConnect\":false,\"launchAtLogin\":false,\"closeBehavior\":\"tray\",\"theme\":\"system\",\"tunnel\":\"proxy\",\"adBlock\":true,\"autoUpdate\":true}",
       "valid": true
     },
     {
       "name": "preferences command",
       "schema": "command",
-      "raw": "{\"type\":\"preferences\",\"preferences\":{\"mode\":\"rule\",\"nodeId\":null,\"autoConnect\":false,\"launchAtLogin\":false,\"closeBehavior\":\"tray\",\"theme\":\"system\",\"tunnel\":\"proxy\",\"adBlock\":true}}",
+      "raw": "{\"type\":\"preferences\",\"preferences\":{\"mode\":\"rule\",\"nodeId\":null,\"autoConnect\":false,\"launchAtLogin\":false,\"closeBehavior\":\"tray\",\"theme\":\"system\",\"tunnel\":\"proxy\",\"adBlock\":true,\"autoUpdate\":true}}",
       "valid": true
     },
     {
       "name": "preferences missing nullable",
       "schema": "preferences",
-      "raw": "{\"mode\":\"rule\",\"autoConnect\":false,\"launchAtLogin\":false,\"closeBehavior\":\"tray\",\"theme\":\"system\",\"tunnel\":\"proxy\",\"adBlock\":true}",
+      "raw": "{\"mode\":\"rule\",\"autoConnect\":false,\"launchAtLogin\":false,\"closeBehavior\":\"tray\",\"theme\":\"system\",\"tunnel\":\"proxy\",\"adBlock\":true,\"autoUpdate\":true}",
       "valid": false
     },
     {
       "name": "preferences unknown nested",
       "schema": "command",
-      "raw": "{\"type\":\"preferences\",\"preferences\":{\"mode\":\"rule\",\"nodeId\":null,\"autoConnect\":false,\"launchAtLogin\":false,\"closeBehavior\":\"tray\",\"theme\":\"system\",\"tunnel\":\"proxy\",\"adBlock\":true,\"token\":\"fixture-only\"}}",
+      "raw": "{\"type\":\"preferences\",\"preferences\":{\"mode\":\"rule\",\"nodeId\":null,\"autoConnect\":false,\"launchAtLogin\":false,\"closeBehavior\":\"tray\",\"theme\":\"system\",\"tunnel\":\"proxy\",\"adBlock\":true,\"autoUpdate\":true,\"token\":\"fixture-only\"}}",
       "valid": false
     },
     {
       "name": "preferences before tunnel and ad blocking",
       "schema": "preferences",
-      "raw": "{\"mode\":\"rule\",\"nodeId\":null,\"autoConnect\":false,\"launchAtLogin\":false,\"closeBehavior\":\"tray\",\"theme\":\"system\"}",
+      "raw": "{\"mode\":\"rule\",\"nodeId\":null,\"autoConnect\":false,\"launchAtLogin\":false,\"closeBehavior\":\"tray\",\"theme\":\"system\",\"autoUpdate\":true}",
       "valid": true
     },
     {
       "name": "preferences TUN tunnel",
       "schema": "preferences",
-      "raw": "{\"mode\":\"rule\",\"nodeId\":null,\"autoConnect\":false,\"launchAtLogin\":false,\"closeBehavior\":\"tray\",\"theme\":\"system\",\"tunnel\":\"tun\",\"adBlock\":false}",
+      "raw": "{\"mode\":\"rule\",\"nodeId\":null,\"autoConnect\":false,\"launchAtLogin\":false,\"closeBehavior\":\"tray\",\"theme\":\"system\",\"tunnel\":\"tun\",\"adBlock\":false,\"autoUpdate\":true}",
       "valid": true
     },
     {
       "name": "preferences unknown tunnel",
       "schema": "preferences",
-      "raw": "{\"mode\":\"rule\",\"nodeId\":null,\"autoConnect\":false,\"launchAtLogin\":false,\"closeBehavior\":\"tray\",\"theme\":\"system\",\"tunnel\":\"vpn\",\"adBlock\":true}",
+      "raw": "{\"mode\":\"rule\",\"nodeId\":null,\"autoConnect\":false,\"launchAtLogin\":false,\"closeBehavior\":\"tray\",\"theme\":\"system\",\"tunnel\":\"vpn\",\"adBlock\":true,\"autoUpdate\":true}",
       "valid": false
     },
     {
       "name": "preferences null tunnel",
       "schema": "preferences",
-      "raw": "{\"mode\":\"rule\",\"nodeId\":null,\"autoConnect\":false,\"launchAtLogin\":false,\"closeBehavior\":\"tray\",\"theme\":\"system\",\"tunnel\":null,\"adBlock\":true}",
+      "raw": "{\"mode\":\"rule\",\"nodeId\":null,\"autoConnect\":false,\"launchAtLogin\":false,\"closeBehavior\":\"tray\",\"theme\":\"system\",\"tunnel\":null,\"adBlock\":true,\"autoUpdate\":true}",
       "valid": false
     },
     {
       "name": "preferences ad blocking as text",
       "schema": "preferences",
-      "raw": "{\"mode\":\"rule\",\"nodeId\":null,\"autoConnect\":false,\"launchAtLogin\":false,\"closeBehavior\":\"tray\",\"theme\":\"system\",\"tunnel\":\"proxy\",\"adBlock\":\"yes\"}",
+      "raw": "{\"mode\":\"rule\",\"nodeId\":null,\"autoConnect\":false,\"launchAtLogin\":false,\"closeBehavior\":\"tray\",\"theme\":\"system\",\"tunnel\":\"proxy\",\"adBlock\":\"yes\",\"autoUpdate\":true}",
       "valid": false
     },
     {

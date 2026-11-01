@@ -31,8 +31,11 @@ type DownloadManager interface {
 	Cancel() error
 	VerifiedPath(Artifact) (string, error)
 }
+
+// Installer applies a verified update in place (SelfUpdater). Available is false where
+// the installation cannot update itself; the user is then sent to the download page.
 type Installer interface {
-	Verified() bool
+	Available() bool
 	Install(context.Context, Artifact, string, string) error
 }
 type ControllerDeps struct {
@@ -58,7 +61,6 @@ type ControllerDeps struct {
 	ExportDiagnostics func(any) error
 	LaunchAtLogin     func(bool) error
 	OSCompatible      func(string) bool
-	ConfirmInstall    func(string) bool
 	// Telemetry reports to the operator's endpoint; nil disables it. SelfCheck runs the
 	// network checks attached to a problem report.
 	Telemetry *Telemetry
@@ -109,29 +111,32 @@ type ClientController struct {
 	renewalUntil                                                          int64
 	updateStatus                                                          string
 	policyBusy, updateBusy                                                bool
-	updateDone                                                            chan struct{}
-	releaseWatermark                                                      *Watermark
-	releaseIndex                                                          *ReleaseIndex
-	updateArtifact                                                        *Artifact
-	releaseEnvelope                                                       string
-	lastPolicyVersion                                                     int64
-	installedRules                                                        string
-	recovery                                                              *controllerFuture
-	suspended                                                             *suspendIntent
-	actualNode                                                            *string
-	closing                                                               bool
-	started                                                               bool
-	tickDone                                                              chan struct{}
-	stopMu                                                                sync.Mutex
-	persistMu                                                             sync.Mutex
-	intentGeneration                                                      uint64
-	probeResults                                                          map[string]savedProbe
-	dirty                                                                 chan struct{}
-	listeners                                                             map[uint64]func(AppView)
-	listenerID                                                            uint64
-	diagnosticsMu                                                         sync.Mutex
-	diagnosticEvents                                                      []map[string]any
-	report                                                                ReportView
+	// installWhenReady: the user asked to update before the download finished;
+	// installing marks the update being applied, after which the app quits.
+	installWhenReady, installing bool
+	updateDone                   chan struct{}
+	releaseWatermark             *Watermark
+	releaseIndex                 *ReleaseIndex
+	updateArtifact               *Artifact
+	releaseEnvelope              string
+	lastPolicyVersion            int64
+	installedRules               string
+	recovery                     *controllerFuture
+	suspended                    *suspendIntent
+	actualNode                   *string
+	closing                      bool
+	started                      bool
+	tickDone                     chan struct{}
+	stopMu                       sync.Mutex
+	persistMu                    sync.Mutex
+	intentGeneration             uint64
+	probeResults                 map[string]savedProbe
+	dirty                        chan struct{}
+	listeners                    map[uint64]func(AppView)
+	listenerID                   uint64
+	diagnosticsMu                sync.Mutex
+	diagnosticEvents             []map[string]any
+	report                       ReportView
 }
 
 func NewClientController(deps ControllerDeps) *ClientController {
@@ -480,7 +485,7 @@ func (c *ClientController) linkLocked(key string, p *Policy) *string {
 	return nil
 }
 func (c *ClientController) manualUpdateLocked() bool {
-	return c.updateArtifact != nil && c.updateArtifact.SignatureIdentity == "unsigned" && c.deps.Platform != "linux"
+	return c.updateArtifact != nil && (c.deps.Installer == nil || !c.deps.Installer.Available())
 }
 func (c *ClientController) View() AppView {
 	// Service callbacks never run with their own state lock held.
@@ -499,7 +504,7 @@ func (c *ClientController) View() AppView {
 	defer c.mu.Unlock()
 	now := c.clock.Now()
 	gate := c.gateLocked()
-	view := AppView{Brand: c.deps.Build.Name, Version: c.deps.Version, Environment: c.deps.Build.Environment, Demo: c.deps.Demo, LoggedIn: c.session != nil, Connection: network.State, SelectedNode: c.preferences.NodeID, ActualNode: c.actualNode, Sync: c.syncStatus, Nodes: []NodeView{}, Preferences: c.preferences, Storage: storage, HelperReady: c.network.Ready(), ProxyPort: c.network.ProxyPort(), Policy: "使用内置设置", Update: c.updateStatus, ManualUpdate: c.manualUpdateLocked(), PendingRenewal: c.renewalUntil > now, Download: download, Rules: rules, ShowTrafficSummary: true, Links: ViewLinks{c.linkLocked("website", p) != nil, c.linkLocked("renew", p) != nil, c.linkLocked("help", p) != nil}, Report: c.report, ReportAvailable: c.deps.Telemetry.Enabled(), Now: now}
+	view := AppView{Brand: c.deps.Build.Name, Version: c.deps.Version, Environment: c.deps.Build.Environment, Demo: c.deps.Demo, LoggedIn: c.session != nil, Connection: network.State, SelectedNode: c.preferences.NodeID, ActualNode: c.actualNode, Sync: c.syncStatus, Nodes: []NodeView{}, Preferences: c.preferences, Storage: storage, HelperReady: c.network.Ready(), ProxyPort: c.network.ProxyPort(), Policy: "使用内置设置", Update: c.updateStatus, ManualUpdate: c.manualUpdateLocked(), Installing: c.installing || c.installWhenReady, PendingRenewal: c.renewalUntil > now, Download: download, Rules: rules, ShowTrafficSummary: true, Links: ViewLinks{c.linkLocked("website", p) != nil, c.linkLocked("renew", p) != nil, c.linkLocked("help", p) != nil}, Report: c.report, ReportAvailable: c.deps.Telemetry.Enabled(), Now: now}
 	if c.failure != "" {
 		e := c.failure
 		view.Error = &e
@@ -713,7 +718,9 @@ func (c *ClientController) Start(ctx context.Context) error {
 			}
 		}
 	}()
-	go c.checkUpdate(c.publicCtx)
+	if c.autoUpdate() {
+		go c.checkUpdate(c.publicCtx)
+	}
 	if auto && c.gate() == "" {
 		if err := c.connect(ctx); err != nil {
 			c.fail(CodeOf(err))
@@ -871,7 +878,7 @@ func (c *ClientController) tick() {
 	if policyCheck {
 		go c.checkPolicy()
 	}
-	if updateCheck {
+	if updateCheck && c.autoUpdate() {
 		go c.checkUpdate(c.publicCtx)
 	}
 	if persist {
@@ -1191,7 +1198,7 @@ func (c *ClientController) checkUpdate(parent context.Context) error {
 		case c.manualUpdateLocked():
 			c.updateStatus = fmt.Sprintf("发现新版本 %s，请从下载页安装", artifact.Version)
 		default:
-			c.updateStatus = fmt.Sprintf("发现新版本 %s，下载由你决定", artifact.Version)
+			c.updateStatus = fmt.Sprintf("发现新版本 %s", artifact.Version)
 		}
 		c.mu.Unlock()
 		return nil
@@ -1216,6 +1223,75 @@ func (c *ClientController) openDownloadPage() error {
 		return err
 	}
 	_, err = c.deps.OpenExternal(target, "")
+	return err
+}
+func (c *ClientController) autoUpdate() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.preferences.AutoUpdate
+}
+
+// downloadThenInstall finishes the download the user asked to install, then installs
+// it unless they cancelled in the meantime.
+func (c *ClientController) downloadThenInstall(selected Artifact) {
+	err := c.deps.Download.Start(c.publicCtx)
+	c.mu.Lock()
+	wanted := c.installWhenReady
+	c.installWhenReady = false
+	c.mu.Unlock()
+	if err == nil && wanted && c.deps.Download.View().Status == "ready" {
+		err = c.installUpdate(c.publicCtx, selected)
+	}
+	if err != nil {
+		c.fail(CodeOf(err))
+	}
+	c.emit()
+}
+
+// installUpdate re-checks the release index, disconnects and hands the verified file to
+// the installer, which quits the app and starts the new version.
+func (c *ClientController) installUpdate(ctx context.Context, selected Artifact) error {
+	c.mu.Lock()
+	if c.installing {
+		c.mu.Unlock()
+		return nil
+	}
+	c.installing = true
+	c.releaseIndex = nil
+	c.mu.Unlock()
+	c.emit()
+	err := func() error {
+		if err := c.checkUpdate(ctx); err != nil {
+			return err
+		}
+		c.mu.Lock()
+		index := c.releaseIndex
+		current := c.updateArtifact
+		envelope := c.releaseEnvelope
+		c.mu.Unlock()
+		if index == nil || current == nil || current.ID != selected.ID || current.SHA256 != selected.SHA256 || envelope == "" {
+			return NewAppError("UPDATE_VERIFY_FAILED")
+		}
+		if err := c.network.Disconnect(ctx); err != nil {
+			return err
+		}
+		if err := InstallationGate(selected, *index, c.now(), c.network.View().State == "Disconnected"); err != nil {
+			return err
+		}
+		path, err := c.deps.Download.VerifiedPath(selected)
+		if err != nil {
+			return err
+		}
+		return c.deps.Installer.Install(ctx, selected, path, envelope)
+	}()
+	c.mu.Lock()
+	if err != nil {
+		c.installing = false
+		c.updateStatus = "更新没有完成，可以重试或从官网下载"
+	} else {
+		c.updateStatus = "正在安装更新，完成后会自动重新打开"
+	}
+	c.mu.Unlock()
 	return err
 }
 func (c *ClientController) Command(ctx context.Context, raw json.RawMessage) CommandResult {
@@ -1432,6 +1508,9 @@ func (c *ClientController) execute(ctx context.Context, cmd Command) error {
 		c.mu.Lock()
 		c.preferences = change
 		c.mu.Unlock()
+		if change.AutoUpdate && !before.AutoUpdate {
+			go c.checkUpdate(c.publicCtx)
+		}
 		if reconnect {
 			return c.connect(ctx)
 		}
@@ -1461,53 +1540,37 @@ func (c *ClientController) execute(ctx context.Context, cmd Command) error {
 		}
 		return nil
 	case "cancel-update":
+		c.mu.Lock()
+		c.installWhenReady = false
+		c.mu.Unlock()
 		if c.deps.Download != nil {
 			return c.deps.Download.Cancel()
 		}
 		return nil
 	case "install-update":
+		// One click, as in Clash Party: download if needed, then install and restart.
 		c.mu.Lock()
 		manual := c.manualUpdateLocked()
 		artifact := c.updateArtifact
+		busy := c.installing || c.installWhenReady
 		c.mu.Unlock()
 		if manual {
 			return c.openDownloadPage()
 		}
-		if artifact == nil || c.deps.Download == nil || c.deps.Installer == nil || !c.deps.Installer.Verified() {
+		if artifact == nil || c.deps.Download == nil || c.deps.Installer == nil {
 			return NewAppError("COMPONENTS_UNAVAILABLE")
 		}
-		selected := *artifact
-		if c.deps.ConfirmInstall == nil || !c.deps.ConfirmInstall(selected.Version) {
+		if busy {
 			return nil
 		}
-		c.mu.Lock()
-		c.releaseIndex = nil
-		c.mu.Unlock()
-		if err := c.checkUpdate(ctx); err != nil {
-			return err
+		if c.deps.Download.View().Status != "ready" {
+			c.mu.Lock()
+			c.installWhenReady = true
+			c.mu.Unlock()
+			go c.downloadThenInstall(*artifact)
+			return nil
 		}
-		c.mu.Lock()
-		index := c.releaseIndex
-		current := c.updateArtifact
-		envelope := c.releaseEnvelope
-		c.mu.Unlock()
-		if index == nil || current == nil || current.ID != selected.ID || current.SHA256 != selected.SHA256 {
-			return NewAppError("UPDATE_VERIFY_FAILED")
-		}
-		if err := c.network.Disconnect(ctx); err != nil {
-			return err
-		}
-		if err := InstallationGate(selected, *index, c.now(), c.network.View().State == "Disconnected"); err != nil {
-			return err
-		}
-		if envelope == "" {
-			return NewAppError("UPDATE_VERIFY_FAILED")
-		}
-		path, err := c.deps.Download.VerifiedPath(selected)
-		if err != nil {
-			return err
-		}
-		return c.deps.Installer.Install(ctx, selected, path, envelope)
+		return c.installUpdate(ctx, *artifact)
 	case "probe-nodes":
 		return c.probeNodes(ctx, cmd.NodeIDs)
 	case "diagnostics":

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"reflect"
 	"runtime"
 	"testing"
 )
@@ -114,8 +115,27 @@ func TestCompileCoreRuleMode(t *testing.T) {
 	}
 	// Blocked domains need no resolver; the others are resolved in section order.
 	servers := cfg.DNS.Servers
-	if len(servers) != 4 || servers[0]["tag"] != "dns-proxy" || servers[1]["tag"] != "dns-proxy" || servers[2]["tag"] != "dns-direct" || len(servers[2]["domains"].([]any)) != 3 || servers[3]["tag"] != "dns-proxy" || servers[3]["domains"] != nil {
+	if len(servers) != 5 || servers[0]["tag"] != "dns-proxy" || servers[1]["tag"] != "dns-proxy" || servers[2]["tag"] != "dns-direct" || len(servers[2]["domains"].([]any)) != 3 || servers[4]["tag"] != "dns-proxy" || servers[4]["domains"] != nil {
 		t.Errorf("dns servers = %v", servers)
+	}
+	// Unlisted names ask the mainland resolver first and keep only mainland answers.
+	if s := servers[3]; s["tag"] != "dns-direct" || s["domains"] != nil || s["skipFallback"] != false || !reflect.DeepEqual(s["expectIPs"], []any{"1.0.1.0/24", "2001:db8::/32"}) {
+		t.Errorf("unlisted names are not resolved in the mainland first: %v", s)
+	}
+	for _, raw := range cfg.Outbounds {
+		if raw.Tag == "direct" && raw.Settings["domainStrategy"] != "UseIPv4v6" {
+			t.Errorf("direct connections must prefer IPv4: %v", raw)
+		}
+	}
+}
+
+func TestMainlandAddressesSkipReservedRanges(t *testing.T) {
+	rules := Rules{SchemaVersion: 2, Sections: []RuleSection{
+		{Target: "proxy", IPs: []string{"8.8.8.0/24"}},
+		{Target: "direct", IPs: []string{"0.0.0.0/8", "10.0.0.0/8", "1.0.1.0/24", "127.0.0.0/8", "fe80::/10", "240e::/18", "not-a-cidr"}},
+	}}
+	if got := mainlandAddresses(rules); !reflect.DeepEqual(got, []string{"1.0.1.0/24", "240e::/18"}) {
+		t.Errorf("mainland addresses = %v", got)
 	}
 }
 

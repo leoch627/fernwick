@@ -12,7 +12,11 @@ Uninstall the service before removing the application:
 sudo '/Library/PrivilegedHelperTools/<appId>.helper/helper' uninstall
 ```
 
-Production builds require Developer ID signing and notarization. The in-app ZIP updater checks the signed release index, file hash, code signature Team ID and Gatekeeper assessment before replacing the app. It keeps one application backup.
+The in-app ZIP updater checks the signed release index and the file hash, then `codesign --verify --deep --strict` on the extracted app. For a Developer ID build (the index names a Team ID) it also checks the Team ID and the Gatekeeper assessment; an ad-hoc build is published as `unsigned` and trusted through the signed index alone. With the network service installed, the service swaps the root-owned bundle and keeps one application backup; without it, the app replaces its own bundle (or asks for an administrator once when the bundle is not the user's). The app is then reopened with `--updated`.
+
+Because the network service makes the bundle root-owned (its peer check requires that), Finder cannot drag-replace an installed copy ("some items had to be skipped… Locked"). Move the old app to the Trash first, or update from inside the app.
+
+The DMG window (background, icon positions, volume icon) is built with `dmgbuild` (`pip install dmgbuild==1.6.7`); without it the packager falls back to a plain `hdiutil` image. The background is rendered from `dmg-background.html` by `node tools/render-dmg-background.mjs`.
 
 Build with `python3 tools/package.py --target darwin-arm64` (or `darwin-x64`). The packager assembles the app with an embedded frontend, signs the bundle without `--deep`, verifies native resource hashes, and emits DMG and ZIP files. `STARRAIL_MAC_SIGN_IDENTITY` selects an explicit identity; the default is ad-hoc (`-`). The packager does not notarize or publish.
 

@@ -82,7 +82,15 @@ func TestCompileSystemProxyListensOnLoopbackOnly(t *testing.T) {
 	if _, network := last["network"]; network || !reflect.DeepEqual(last["ip"], []any{"0.0.0.0/0", "::/0"}) {
 		t.Fatalf("rule mode must end on an address rule so unmatched names resolve: %v", last)
 	}
+	servers := decoded["dns"].(map[string]any)["servers"].([]any)
+	mainland := servers[len(servers)-2].(map[string]any)
+	if mainland["tag"] != "dns-direct" || mainland["domains"] != nil || !reflect.DeepEqual(mainland["expectIPs"], []any{"1.0.1.0/24"}) {
+		t.Fatalf("unlisted names must ask the mainland resolver first: %v", servers)
+	}
 	for _, raw := range decoded["outbounds"].([]any) {
+		if out := raw.(map[string]any); out["tag"] == "direct" && out["settings"].(map[string]any)["domainStrategy"] != "UseIPv4v6" {
+			t.Fatalf("direct connections must prefer IPv4: %v", out)
+		}
 		stream, _ := raw.(map[string]any)["streamSettings"].(map[string]any)
 		if _, bound := stream["sockopt"]; bound {
 			t.Fatalf("system proxy outbounds must not bind interfaces: %v", raw)

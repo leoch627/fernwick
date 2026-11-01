@@ -1,6 +1,9 @@
 package core
 
-import "strconv"
+import (
+	"net"
+	"strconv"
+)
 
 // System proxy mode runs the pinned core as the user, with no network service: apps
 // that follow the system proxy reach a loopback HTTP/SOCKS port, and the core routes
@@ -41,6 +44,46 @@ func (r Rules) WithoutTarget(target string) Rules {
 		}
 	}
 	return kept
+}
+
+// reservedRanges are never real mainland answers: a resolver that returns them for a
+// public name is broken or poisoned, so they do not count as "in China" below.
+var reservedRanges = func() []*net.IPNet {
+	var out []*net.IPNet
+	for _, cidr := range []string{"0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16", "172.16.0.0/12", "192.168.0.0/16", "224.0.0.0/3", "::/8", "fc00::/7", "fe80::/10", "ff00::/8"} {
+		_, network, _ := net.ParseCIDR(cidr)
+		out = append(out, network)
+	}
+	return out
+}()
+
+// MainlandAddresses lists the public address ranges the rules send direct (the CN
+// geoip section). A mainland resolver's answer inside them is trusted as a mainland
+// CDN address; an answer outside them (a foreign or poisoned address) is not.
+func MainlandAddresses(rules Rules) []string {
+	out := []string{}
+	for _, section := range rules.Sections {
+		if section.Target != "direct" {
+			continue
+		}
+		for _, cidr := range section.IPs {
+			ip, _, err := net.ParseCIDR(cidr)
+			if err != nil {
+				continue
+			}
+			reserved := false
+			for _, network := range reservedRanges {
+				if network.Contains(ip) {
+					reserved = true
+					break
+				}
+			}
+			if !reserved {
+				out = append(out, cidr)
+			}
+		}
+	}
+	return out
 }
 
 // CompileSystemProxy builds the core configuration for system proxy mode. It never
@@ -137,9 +180,17 @@ func CompileSystemProxy(c Candidate, ports ProxyPorts) (map[string]any, error) {
 	} else {
 		routes = append(routes, withTarget(map[string]any{"type": "field", "network": "tcp,udp"}, primary))
 	}
+	// A name no list covers is asked of the mainland resolver first and kept only when
+	// the answer is a mainland address, like Mihomo's fallback-filter. Asking abroad
+	// first sent unlisted mainland sites to overseas CDN nodes, through the proxy.
+	if mainland := MainlandAddresses(c.Rules); c.Mode == "rule" && len(mainland) > 0 {
+		dns = append(dns, map[string]any{"address": "https://223.5.5.5/dns-query", "tag": "dns-direct", "expectIPs": mainland, "skipFallback": false})
+	}
 	dns = append(dns, map[string]any{"address": "https://1.1.1.1/dns-query", "tag": "dns-proxy", "skipFallback": false, "finalQuery": true})
 	outbounds = append(outbounds,
-		map[string]any{"tag": "direct", "protocol": "freedom", "settings": map[string]any{"domainStrategy": "UseIP", "finalRules": []any{map[string]any{"action": "allow", "ip": lanCIDRs}}}},
+		// Prefer IPv4: "UseIP" picks a random A or AAAA answer, and on the many networks
+		// without working IPv6 every other direct connection failed or hung.
+		map[string]any{"tag": "direct", "protocol": "freedom", "settings": map[string]any{"domainStrategy": "UseIPv4v6", "finalRules": []any{map[string]any{"action": "allow", "ip": lanCIDRs}}}},
 		map[string]any{"tag": "dns-out", "protocol": "dns", "settings": map[string]any{"rules": []any{map[string]any{"action": "hijack", "qType": "1,28"}, map[string]any{"action": "return", "rCode": 5}}}},
 		map[string]any{"tag": "block", "protocol": "blackhole"},
 	)
