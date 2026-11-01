@@ -5,8 +5,11 @@ package main
 import (
 	"context"
 	"golang.org/x/sys/windows"
+	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"time"
 )
 
 func secureMacApplication(string) error { return nil }
@@ -108,7 +111,7 @@ func installPlatformUpdate(ctx context.Context, job UpdateJob) error {
 	if e := markUpdateApplying(job); e != nil {
 		return e
 	}
-	if e := longRun(ctx, job.Path, "", "/S", "/D="+installed.AppRoot); e != nil {
+	if e := runInstaller(ctx, job.Path, "/S", "/D="+installed.AppRoot); e != nil {
 		_ = stopInstalledService()
 		_ = copyTree(filepath.Join(backup, "app"), installed.AppRoot)
 		_ = copyTree(filepath.Join(backup, "helper"), helperRoot())
@@ -130,4 +133,28 @@ func restorePlatformBackup(context.Context) error {
 		return e
 	}
 	return copyFile(filepath.Join(backup, "installation.json"), filepath.Join(stateRoot(), "installation.json"), 0600)
+}
+
+// runInstaller runs the verified installer with the system's environment variables. The
+// installer finds the Start menu and the desktop through %ProgramData% and %PUBLIC%,
+// which the minimal environment of the network tools lacks: without them it created no
+// shortcuts on an in-app update.
+func runInstaller(ctx context.Context, path string, args ...string) error {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+	c := exec.CommandContext(ctx, path, args...)
+	environment, e := windows.Token(0).Environ(false)
+	if e != nil {
+		environment = safeEnvironment()
+	}
+	c.Env = environment
+	c.Dir = filepath.Dir(path)
+	c.Stdout = io.Discard
+	c.Stderr = io.Discard
+	configureChild(c)
+	if e := c.Run(); e != nil {
+		logEvent("update: the installer failed: %v", e)
+		return failure("UPDATE_VERIFY_FAILED")
+	}
+	return nil
 }

@@ -149,3 +149,50 @@ func TestNativePrepareSendsOnlyFrozenCandidateFields(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestHeartbeatFailureClassification(t *testing.T) {
+	cases := []struct {
+		reply nativeReply
+		err   error
+		want  ErrorCode
+	}{
+		{err: NewAppError("COMPONENTS_UNAVAILABLE"), want: ""},
+		{err: NewAppError("CANCELLED"), want: ""},
+		{err: NewAppError("NETWORK_CONFLICT"), want: "ENDED"},
+		{reply: nativeReply{OK: true, Owned: false, State: "Disconnected"}, want: "ENDED"},
+		{reply: nativeReply{OK: true, Owned: true, State: "RecoveryRequired"}, want: "NETWORK_RECOVERY_REQUIRED"},
+	}
+	for _, c := range cases {
+		if got := heartbeatFailure(c.reply, c.err); got != c.want {
+			t.Errorf("heartbeatFailure(%+v, %v) = %q, want %q", c.reply, c.err, got, c.want)
+		}
+	}
+}
+
+// A connection the service has ended and cleaned up is reported as dropped, not as a
+// network to repair, and leaves the service usable.
+func TestHeartbeatReportsConnectionEndedByService(t *testing.T) {
+	reported := make(chan ErrorCode, 1)
+	driver := testRPCDriver(t, nil, func(input map[string]any) nativeReply {
+		if input["action"] == "heartbeat" {
+			return nativeReply{OK: false, Error: "NETWORK_CONFLICT"}
+		}
+		return nativeReply{OK: true, Ready: true, State: "Disconnected"}
+	})
+	driver.failed = func(code ErrorCode) { reported <- code }
+	driver.verified, driver.ticket = true, "ticket"
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go driver.heartbeat(ctx, "ticket")
+	select {
+	case code := <-reported:
+		if code != "CONNECT_TIMEOUT" {
+			t.Fatalf("reported %s", code)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("ended connection not reported")
+	}
+	if !driver.Verified() {
+		t.Error("an ended connection marked the service as needing repair")
+	}
+}

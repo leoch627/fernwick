@@ -9,9 +9,11 @@ import platform
 import plistlib
 import shlex
 import shutil
+import struct
 import subprocess
 import sys
 from urllib.parse import urlsplit
+import zlib
 
 ROOT = Path(__file__).resolve().parents[1]
 MACOS_MINIMUM = '14.0'
@@ -233,6 +235,136 @@ def build_dmg(product, app, icns, target, dmg):
     dmgbuild.build_dmg(str(dmg), product, settings=settings)
 
 
+def read_png(path):
+    """Decode an 8-bit, non-interlaced RGB or RGBA PNG into (width, height, RGBA rows)."""
+    data = Path(path).read_bytes()
+    if data[:8] != b'\x89PNG\r\n\x1a\n':
+        raise ValueError('not a PNG file')
+    offset, chunks, header = 8, [], None
+    while offset < len(data):
+        length, kind = struct.unpack('>I4s', data[offset:offset + 8])
+        body = data[offset + 8:offset + 8 + length]
+        if kind == b'IHDR':
+            header = struct.unpack('>IIBBBBB', body)
+        elif kind == b'IDAT':
+            chunks.append(body)
+        offset += 12 + length
+    width, height, depth, color, _, _, interlace = header
+    if depth != 8 or color not in (2, 6) or interlace:
+        raise ValueError('icon must be an 8-bit, non-interlaced RGB or RGBA PNG')
+    channels = 4 if color == 6 else 3
+    raw, stride = zlib.decompress(b''.join(chunks)), width * channels
+    rows, previous = [], bytearray(stride)
+    for y in range(height):
+        start = y * (stride + 1)
+        kind, line = raw[start], bytearray(raw[start + 1:start + 1 + stride])
+        for i in range(stride):
+            left = line[i - channels] if i >= channels else 0
+            up, corner = previous[i], previous[i - channels] if i >= channels else 0
+            if kind == 1:
+                line[i] = (line[i] + left) & 255
+            elif kind == 2:
+                line[i] = (line[i] + up) & 255
+            elif kind == 3:
+                line[i] = (line[i] + ((left + up) >> 1)) & 255
+            elif kind == 4:
+                estimate = left + up - corner
+                pa, pb, pc = abs(estimate - left), abs(estimate - up), abs(estimate - corner)
+                line[i] = (line[i] + (left if pa <= pb and pa <= pc else up if pb <= pc else corner)) & 255
+        previous = line
+        if channels == 3:
+            line = bytearray(b''.join(bytes(line[i:i + 3]) + b'\xff' for i in range(0, stride, 3)))
+        rows.append(line)
+    return width, height, rows
+
+
+def resample(width, height, rows, size):
+    """Area-average an RGBA image to size x size, in premultiplied alpha."""
+    def taps(source):
+        scale, result = source / size, []
+        for out in range(size):
+            begin, end = out * scale, (out + 1) * scale
+            weights = [(i, min(end, i + 1) - max(begin, i)) for i in range(int(begin), min(source, int(end) + 1)) if min(end, i + 1) > max(begin, i)]
+            result.append([(i, w / scale) for i, w in weights])
+        return result
+    premultiplied = []
+    for line in rows:
+        values = []
+        for x in range(width):
+            r, g, b, a = line[4 * x:4 * x + 4]
+            values.append((r * a, g * a, b * a, a))
+        premultiplied.append(values)
+    horizontal = [[tuple(sum(row[i][c] * w for i, w in tap) for c in range(4)) for tap in taps(width)] for row in premultiplied]
+    result = []
+    for tap in taps(height):
+        line = bytearray()
+        for x in range(size):
+            r, g, b, a = (sum(horizontal[i][x][c] * w for i, w in tap) for c in range(4))
+            line += bytes((round(r / a), round(g / a), round(b / a), round(a))) if a >= 0.5 else b'\0\0\0\0'
+        result.append(line)
+    return result
+
+
+def png_bytes(size, rows):
+    def chunk(kind, body):
+        return struct.pack('>I', len(body)) + kind + body + struct.pack('>I', zlib.crc32(kind + body) & 0xffffffff)
+    raw = b''.join(b'\0' + bytes(line) for line in rows)
+    return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', size, size, 8, 6, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(raw, 9)) + chunk(b'IEND', b'')
+
+
+def ico_bytes(source, sizes=(16, 24, 32, 48, 64, 128, 256)):
+    """A Windows icon of source at every size Explorer and the installer use: 32-bit
+    bitmaps up to 128 px and a PNG image at 256 px, as Windows' own icons are stored."""
+    width, height, rows = read_png(source)
+    if width < max(sizes) or height < max(sizes):
+        raise ValueError('icon must be at least 256 x 256 pixels')
+    # Halve to 256 px first; each size is then averaged from that.
+    base = resample(width, height, rows, 256) if width != 256 or height != 256 else rows
+    images = []
+    for size in sizes:
+        pixels = base if size == 256 else resample(256, 256, base, size)
+        if size == 256:
+            images.append((size, png_bytes(size, pixels)))
+            continue
+        mask_stride = ((size + 31) // 32) * 4
+        header = struct.pack('<IiiHHIIiiII', 40, size, size * 2, 1, 32, 0, size * size * 4 + mask_stride * size, 0, 0, 0, 0)
+        # Bitmap rows run bottom-up in BGRA; the AND mask is unused with an alpha channel.
+        bgra = b''.join(bytes(b for x in range(0, 4 * size, 4) for b in (line[x + 2], line[x + 1], line[x], line[x + 3])) for line in reversed(pixels))
+        images.append((size, header + bgra + bytes(mask_stride * size)))
+    directory = struct.pack('<HHH', 0, 1, len(images))
+    offset = 6 + 16 * len(images)
+    for size, body in images:
+        directory += struct.pack('<BBBBHHII', size % 256, size % 256, 0, 0, 1, 32, len(body), offset)
+        offset += len(body)
+    return directory + b''.join(body for _, body in images)
+
+
+def composite(rows, x0, y0, canvas):
+    """Draw RGBA rows over an RGB canvas (a list of bytearrays) at x0, y0."""
+    for y, line in enumerate(rows):
+        target = canvas[y0 + y]
+        for x in range(len(line) // 4):
+            r, g, b, a = line[4 * x:4 * x + 4]
+            i = 3 * (x0 + x)
+            for c, value in enumerate((r, g, b)):
+                target[i + c] = (value * a + target[i + c] * (255 - a) + 127) // 255
+
+
+def wizard_bmp(source, width=164, height=314):
+    """The installer's welcome and finish side image: the app icon on its own colour, in
+    place of NSIS's stock artwork. A 24-bit bitmap, as NSIS requires."""
+    w, h, rows = read_png(source)
+    icon = resample(w, h, rows, 112)
+    middle = icon[len(icon) // 2]
+    colour = bytes(middle[16:19])  # inside the icon's border, clear of the mark
+    canvas = [bytearray(colour * width) for _ in range(height)]
+    composite(icon, (width - 112) // 2, 78, canvas)
+    stride = (width * 3 + 3) & ~3
+    pixels = b''.join(bytes(b for x in range(width) for b in (line[3 * x + 2], line[3 * x + 1], line[3 * x])).ljust(stride, b'\0') for line in reversed(canvas))
+    header = struct.pack('<IiiHHIIiiII', 40, width, height, 1, 24, 0, len(pixels), 2835, 2835, 0, 0)
+    return b'BM' + struct.pack('<IHHI', 14 + len(header) + len(pixels), 0, 0, 14 + len(header)) + header + pixels
+
+
 def nsis_literal(value):
     return str(value).replace('$', '$$').replace('"', '$\\"').replace('\n', '$\\n').replace('\r', '$\\r')
 
@@ -242,9 +374,13 @@ def package_windows(config, version, target, binary, stage, manifest):
     copy_resources(stage / 'resources', target, manifest)
     script = (ROOT / 'packaging/windows/installer.nsi').read_text(encoding='utf-8')
     output = ROOT / 'release' / f"{config['productId']}-{version}-windows-x64.exe"
+    icon, wizard = ROOT / 'work/packaging/installer.ico', ROOT / 'work/packaging/installer-wizard.bmp'
+    icon.parent.mkdir(parents=True, exist_ok=True)
+    icon.write_bytes(ico_bytes(ROOT / 'resources/icon.png'))
+    wizard.write_bytes(wizard_bmp(ROOT / 'resources/icon.png'))
     replacements = {'PRODUCT_NAME': product_name(config), 'PRODUCT_ID': config['productId'], 'APP_ID': config['appId'],
                     'VERSION': version, 'NUMERIC_VERSION': version.split('-')[0].split('+')[0] + '.0',
-                    'EXE_NAME': binary.name, 'STAGE': stage, 'OUTPUT': output}
+                    'EXE_NAME': binary.name, 'STAGE': stage, 'OUTPUT': output, 'ICON': icon, 'WIZARD': wizard}
     for name, value in replacements.items():
         script = script.replace('@' + name + '@', nsis_literal(value))
     definition = ROOT / 'work/packaging/installer.nsi'

@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 )
@@ -53,6 +54,9 @@ func (s *service) request(p Peer, r Request) Response {
 		return response
 	}
 	e := s.perform(p, r, &response)
+	if e != nil && r.Action != "status" && r.Action != "heartbeat" && r.Action != "control" {
+		logEvent("%s: %s", r.Action, cleanError(e))
+	}
 	current := s.base(p, r.ID)
 	current.Ticket = response.Ticket
 	current.Proof = response.Proof
@@ -70,15 +74,15 @@ func (s *service) perform(p Peer, r Request, response *Response) error {
 	case "control":
 		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 		defer cancel()
-		s.mu.Lock()
-		var physical Interface
-		if s.journal != nil {
-			physical = s.journal.Interface
-		}
-		s.mu.Unlock()
-		var e error
-		if physical.Name == "" {
-			physical, e = discoverInterface(ctx)
+		// The interface of the default route now: while connected it can have changed
+		// since the connection was made (Windows and macOS stay connected across it).
+		physical, e := discoverInterface(ctx)
+		if e != nil {
+			s.mu.Lock()
+			if s.journal != nil {
+				physical, e = s.journal.Interface, nil
+			}
+			s.mu.Unlock()
 			if e != nil {
 				return e
 			}
@@ -155,7 +159,7 @@ func (s *service) perform(p Peer, r Request, response *Response) error {
 				bypass = append(bypass, ip)
 			}
 		}
-		j := &Journal{SchemaVersion: 1, ID: nonce(), ProductID: build.ProductID, Owner: p, Phase: "Preparing", Interface: physical, Tun: tunName(), NodeAddress: address, PoolAddresses: pool, Bypass: bypass, CorePath: installed.CorePath, AuthorizedUntil: r.Candidate.AuthorizedUntil, Deadline: time.Now().Add(30 * time.Second).UnixMilli()}
+		j := &Journal{SchemaVersion: 1, ID: nonce(), ProductID: build.ProductID, Owner: p, Phase: "Preparing", Interface: physical, Tun: tunName(), RouteIPv6: hasGlobalIPv6(), NodeAddress: address, PoolAddresses: pool, Bypass: bypass, CorePath: installed.CorePath, AuthorizedUntil: r.Candidate.AuthorizedUntil, Deadline: time.Now().Add(30 * time.Second).UnixMilli()}
 		if e = platformPrepare(ctx, j); e != nil {
 			return e
 		}
@@ -164,10 +168,14 @@ func (s *service) perform(p Peer, r Request, response *Response) error {
 		command := exec.CommandContext(ctx, installed.CorePath, "run", "-test", "-format", "json", "-config", "stdin:")
 		command.Stdin = bytes.NewReader(configuration)
 		command.Env = safeEnvironment()
-		command.Stdout = io.Discard
-		command.Stderr = io.Discard
+		output := coreLog()
+		command.Stdout = output
+		command.Stderr = output
 		configureChild(command)
-		if e = command.Run(); e != nil {
+		e = command.Run()
+		output.Close()
+		if e != nil {
+			logEvent("prepare: the core rejected the configuration (see core.log): %v", e)
 			return failure("NO_COMPATIBLE_NODES")
 		}
 		if e = writeJournal(j); e != nil {
@@ -206,7 +214,9 @@ func (s *service) perform(p Peer, r Request, response *Response) error {
 		s.deadline = now.Add(12 * time.Second)
 		s.transactionEnd = now.Add(15 * time.Second)
 		j.Deadline = s.transactionEnd.UnixMilli()
-		j.Protection = true
+		// Where the core owns the routes, nothing guards the transition: like v2rayN,
+		// traffic goes out directly until the core's routes are in place.
+		j.Protection = !coreOwnsRoutes(runtime.GOOS)
 		j.Phase = "Connecting"
 		s.state = "Connecting"
 		s.mu.Unlock()
@@ -232,16 +242,21 @@ func (s *service) perform(p Peer, r Request, response *Response) error {
 		s.mu.Unlock()
 		command := exec.Command(installed.CorePath, "run", "-format", "json", "-config", "stdin:")
 		command.Stdin = bytes.NewReader(s.configuration)
-		command.Stdout = io.Discard
-		command.Stderr = io.Discard
+		// The core logs nothing about traffic; what it prints is its version and why it
+		// could not start (a missing driver, a refused route or filter).
+		output := coreLog()
+		command.Stdout = output
+		command.Stderr = output
 		command.Env = safeEnvironment()
 		command.Dir = filepath.Dir(installed.CorePath)
 		configureChild(command)
 		if e := command.Start(); e != nil {
+			output.Close()
+			logEvent("start: the core could not be started: %v", e)
 			return failure("COMPONENTS_UNAVAILABLE")
 		}
 		exited := make(chan error, 1)
-		go func() { exited <- command.Wait(); close(exited) }()
+		go func() { exited <- command.Wait(); output.Close(); close(exited) }()
 		s.mu.Lock()
 		s.core = command
 		s.coreExit = exited
@@ -262,8 +277,10 @@ func (s *service) perform(p Peer, r Request, response *Response) error {
 			}
 			select {
 			case <-ctx.Done():
+				logEvent("start: the TUN %s did not appear in time", j.Tun)
 				return errCancelled
 			case <-exited:
+				logEvent("start: the core exited before its TUN appeared (see core.log)")
 				return failure("CONNECT_TIMEOUT")
 			case <-time.After(30 * time.Millisecond):
 			}
@@ -283,6 +300,7 @@ func (s *service) perform(p Peer, r Request, response *Response) error {
 		defer cancel()
 		proof, e := probeDataPath(ctx, j)
 		if e != nil {
+			logEvent("probe: tcp=%t dns=%t udp=%t ipv6=%t", proof.TCP, proof.DNS, proof.UDP, proof.IPv6)
 			return e
 		}
 		response.Proof = &proof

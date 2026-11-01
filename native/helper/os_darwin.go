@@ -122,7 +122,8 @@ func field(output, key string) string {
 func discoverInterface(ctx context.Context) (Interface, error) {
 	data, e := routeInfo(ctx, "default")
 	if e != nil {
-		return Interface{}, e
+		// No default route: there is no network to connect over, nothing to repair.
+		return Interface{}, failure("CONNECT_TIMEOUT")
 	}
 	name := field(data, "interface")
 	iface, e := net.InterfaceByName(name)
@@ -140,6 +141,8 @@ func discoverInterface(ctx context.Context) (Interface, error) {
 	return out, nil
 }
 
+// The split routes an earlier version added itself. Xray now adds its own
+// (coreOwnsRoutes); these are only looked for in recovery and in another VPN.
 var macRoutes = []string{"0.0.0.0/1", "128.0.0.0/1", "::/1", "8000::/1"}
 
 func platformPrepare(ctx context.Context, j *Journal) error {
@@ -181,51 +184,32 @@ func platformPrepare(ctx context.Context, j *Journal) error {
 		}
 	}
 	if len(j.Interface.DNS) == 0 {
-		return failure("COMPONENTS_UNAVAILABLE")
+		// The default route has no network service (a tethered phone, another VPN's
+		// interface): DNS is left alone, and queries to a server beyond the local
+		// network still reach the TUN by its routes.
+		logEvent("prepare: no network service for %s; DNS is left unchanged", j.Interface.Name)
 	}
 	return nil
 }
 func anchorName(j *Journal) string { return "com.apple/" + ruleTag() + "." + j.ID }
-func platformProtect(ctx context.Context, j *Journal) error {
-	// macOS's default pf.conf already evaluates com.apple/* anchors. Refuse custom roots that do not.
-	active, e := run(ctx, "/sbin/pfctl", nil, "-sr")
-	if e != nil || !strings.Contains(string(active), `anchor "com.apple/*"`) {
-		return failure("NETWORK_CONFLICT")
-	}
-	c := exec.CommandContext(ctx, "/sbin/pfctl", "-E")
-	c.Env = safeEnvironment()
-	out, e := c.CombinedOutput()
-	if e != nil {
-		return failure("NETWORK_RECOVERY_REQUIRED")
-	}
-	token := regexp.MustCompile(`Token\s*:\s*([0-9]+)`).FindSubmatch(out)
-	if len(token) != 2 {
-		return failure("NETWORK_RECOVERY_REQUIRED")
-	}
-	j.FilterToken = string(token[1])
-	if e = writeJournal(j); e != nil {
-		return e
-	}
-	destinations := append(append([]string{}, lan...), j.Bypass...)
-	rules := "pass out quick on lo0 all\npass out quick on " + j.Tun + " all\npass out quick inet6 proto icmp6 icmp6-type { 1, 2, 3, 4, 133, 134, 135, 136 }\npass out quick to { " + strings.Join(destinations, ", ") + " }\nblock drop out quick all\n"
-	if _, e = run(ctx, "/sbin/pfctl", []byte(rules), "-a", anchorName(j), "-f", "-"); e != nil {
-		return e
-	}
-	for _, address := range j.Interface.Addresses {
-		if _, e = run(ctx, "/sbin/pfctl", nil, "-k", address); e != nil {
-			return e
-		}
-	}
-	return nil
-}
+
+// Xray owns the TUN's routes (coreOwnsRoutes); nothing guards the transition, as with
+// v2rayN. An earlier version's pf guard is still removed by platformUnprotect.
+func platformProtect(context.Context, *Journal) error { return nil }
+
+// platformApply waits until the core's routes lead to the TUN, then points the primary
+// network service's DNS at the TUN: Xray does not change macOS DNS, and a resolver on the
+// local network would otherwise be reached past the TUN.
 func platformApply(ctx context.Context, j *Journal) error {
-	for _, prefix := range macRoutes {
-		family := "-inet"
-		if strings.Contains(prefix, ":") {
-			family = "-inet6"
+	for {
+		if data, e := routeInfo(ctx, "1.1.1.1"); e == nil && field(data, "interface") == j.Tun {
+			break
 		}
-		if _, e := run(ctx, "/sbin/route", nil, "-n", "add", family, "-net", prefix, "-interface", j.Tun); e != nil {
-			return e
+		select {
+		case <-ctx.Done():
+			logEvent("start: the core's routes to %s did not appear in time", j.Tun)
+			return errCancelled
+		case <-time.After(100 * time.Millisecond):
 		}
 	}
 	for _, dns := range j.Interface.DNS {
@@ -234,6 +218,7 @@ func platformApply(ctx context.Context, j *Journal) error {
 		}
 	}
 	_, _ = run(ctx, "/usr/bin/dscacheutil", nil, "-flushcache")
+	_, _ = run(ctx, "/usr/bin/killall", nil, "-HUP", "mDNSResponder")
 	return nil
 }
 func platformRecover(ctx context.Context, j *Journal) error {
@@ -323,18 +308,7 @@ func fileOwner(path string, p Peer) error {
 	}
 	return nil
 }
-func platformNetworkFingerprint(ctx context.Context, p Interface) (string, error) {
-	a, e := routeInfo(ctx, "default")
-	if e != nil {
-		return "", e
-	}
-	data := "interface=" + field(a, "interface") + ";gateway=" + field(a, "gateway")
-	for _, dns := range p.DNS {
-		value, e := run(ctx, "/usr/sbin/networksetup", nil, "-getdnsservers", dns.Service)
-		if e != nil {
-			return "", e
-		}
-		data += string(value)
-	}
-	return stringHash(data), nil
-}
+
+// Xray follows the default route itself (coreOwnsRoutes): a network change needs no
+// reconnection.
+func (s *service) monitorNetwork(context.Context) {}

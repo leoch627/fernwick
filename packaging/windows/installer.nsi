@@ -21,6 +21,11 @@ VIAddVersionKey /LANG=1033 "LegalCopyright" "@PRODUCT_NAME@"
 !define WEBVIEW2_CLIENT "{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
 
 !define MUI_ABORTWARNING
+; The app's own icon and artwork in place of NSIS's stock ones; tools/package.py draws
+; both from resources/icon.png.
+!define MUI_ICON "@ICON@"
+!define MUI_UNICON "@ICON@"
+!define MUI_WELCOMEFINISHPAGE_BITMAP "@WIZARD@"
 !define MUI_WELCOMEPAGE_TITLE "安装 @PRODUCT_NAME@"
 !define MUI_WELCOMEPAGE_TEXT "将在这台电脑上安装 @PRODUCT_NAME@ @VERSION@。$\r$\n$\r$\n安装会同时配置网络服务，以后的版本在客户端内一键更新，不用再下载安装包。$\r$\n$\r$\n点击“下一步”继续。"
 ; Interactive installs end by starting the app as the signed-in user; the updater starts
@@ -108,14 +113,24 @@ Section "Install"
   ${EndIf}
   WriteUninstaller "$INSTDIR\Uninstall.exe"
   CreateDirectory "$SMPROGRAMS\@PRODUCT_NAME@"
-  CreateShortcut "$SMPROGRAMS\@PRODUCT_NAME@\@PRODUCT_NAME@.lnk" "$INSTDIR\@EXE_NAME@"
-  ; The desktop shortcut is made once; an update keeps it, or keeps it deleted.
-  ReadRegDWORD $2 HKLM "${UNINSTALL_KEY}" "DesktopShortcut"
+  CreateShortcut "$SMPROGRAMS\@PRODUCT_NAME@\@PRODUCT_NAME@.lnk" "$INSTDIR\@EXE_NAME@" "" "$INSTDIR\@EXE_NAME@" 0
+  ; Every installer window makes the desktop shortcut (on the shared desktop, so it is
+  ; there for the signed-in user even when an administrator account approved the
+  ; install). An update keeps it, or keeps it deleted once it has been made. It counts
+  ; as made only when the file is there: an in-app update used to run without the
+  ; system's folders, wrote the old DesktopShortcut value and never made one.
+  ReadRegDWORD $2 HKLM "${UNINSTALL_KEY}" "DesktopShortcutMade"
   ${If} $2 != 1
   ${OrIfNot} ${Silent}
   ${OrIf} ${FileExists} "$DESKTOP\@PRODUCT_NAME@.lnk"
-    CreateShortcut "$DESKTOP\@PRODUCT_NAME@.lnk" "$INSTDIR\@EXE_NAME@"
+    CreateShortcut "$DESKTOP\@PRODUCT_NAME@.lnk" "$INSTDIR\@EXE_NAME@" "" "$INSTDIR\@EXE_NAME@" 0
   ${EndIf}
+  ${If} ${FileExists} "$DESKTOP\@PRODUCT_NAME@.lnk"
+    WriteRegDWORD HKLM "${UNINSTALL_KEY}" "DesktopShortcutMade" 1
+  ${EndIf}
+  DeleteRegValue HKLM "${UNINSTALL_KEY}" "DesktopShortcut"
+  ; Explorer shows the new shortcut and the updated icon without a sign-out.
+  System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
   WriteRegStr HKLM "${UNINSTALL_KEY}" "DisplayName" "@PRODUCT_NAME@"
   WriteRegStr HKLM "${UNINSTALL_KEY}" "DisplayIcon" '"$INSTDIR\@EXE_NAME@",0'
   WriteRegStr HKLM "${UNINSTALL_KEY}" "Publisher" "@PRODUCT_NAME@"
@@ -124,7 +139,6 @@ Section "Install"
   WriteRegStr HKLM "${UNINSTALL_KEY}" "QuietUninstallString" '$\"$INSTDIR\Uninstall.exe$\" /S'
   WriteRegDWORD HKLM "${UNINSTALL_KEY}" "NoModify" 1
   WriteRegDWORD HKLM "${UNINSTALL_KEY}" "NoRepair" 1
-  WriteRegDWORD HKLM "${UNINSTALL_KEY}" "DesktopShortcut" 1
   ; Written last: the in-app updater waits for this version before starting the app.
   WriteRegStr HKLM "${UNINSTALL_KEY}" "DisplayVersion" "@VERSION@"
   ${IfNot} ${Silent}
