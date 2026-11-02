@@ -8,6 +8,7 @@ import (
 	"encoding/pem"
 	"os"
 	"path/filepath"
+	"regexp"
 )
 
 func ensureServerIdentity() error {
@@ -63,8 +64,17 @@ func serverKey() (ed25519.PrivateKey, error) {
 	}
 	return key, nil
 }
+
+// validChallenge accepts the UUID the client sends, and the 48 hex characters that
+// clients up to 0.2.6 sent and this service used to refuse.
+func validChallenge(challenge string) bool {
+	return uuidPattern.MatchString(challenge) || hexChallenge.MatchString(challenge)
+}
+
+var hexChallenge = regexp.MustCompile(`^[0-9a-f]{32,128}$`)
+
 func signHello(challenge string) (string, error) {
-	if !uuidPattern.MatchString(challenge) {
+	if !validChallenge(challenge) {
 		return "", failure("INVALID_INPUT")
 	}
 	key, e := serverKey()

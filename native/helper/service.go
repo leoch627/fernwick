@@ -565,8 +565,14 @@ func serve(ctx context.Context) error {
 			defer conn.Close()
 			defer func() { <-slots }()
 			_ = conn.SetDeadline(time.Now().Add(12 * time.Second))
+			// Refusals are logged: the client only sees the connection close.
 			peer, e := peerForConnection(conn)
-			if e != nil || verifyPeer(peer) != nil {
+			if e != nil {
+				logEvent("connection: peer unknown: %v", e)
+				return
+			}
+			if e = verifyPeer(peer); e != nil {
+				logEvent("connection: refused %s (pid %d): %s", peer.Executable, peer.PID, cleanError(e))
 				return
 			}
 			reader := bufio.NewReader(io.LimitReader(conn, maxMessage+4096))
@@ -576,10 +582,12 @@ func serve(ctx context.Context) error {
 			}
 			var hello Request
 			if strictJSON(helloRaw, &hello) != nil || hello.Action != "hello" || hello.Protocol != protocolVersion || hello.ProductID != build.ProductID {
+				logEvent("hello: refused, not a hello for this product and protocol")
 				return
 			}
 			signature, e := signHello(hello.Challenge)
 			if e != nil {
+				logEvent("hello: not signed: %s", cleanError(e))
 				return
 			}
 			helloReply := s.base(peer, hello.ID)

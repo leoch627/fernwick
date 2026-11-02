@@ -11,10 +11,15 @@ import (
 	"encoding/pem"
 	"io"
 	"net"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
 )
+
+// helperChallenge is the challenge format the network service signs (native/helper
+// validChallenge accepts this and 32-128 hex characters; the client sends a UUID).
+var helperChallenge = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 func testRPCDriver(t *testing.T, mutate func(*nativeReply), action func(map[string]any) nativeReply) *NativeDriver {
 	t.Helper()
@@ -41,6 +46,10 @@ func testRPCDriver(t *testing.T, mutate func(*nativeReply), action func(map[stri
 			}
 			var hello map[string]any
 			if json.Unmarshal(raw, &hello) != nil {
+				return
+			}
+			// As native/helper signHello: no answer to a challenge that is not a UUID.
+			if challenge, _ := hello["challenge"].(string); !helperChallenge.MatchString(challenge) {
 				return
 			}
 			proof := []byte("starrail-helper-v1\n" + hello["challenge"].(string) + "\n" + driver.build.ProductID + "\n" + driver.manifest.BuildID)

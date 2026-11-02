@@ -159,6 +159,24 @@ func TestCandidateValidateChoosesModernFingerprint(t *testing.T) {
 	}
 }
 
+// The client's hello challenge must be signed: a refused one leaves the service
+// unreachable, and every connection asks for the password again.
+func TestValidChallenge(t *testing.T) {
+	for challenge, want := range map[string]bool{
+		"3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b":    true,
+		strings.Repeat("ab", 24):                  true, // clients up to 0.2.6
+		"":                                        false,
+		"3f2b8c1e9a4d":                            false,
+		strings.Repeat("ab", 24) + "\n":           false,
+		"../../" + strings.Repeat("a", 40):        false,
+		strings.ToUpper(strings.Repeat("ab", 24)): false,
+	} {
+		if got := validChallenge(challenge); got != want {
+			t.Errorf("validChallenge(%q) = %v, want %v", challenge, got, want)
+		}
+	}
+}
+
 func TestSafeOrigin(t *testing.T) {
 	cases := map[string]string{
 		"https://api.starrail.work/api/v1?x=1":   "https://api.starrail.work",

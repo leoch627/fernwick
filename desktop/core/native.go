@@ -192,7 +192,10 @@ func (n *NativeDriver) rpc(ctx context.Context, action string, input map[string]
 		}
 		return reply, nil
 	}
-	helloID, challenge := randomNativeID(), randomNativeID()
+	// The service signs only a UUID challenge (native/helper signHello), as the
+	// Electron client sent; 48 hex characters were refused, so the service never
+	// answered and every connection asked for the password again.
+	helloID, challenge := randomNativeID(), newUUID()
 	if err = send(helloID, "hello", map[string]any{"challenge": challenge}); err != nil {
 		return nativeReply{}, nativeFailure(ctx)
 	}
