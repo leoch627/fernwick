@@ -342,3 +342,48 @@ func TestControllerShowsSyncFailureOnlyWhenAsked(t *testing.T) {
 		t.Fatalf("asked-for failure hidden: %v", view.Error)
 	}
 }
+
+type loginPanel struct {
+	lifecyclePanel
+	loginMu sync.Mutex
+	tried   []string
+	fail    map[string]ErrorCode
+}
+
+func (p *loginPanel) Login(ctx context.Context, endpoint, email, password string) (Session, error) {
+	p.loginMu.Lock()
+	p.tried = append(p.tried, endpoint)
+	failure := p.fail[endpoint]
+	p.loginMu.Unlock()
+	if failure != "" {
+		return Session{}, NewAppError(failure)
+	}
+	return p.DemoPanel.Login(ctx, endpoint, email, password)
+}
+func (p *loginPanel) attempts() []string {
+	p.loginMu.Lock()
+	defer p.loginMu.Unlock()
+	tried := p.tried
+	p.tried = nil
+	return tried
+}
+
+// Login moves on to the backup API when the primary does not answer, as sync does,
+// and asks the one that answered first next time; a refused password is not retried.
+func TestLoginFallsBackToTheBackupAPI(t *testing.T) {
+	panel := &loginPanel{fail: map[string]ErrorCode{"primary": "CONTROL_UNAVAILABLE"}}
+	h := newControllerHarness(t, func(deps *ControllerDeps) { deps.Panel = panel }, false)
+	if tried := panel.attempts(); strings.Join(tried, ",") != "primary,backup" {
+		t.Fatalf("first login tried %v", tried)
+	}
+	panel.loginMu.Lock()
+	panel.fail = map[string]ErrorCode{"backup": "LOGIN_FAILED"}
+	panel.loginMu.Unlock()
+	result := commandForTest(h.controller, map[string]any{"type": "login", "email": "test@example.invalid", "password": "wrong"})
+	if result.OK || result.Error != "LOGIN_FAILED" {
+		t.Fatalf("refused login: %+v", result)
+	}
+	if tried := panel.attempts(); strings.Join(tried, ",") != "backup" {
+		t.Fatalf("refused login tried %v", tried)
+	}
+}

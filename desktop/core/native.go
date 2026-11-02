@@ -90,6 +90,13 @@ func NativeTarget() string {
 	return platform + "-" + arch
 }
 func (n *NativeDriver) Verified() bool { n.mu.Lock(); defer n.mu.Unlock(); return n.verified }
+
+// Tunneling reports a TUN connection through the service, made or being made.
+func (n *NativeDriver) Tunneling() bool {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.verified && n.ticket != ""
+}
 func randomNativeID() string {
 	var b [24]byte
 	if _, err := rand.Read(b[:]); err != nil {
@@ -126,7 +133,7 @@ func (n *NativeDriver) rpc(ctx context.Context, action string, input map[string]
 	if err := n.checkSocket(socket); err != nil {
 		return nativeReply{}, nativeFailure(ctx)
 	}
-	bytes, err := n.readIdentity(filepath.Join(HelperRoot(n.build, n.appRoot), "server-public.pem"))
+	bytes, err := n.readIdentity(n.identityPath())
 	if err != nil {
 		return nativeReply{}, nativeFailure(ctx)
 	}
@@ -228,7 +235,16 @@ func (n *NativeDriver) rpc(ctx context.Context, action string, input map[string]
 	}
 	return reply, nil
 }
+func (n *NativeDriver) identityPath() string {
+	return filepath.Join(HelperRoot(n.build, n.appRoot), "server-public.pem")
+}
 func (n *NativeDriver) Initialize(ctx context.Context) error {
+	n.status(ctx)
+	return nil
+}
+
+// status asks the service for its state and reports whether it answered.
+func (n *NativeDriver) status(ctx context.Context) bool {
 	reply, err := n.rpc(ctx, "status", nil)
 	n.mu.Lock()
 	n.verified = err == nil && reply.Ready
@@ -236,12 +252,32 @@ func (n *NativeDriver) Initialize(ctx context.Context) error {
 	if err == nil && reply.State == "RecoveryRequired" {
 		n.failed("NETWORK_RECOVERY_REQUIRED")
 	}
-	return nil
+	return err == nil
+}
+
+// WaitReady gives an installed service up to limit to answer. At Windows sign-in, and
+// right after the installer or an update starts it, the app asks before the service
+// listens, and a pipe or socket that is not there yet fails at once: the app took the
+// service for broken and asked for the password to reinstall it.
+func (n *NativeDriver) WaitReady(ctx context.Context, limit time.Duration) bool {
+	_, err := n.readIdentity(n.identityPath())
+	installed := err == nil
+	for deadline := time.Now().Add(limit); ; {
+		if n.status(ctx) || !installed || ctx.Err() != nil || !time.Now().Before(deadline) {
+			return n.Verified()
+		}
+		select {
+		case <-ctx.Done():
+		case <-time.After(250 * time.Millisecond):
+		}
+	}
 }
 func (n *NativeDriver) EnsureReady(ctx context.Context) error {
-	_ = n.Initialize(ctx)
-	if n.Verified() {
+	if n.WaitReady(ctx, 10*time.Second) {
 		return nil
+	}
+	if ctx.Err() != nil {
+		return NewAppError("CANCELLED")
 	}
 	return n.Repair(ctx)
 }
@@ -326,17 +362,7 @@ func (n *NativeDriver) repair(ctx context.Context) error {
 	// The service manager starts the new service after the install returns. Checking
 	// only once found it not listening yet, failed the connection and asked for the
 	// password again at the next one.
-	for wait := time.Now().Add(8 * time.Second); ; {
-		_ = n.Initialize(ctx)
-		if n.Verified() || ctx.Err() != nil || time.Now().After(wait) {
-			break
-		}
-		select {
-		case <-ctx.Done():
-		case <-time.After(250 * time.Millisecond):
-		}
-	}
-	if !n.Verified() {
+	if !n.WaitReady(ctx, 8*time.Second) {
 		return NewAppError("COMPONENTS_UNAVAILABLE")
 	}
 	return nil
@@ -558,9 +584,19 @@ type HelperTransport struct {
 func NewHelperTransport(native *NativeDriver) *HelperTransport {
 	return &HelperTransport{native: native, direct: NewDirectHTTPSTransport()}
 }
+
+// Request goes out directly, as any app's does, except while TUN is up or coming up:
+// then the service sends it over the physical interface, so the panel stays reachable
+// when the tunnel is not, and a request the service cannot make still goes out
+// directly. Everything used to go through the service once it was installed, where
+// one failed lookup (it asks only 223.5.5.5) failed a login that a direct request
+// made, and a service that did not answer showed as components to repair.
 func (h *HelperTransport) Request(ctx context.Context, input HTTPRequest) (HTTPResponse, error) {
-	if h.native != nil && h.native.Verified() {
-		return h.native.Control(ctx, input)
+	if h.native != nil && h.native.Tunneling() {
+		response, err := h.native.Control(ctx, input)
+		if err == nil || ctx.Err() != nil || CodeOf(err) == "CANCELLED" {
+			return response, err
+		}
 	}
 	return h.direct.Request(ctx, input)
 }

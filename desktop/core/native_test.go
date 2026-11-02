@@ -242,3 +242,62 @@ func TestNativeReplyDecodesTheServiceHTTPAnswer(t *testing.T) {
 		t.Fatalf("%#v %v", reply.HTTP, err)
 	}
 }
+
+// At Windows sign-in, and right after the installer starts it, the service is not
+// listening yet: a TUN connection waits for it instead of asking for the password to
+// reinstall it (the driver is not packaged, so a repair would fail).
+func TestEnsureReadyWaitsForAStartingService(t *testing.T) {
+	driver := testRPCDriver(t, nil, func(map[string]any) nativeReply { return nativeReply{OK: true, Ready: true, State: "Disconnected"} })
+	listening := driver.dial
+	dials := 0
+	driver.dial = func(ctx context.Context, path string) (net.Conn, error) {
+		if dials++; dials < 4 {
+			return nil, io.ErrClosedPipe
+		}
+		return listening(ctx, path)
+	}
+	if err := driver.EnsureReady(context.Background()); err != nil || !driver.Verified() {
+		t.Fatalf("EnsureReady = %v after %d dials", err, dials)
+	}
+}
+
+// A service that was never installed is repaired at once, without the wait.
+func TestEnsureReadyRepairsAMissingServiceAtOnce(t *testing.T) {
+	driver := testRPCDriver(t, nil, func(map[string]any) nativeReply { return nativeReply{OK: true, Ready: true} })
+	driver.readIdentity = func(string) ([]byte, error) { return nil, NewAppError("COMPONENTS_UNAVAILABLE") }
+	started := time.Now()
+	if err := driver.EnsureReady(context.Background()); CodeOf(err) != "COMPONENTS_UNAVAILABLE" || time.Since(started) > time.Second {
+		t.Fatalf("EnsureReady = %v after %v", err, time.Since(started))
+	}
+}
+
+// Panel requests go out directly unless TUN is up; then through the service, and
+// directly again when the service cannot make them.
+func TestHelperTransportUsesTheServiceOnlyForTUN(t *testing.T) {
+	answer := nativeReply{OK: true, State: "Connected", Ready: true, HTTP: &HTTPResponse{Status: 200, Headers: map[string]string{}, Body: "service"}}
+	driver := testRPCDriver(t, nil, func(map[string]any) nativeReply { return answer })
+	direct := 0
+	transport := &HelperTransport{native: driver, direct: transportFunc(func(context.Context, HTTPRequest) (HTTPResponse, error) {
+		direct++
+		return HTTPResponse{Status: 200, Body: "direct"}, nil
+	})}
+	request := func() string {
+		response, err := transport.Request(context.Background(), HTTPRequest{URL: "https://api.example.invalid/"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return response.Body
+	}
+	driver.verified = true
+	if got := request(); got != "direct" {
+		t.Fatalf("verified service without TUN: %s", got)
+	}
+	driver.ticket = "ticket"
+	if got := request(); got != "service" {
+		t.Fatalf("TUN up: %s", got)
+	}
+	answer = nativeReply{OK: false, Error: "CONTROL_UNAVAILABLE"}
+	if got := request(); got != "direct" || direct != 2 {
+		t.Fatalf("service failed: %s after %d direct", got, direct)
+	}
+}

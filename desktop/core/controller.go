@@ -1357,8 +1357,24 @@ func (c *ClientController) execute(ctx context.Context, cmd Command) error {
 			c.mu.Unlock()
 		}()
 		started := time.Now()
-		session, err := c.deps.Panel.Login(loginCtx, endpoints[0].ID, cmd.Email, cmd.Password)
-		c.deps.Telemetry.Record("login", map[string]any{"ok": err == nil, "code": string(CodeOf(err)), "ms": time.Since(started).Milliseconds(), "email": cmd.Email}, err != nil)
+		// A panel that does not answer moves on to the backup, as sync does; login only
+		// ever asked the primary, so one failed request there was "cannot reach server".
+		var session Session
+		var err error
+		attempts := 0
+		for _, endpoint := range endpoints {
+			attempts++
+			session, err = c.deps.Panel.Login(loginCtx, endpoint.ID, cmd.Email, cmd.Password)
+			if err == nil {
+				c.pool.Success(endpoint.ID)
+				break
+			}
+			if CodeOf(err) != "CONTROL_UNAVAILABLE" || loginCtx.Err() != nil {
+				break
+			}
+			c.pool.Failure(endpoint.ID)
+		}
+		c.deps.Telemetry.Record("login", map[string]any{"ok": err == nil, "code": string(CodeOf(err)), "ms": time.Since(started).Milliseconds(), "attempts": attempts, "email": cmd.Email}, err != nil)
 		if err != nil {
 			return err
 		}

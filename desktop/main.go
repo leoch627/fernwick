@@ -475,11 +475,7 @@ func run() error {
 			// Started by the updater: the network service may still be restarting after
 			// reinstalling itself. Give it a moment rather than asking to repair it.
 			if slices.Contains(os.Args[1:], "--updated") && !demo {
-				if _, err := os.Stat(filepath.Join(core.HelperRoot(build, root), "server-public.pem")); err == nil {
-					for deadline := time.Now().Add(15 * time.Second); !native.Verified() && time.Now().Before(deadline) && ctx.Err() == nil; time.Sleep(500 * time.Millisecond) {
-						_ = native.Initialize(ctx)
-					}
-				}
+				native.WaitReady(ctx, 15*time.Second)
 			}
 			_ = s.controller.Start(ctx)
 			if demo {
