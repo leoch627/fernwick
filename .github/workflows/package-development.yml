@@ -63,9 +63,22 @@ jobs:
       - name: Linux build dependencies
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+      # Chocolatey's community feed has outages (HTTP 503) after which choco still exits 0
+      # having installed nothing, and packaging failed later on a missing makensis: retry,
+      # fall back to winget, and fail here.
       - name: Windows installer compiler
         if: runner.os == 'Windows'
-        run: choco install nsis --no-progress -y
+        shell: pwsh
+        run: |
+          $found = { (Test-Path (Join-Path ${env:ProgramFiles(x86)} 'NSIS\makensis.exe')) -or (Test-Path (Join-Path $env:ProgramFiles 'NSIS\makensis.exe')) }
+          for ($i = 1; $i -le 3 -and -not (& $found); $i++) {
+            choco install nsis --no-progress -y
+            if (-not (& $found)) { Start-Sleep -Seconds (30 * $i) }
+          }
+          if (-not (& $found)) {
+            winget install --id NSIS.NSIS --exact --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
+          }
+          if (-not (& $found)) { Write-Error 'NSIS could not be installed'; exit 1 }
       # Lays out the DMG window (background, icon positions) without scripting Finder.
       - name: macOS disk image builder
         if: runner.os == 'macOS'
