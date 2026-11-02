@@ -110,7 +110,7 @@ type ClientController struct {
 	lastManual, lastProbeBatch, renewalRefresh                            time.Time
 	renewalUntil                                                          int64
 	updateStatus                                                          string
-	policyBusy, updateBusy                                                bool
+	policyBusy, updateBusy, syncAsked                                     bool
 	// installWhenReady: the user asked to update before the download finished;
 	// installing marks the update being applied, after which the app quits.
 	installWhenReady, installing bool
@@ -388,8 +388,13 @@ func (c *ClientController) syncDoneCurrent(generation string, code ErrorCode) {
 		return
 	}
 	c.startupAttempted = true
-	c.failure = code
 	gate := c.gateLocked()
+	// A background sync that failed while the saved lines still work leaves nothing to
+	// do: showing it put "网络组件需要修复" on the main screen although connecting worked.
+	if code == "" || gate != "" || c.syncAsked {
+		c.failure = code
+	}
+	c.syncAsked = false
 	switch {
 	case code != "" && gate == "":
 		c.syncStatus = "UsingValidCache"
@@ -1392,6 +1397,7 @@ func (c *ClientController) execute(ctx context.Context, cmd Command) error {
 			return NewAppError("RATE_LIMITED")
 		}
 		c.lastManual = time.Now()
+		c.syncAsked = true
 		c.mu.Unlock()
 		return c.refresh(ctx, true)
 	case "connect":

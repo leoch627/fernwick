@@ -20,6 +20,7 @@ type lifecyclePanel struct {
 	wait    <-chan struct{}
 	onRead  func()
 	expired bool
+	err     error
 	reads   int
 	nodes   int
 }
@@ -27,8 +28,11 @@ type lifecyclePanel struct {
 func (p *lifecyclePanel) FetchAccount(ctx context.Context, endpoint string, session Session) (Account, error) {
 	p.mu.Lock()
 	p.reads++
-	wait, read, expired := p.wait, p.onRead, p.expired
+	wait, read, expired, failure := p.wait, p.onRead, p.expired, p.err
 	p.mu.Unlock()
+	if failure != nil {
+		return Account{}, failure
+	}
 	if read != nil {
 		read()
 	}
@@ -312,5 +316,29 @@ func TestControllerPublicViewContainsNoSecrets(t *testing.T) {
 	}
 	if !strings.Contains(string(raw), `"nodes":[`) {
 		t.Fatal("public nodes null")
+	}
+}
+
+// A background sync that fails while the saved lines still work is not shown: it put
+// "网络组件需要修复" on the main screen although connecting worked. A sync the user
+// asked for still says why it failed.
+func TestControllerShowsSyncFailureOnlyWhenAsked(t *testing.T) {
+	fail := func(h *controllerHarness) {
+		h.panel.mu.Lock()
+		h.panel.err = NewAppError("COMPONENTS_UNAVAILABLE")
+		h.panel.mu.Unlock()
+	}
+	background := newControllerHarness(t, nil, false)
+	fail(background)
+	if err := background.controller.refresh(context.Background(), true); err != nil {
+		t.Fatal(err)
+	}
+	if view := background.controller.View(); view.Error != nil || view.Sync != "UsingValidCache" {
+		t.Fatalf("background failure shown: error=%v sync=%s", view.Error, view.Sync)
+	}
+	asked := newControllerHarness(t, nil, false)
+	fail(asked)
+	if view := commandForTest(asked.controller, map[string]any{"type": "sync"}).State; view.Error == nil || *view.Error != "COMPONENTS_UNAVAILABLE" {
+		t.Fatalf("asked-for failure hidden: %v", view.Error)
 	}
 }
