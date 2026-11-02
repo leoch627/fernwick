@@ -18,10 +18,14 @@ type HTTPRequest struct {
 	Body     string
 	MaxBytes int
 }
+
+// HTTPResponse is also the network service's reply to a control request
+// (native/helper ControlResponse). DecodeStrict matches names exactly, so without
+// these tags every answered request was refused and sync failed while it was verified.
 type HTTPResponse struct {
-	Status  int
-	Headers map[string]string
-	Body    string
+	Status  int               `json:"status"`
+	Headers map[string]string `json:"headers"`
+	Body    string            `json:"body"`
 }
 type Transport interface {
 	Request(context.Context, HTTPRequest) (HTTPResponse, error)

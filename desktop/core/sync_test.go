@@ -305,3 +305,32 @@ func TestSyncPersistenceFailureNeverPublishes(t *testing.T) {
 		t.Fatal("disk failure published snapshot")
 	}
 }
+
+// A sync inside the backoff reaches no server; counting it as a failure doubled the
+// backoff on every retry and kept the app on RATE_LIMITED.
+func TestSyncInsideBackoffDoesNotExtendIt(t *testing.T) {
+	h := newSyncHarness(t)
+	calls := 0
+	h.panel.account = func(context.Context, string, Session) (Account, error) {
+		calls++
+		return Account{}, NewAppError("CONTROL_UNAVAILABLE")
+	}
+	runSync(t, h, true)
+	h.coordinator.mu.Lock()
+	failures, until := h.coordinator.failures, h.coordinator.blockedUntil
+	h.coordinator.mu.Unlock()
+	if failures != 1 || until <= authTestNow {
+		t.Fatalf("failure not backed off: failures %d until %d", failures, until)
+	}
+	attempts := calls
+	runSync(t, h, true)
+	runSync(t, h, true)
+	h.coordinator.mu.Lock()
+	defer h.coordinator.mu.Unlock()
+	if calls != attempts || h.coordinator.failures != 1 || h.coordinator.blockedUntil != until {
+		t.Fatalf("backoff extended: calls %d->%d failures %d until %d->%d", attempts, calls, h.coordinator.failures, until, h.coordinator.blockedUntil)
+	}
+	if len(h.done) != 3 || h.done[1] != "RATE_LIMITED" || h.done[2] != "RATE_LIMITED" {
+		t.Fatalf("done %#v", h.done)
+	}
+}

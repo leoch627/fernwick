@@ -231,3 +231,14 @@ func TestInstallFailure(t *testing.T) {
 		t.Errorf("cancelled install = %s", got)
 	}
 }
+
+// The network service answers a control request with native/helper Response and
+// ControlResponse, as below; the fake service above encodes the client's own structs,
+// so it could not catch the names differing.
+func TestNativeReplyDecodesTheServiceHTTPAnswer(t *testing.T) {
+	raw := []byte(`{"id":"x","ok":true,"protocol":1,"productId":"p","buildId":"b","version":"0.2.7","state":"Connected","ready":true,"owned":true,"http":{"status":200,"headers":{"content-type":"application/json"},"body":"{}"}}`)
+	var reply nativeReply
+	if err := DecodeStrict(raw, &reply, 1<<20); err != nil || reply.HTTP == nil || reply.HTTP.Status != 200 || reply.HTTP.Body != "{}" || reply.HTTP.Headers["content-type"] != "application/json" {
+		t.Fatalf("%#v %v", reply.HTTP, err)
+	}
+}

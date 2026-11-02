@@ -135,8 +135,10 @@ func (s *SyncCoordinator) execute(full bool) {
 		}
 		return nil
 	}
+	waiting := false
 	perform := func() error {
 		if s.hooks.Now() < blocked {
+			waiting = true
 			return &AppError{Code: "RATE_LIMITED", RetryAfterMs: blocked - s.hooks.Now()}
 		}
 		policy := s.hooks.Policy()
@@ -290,7 +292,9 @@ func (s *SyncCoordinator) execute(full bool) {
 		code = "CONTROL_UNAVAILABLE"
 	}
 	s.mu.Lock()
-	if same {
+	// A sync turned away by the backoff reached no server and is not another failure:
+	// counting it doubled the wait on every retry, so the app kept saying RATE_LIMITED.
+	if same && !waiting {
 		if code == "" {
 			s.failures = 0
 			s.blockedUntil = 0
