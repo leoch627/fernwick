@@ -170,6 +170,24 @@ func copyFile(source, destination string, mode os.FileMode) error {
 	return replaceFile(tmp, destination)
 }
 
+// awaitLock waits until no other process holds the machine lock, then releases it.
+func awaitLock(ctx context.Context, take func() (io.Closer, error)) error {
+	for {
+		lock, e := take()
+		if e == nil {
+			return lock.Close()
+		}
+		if e.Error() != "NETWORK_CONFLICT" {
+			return e
+		}
+		select {
+		case <-ctx.Done():
+			return e
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+}
+
 // run runs a system tool. The caller's context bounds it; ten seconds is only a ceiling
 // for a tool that hangs, as a cold system (Windows' first PowerShell or a busy configd)
 // can take several seconds for what normally takes a fraction of one.

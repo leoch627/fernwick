@@ -313,11 +313,12 @@ func (n *NativeDriver) repair(ctx context.Context) error {
 		return NewAppError("COMPONENTS_UNAVAILABLE")
 	}
 	configureNativeChild(command)
+	var stderr strings.Builder
 	command.Stdout = io.Discard
-	command.Stderr = io.Discard
+	command.Stderr = &stderr
 	command.WaitDelay = time.Second
 	if err := command.Run(); err != nil {
-		return NewAppError("PERMISSION_REQUIRED")
+		return installFailure(ctx, n.build.ProductID, stderr.String())
 	}
 	// The service manager starts the new service after the install returns. Checking
 	// only once found it not listening yet, failed the connection and asked for the
@@ -336,6 +337,32 @@ func (n *NativeDriver) repair(ctx context.Context) error {
 		return NewAppError("COMPONENTS_UNAVAILABLE")
 	}
 	return nil
+}
+
+// installFailure says why the elevated install failed. The helper prints its error code
+// to stderr and osascript and pkexec pass it on; without one (a dismissed password
+// prompt, or Windows, where RunAs hides the output) the cause stays PERMISSION_REQUIRED.
+func installFailure(ctx context.Context, productID, stderr string) error {
+	if ctx.Err() != nil {
+		return NewAppError("CANCELLED")
+	}
+	marker := productID + "-helper: "
+	index := strings.LastIndex(stderr, marker)
+	if index < 0 {
+		return NewAppError("PERMISSION_REQUIRED")
+	}
+	code := stderr[index+len(marker):]
+	if end := strings.IndexFunc(code, func(r rune) bool { return (r < 'A' || r > 'Z') && r != '_' }); end >= 0 {
+		code = code[:end]
+	}
+	switch _, known := Messages[ErrorCode(code)]; {
+	case code == "NETWORK_RECOVERY_REQUIRED":
+		// A system tool failed during the install; the network itself was not touched.
+		return NewAppError("COMPONENTS_UNAVAILABLE")
+	case known:
+		return NewAppError(ErrorCode(code))
+	}
+	return NewAppError("COMPONENTS_UNAVAILABLE")
 }
 func (n *NativeDriver) SetAuthorizedUntil(deadline int64) {
 	n.mu.Lock()

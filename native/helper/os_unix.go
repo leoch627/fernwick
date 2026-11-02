@@ -167,9 +167,15 @@ func startDetached(path string, args ...string) error {
 	return command.Process.Release()
 }
 func stopInstalledService() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	// launchd kills a service that has not exited after its ExitTimeOut (8s); allow that.
+	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 	defer cancel()
-	return platformStopService(ctx)
+	if e := platformStopService(ctx); e != nil {
+		return e
+	}
+	// launchctl bootout returns while the old service is still exiting with the machine
+	// lock held, so reinstalling right after an update failed with NETWORK_CONFLICT.
+	return awaitLock(ctx, machineLock)
 }
 func secureInstallationDirectories() error { return nil }
 func availableSpace() (uint64, error) {

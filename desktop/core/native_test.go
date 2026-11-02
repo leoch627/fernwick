@@ -200,3 +200,25 @@ func TestHeartbeatReportsConnectionEndedByService(t *testing.T) {
 		t.Error("an ended connection marked the service as needing repair")
 	}
 }
+
+// The elevated install passes on the helper's own error code, so a failed install is no
+// longer shown as a missing permission; a dismissed password prompt still is.
+func TestInstallFailure(t *testing.T) {
+	for stderr, want := range map[string]ErrorCode{
+		"0:180: execution error: starrail-network-helper: NETWORK_CONFLICT (1)\n": "NETWORK_CONFLICT",
+		"0:180: execution error: User canceled. (-128)\n":                         "PERMISSION_REQUIRED",
+		"starrail-network-helper: PERMISSION_REQUIRED\n":                          "PERMISSION_REQUIRED",
+		"starrail-network-helper: NETWORK_RECOVERY_REQUIRED\n":                    "COMPONENTS_UNAVAILABLE",
+		"starrail-network-helper: NOT_A_CODE\n":                                   "COMPONENTS_UNAVAILABLE",
+		"":                                                                        "PERMISSION_REQUIRED",
+	} {
+		if got := CodeOf(installFailure(context.Background(), "starrail-network", stderr)); got != want {
+			t.Errorf("installFailure(%q) = %s, want %s", stderr, got, want)
+		}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if got := CodeOf(installFailure(ctx, "starrail-network", "starrail-network-helper: NETWORK_CONFLICT")); got != "CANCELLED" {
+		t.Errorf("cancelled install = %s", got)
+	}
+}

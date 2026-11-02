@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -109,3 +111,30 @@ func TestHeartbeatBoundsAuthorization(t *testing.T) {
 		t.Fatalf("negative authorization accepted: %+v until=%d", r, s.authUntil)
 	}
 }
+
+// Reinstalling stops the old service first, and it can still hold the machine lock for a
+// moment after launchctl bootout returns.
+func TestAwaitLockWaitsForTheOldService(t *testing.T) {
+	attempts, closed := 0, false
+	take := func() (io.Closer, error) {
+		if attempts++; attempts < 3 {
+			return nil, failure("NETWORK_CONFLICT")
+		}
+		return closeFunc(func() error { closed = true; return nil }), nil
+	}
+	if e := awaitLock(context.Background(), take); e != nil || attempts != 3 || !closed {
+		t.Fatalf("awaitLock = %v after %d attempts, closed %v", e, attempts, closed)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+	defer cancel()
+	if e := awaitLock(ctx, func() (io.Closer, error) { return nil, failure("NETWORK_CONFLICT") }); e == nil || e.Error() != "NETWORK_CONFLICT" {
+		t.Fatalf("lock still held: %v", e)
+	}
+	if e := awaitLock(context.Background(), func() (io.Closer, error) { return nil, failure("PERMISSION_REQUIRED") }); e == nil || e.Error() != "PERMISSION_REQUIRED" {
+		t.Fatalf("other failure: %v", e)
+	}
+}
+
+type closeFunc func() error
+
+func (f closeFunc) Close() error { return f() }
