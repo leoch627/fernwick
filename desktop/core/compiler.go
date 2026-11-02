@@ -139,13 +139,13 @@ func CompileOutbound(node ProxyNode) (map[string]any, error) {
 	}
 	stream := map[string]any{"network": node.Transport, "security": node.Security}
 	if node.Security == "tls" {
-		tls := map[string]any{"allowInsecure": false, "fingerprint": defaultNodeString(node.Fingerprint, DefaultTLSFingerprint)}
+		tls := map[string]any{"allowInsecure": false, "fingerprint": ModernTLSFingerprint(node.Fingerprint)}
 		optionalMapString(tls, "serverName", node.SNI)
 		optionalMapString(tls, "echConfigList", node.ECH)
 		stream["tlsSettings"] = tls
 	}
 	if node.Security == "reality" {
-		reality := map[string]any{"fingerprint": defaultNodeString(node.Fingerprint, DefaultTLSFingerprint)}
+		reality := map[string]any{"fingerprint": ModernTLSFingerprint(node.Fingerprint)}
 		optionalMapString(reality, "serverName", node.SNI)
 		optionalMapString(reality, "publicKey", node.PublicKey)
 		optionalMapString(reality, "shortId", node.ShortID)

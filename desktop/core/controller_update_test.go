@@ -89,6 +89,22 @@ func (d *readyDownload) View() DownloadView {
 	return view
 }
 
+// failedDownload ends the way a transfer that broke off does: Start returns and the
+// status says failed.
+type failedDownload struct{ controllerDownload }
+
+func (d *failedDownload) Start(ctx context.Context) error {
+	_ = d.controllerDownload.Start(ctx)
+	return nil
+}
+func (d *failedDownload) View() DownloadView {
+	view := d.controllerDownload.View()
+	if d.starts.Load() > 0 {
+		view.Status = "failed"
+	}
+	return view
+}
+
 func updateFixture(t *testing.T, platform, identity string) (signedFixture, Artifact, string) {
 	f := newSignedFixture(t)
 	now := time.Now().UnixMilli()
@@ -191,6 +207,34 @@ func TestControllerInstallUpdateDownloadsThenInstalls(t *testing.T) {
 	// A second click while installing does nothing.
 	if result := commandForTest(h.controller, map[string]any{"type": "install-update"}); !result.OK || len(installer.installed) != 0 {
 		t.Fatal("installed twice")
+	}
+}
+
+func TestControllerReportsAFailedUpdateDownload(t *testing.T) {
+	f, _, envelope := updateFixture(t, "win32", "unsigned")
+	download := &failedDownload{}
+	installer := &controllerInstaller{available: true, installed: make(chan Artifact, 1)}
+	opened := []string{}
+	h := updateHarness(t, "win32", envelope, f, download, installer, &opened)
+	if result := commandForTest(h.controller, map[string]any{"type": "check-update"}); !result.OK {
+		t.Fatal(result)
+	}
+	if result := commandForTest(h.controller, map[string]any{"type": "install-update"}); !result.OK {
+		t.Fatal(result)
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		view := h.controller.View()
+		if view.Error != nil && *view.Error == "UPDATE_DOWNLOAD_FAILED" && !view.Installing {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("a failed download went unreported: error=%v installing=%v", view.Error, view.Installing)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if len(installer.installed) != 0 {
+		t.Fatal("a failed download was installed")
 	}
 }
 

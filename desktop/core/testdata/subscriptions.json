@@ -74,7 +74,7 @@
             "tlsSettings": {
               "serverName": "node.example.invalid",
               "allowInsecure": false,
-              "fingerprint": "hellochrome_120"
+              "fingerprint": "hellochrome_133"
             }
           }
         }
@@ -129,7 +129,7 @@
                 "tlsSettings": {
                   "serverName": "node.example.invalid",
                   "allowInsecure": false,
-                  "fingerprint": "hellochrome_120"
+                  "fingerprint": "hellochrome_133"
                 }
               }
             }
@@ -217,7 +217,7 @@
             "tlsSettings": {
               "serverName": "node.example.invalid",
               "allowInsecure": false,
-              "fingerprint": "firefox"
+              "fingerprint": "hellochrome_133"
             }
           }
         }
@@ -272,7 +272,7 @@
                 "tlsSettings": {
                   "serverName": "node.example.invalid",
                   "allowInsecure": false,
-                  "fingerprint": "firefox"
+                  "fingerprint": "hellochrome_133"
                 }
               }
             }
@@ -361,7 +361,7 @@
             "security": "reality",
             "realitySettings": {
               "serverName": "node.example.invalid",
-              "fingerprint": "hellochrome_120",
+              "fingerprint": "hellochrome_133",
               "publicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
               "shortId": "1234"
             }
@@ -417,7 +417,7 @@
                 "security": "reality",
                 "realitySettings": {
                   "serverName": "node.example.invalid",
-                  "fingerprint": "hellochrome_120",
+                  "fingerprint": "hellochrome_133",
                   "publicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
                   "shortId": "1234"
                 }
@@ -508,7 +508,7 @@
             "security": "reality",
             "realitySettings": {
               "serverName": "node.example.invalid",
-              "fingerprint": "chrome",
+              "fingerprint": "hellochrome_133",
               "publicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
               "shortId": ""
             }
@@ -564,7 +564,7 @@
                 "security": "reality",
                 "realitySettings": {
                   "serverName": "node.example.invalid",
-                  "fingerprint": "chrome",
+                  "fingerprint": "hellochrome_133",
                   "publicKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
                   "shortId": ""
                 }
@@ -654,7 +654,7 @@
             "tlsSettings": {
               "serverName": "node.example.invalid",
               "allowInsecure": false,
-              "fingerprint": "hellochrome_120"
+              "fingerprint": "hellochrome_133"
             }
           }
         }
@@ -709,7 +709,7 @@
                 "tlsSettings": {
                   "serverName": "node.example.invalid",
                   "allowInsecure": false,
-                  "fingerprint": "hellochrome_120"
+                  "fingerprint": "hellochrome_133"
                 }
               }
             }
@@ -797,7 +797,7 @@
             "tlsSettings": {
               "serverName": "node.example.invalid",
               "allowInsecure": false,
-              "fingerprint": "hellochrome_120"
+              "fingerprint": "hellochrome_133"
             }
           }
         }
@@ -852,7 +852,7 @@
                 "tlsSettings": {
                   "serverName": "node.example.invalid",
                   "allowInsecure": false,
-                  "fingerprint": "hellochrome_120"
+                  "fingerprint": "hellochrome_133"
                 }
               }
             }
@@ -940,7 +940,7 @@
             "tlsSettings": {
               "serverName": "node.example.invalid",
               "allowInsecure": false,
-              "fingerprint": "hellochrome_120"
+              "fingerprint": "hellochrome_133"
             }
           }
         }
@@ -995,7 +995,7 @@
                 "tlsSettings": {
                   "serverName": "node.example.invalid",
                   "allowInsecure": false,
-                  "fingerprint": "hellochrome_120"
+                  "fingerprint": "hellochrome_133"
                 }
               }
             }
@@ -1083,7 +1083,7 @@
             "tlsSettings": {
               "serverName": "node.example.invalid",
               "allowInsecure": false,
-              "fingerprint": "hellochrome_120"
+              "fingerprint": "hellochrome_133"
             }
           }
         }
@@ -1138,7 +1138,7 @@
                 "tlsSettings": {
                   "serverName": "node.example.invalid",
                   "allowInsecure": false,
-                  "fingerprint": "hellochrome_120"
+                  "fingerprint": "hellochrome_133"
                 }
               }
             }
@@ -1226,7 +1226,7 @@
             "tlsSettings": {
               "serverName": "node.example.invalid",
               "allowInsecure": false,
-              "fingerprint": "hellochrome_120"
+              "fingerprint": "hellochrome_133"
             }
           }
         }
@@ -1281,7 +1281,7 @@
                 "tlsSettings": {
                   "serverName": "node.example.invalid",
                   "allowInsecure": false,
-                  "fingerprint": "hellochrome_120"
+                  "fingerprint": "hellochrome_133"
                 }
               }
             }
@@ -1302,8 +1302,8 @@
       ]
     },
     {
-      "name": "vless-bad-fingerprint",
-      "raw": "vless://00000000-0000-4000-8000-000000000001@node.example.invalid:443?security=tls&type=tcp&sni=node.example.invalid&fp=x25519#Tokyo",
+      "name": "vless-any-fingerprint",
+      "raw": "vless://00000000-0000-4000-8000-000000000001@node.example.invalid:443?security=tls&type=tcp&sni=node.example.invalid&fp=360#Tokyo",
       "options": {
         "source": "test-fixture",
         "capabilities": [
@@ -1318,7 +1318,7 @@
       "parsed": {
         "nodes": [
           {
-            "id": "c463429f5d25fc337279220492d0e936aeda2b711b0f54bbb538bb9799fc57d7",
+            "id": "0584ba2e0662e10529f91acbea6e447d47622e072b8f99d265e95810d4262c08",
             "name": "Tokyo",
             "group": "全部节点",
             "region": null,
@@ -1329,26 +1329,119 @@
             "credential": "00000000-0000-4000-8000-000000000001",
             "transport": "tcp",
             "security": "tls",
-            "compatible": false,
-            "incompatibility": "未验证的 TLS 指纹",
+            "compatible": true,
+            "incompatibility": null,
             "tcp": true,
             "udp": true,
             "ipv6": "unknown",
-            "connectionFingerprint": "c463429f5d25fc337279220492d0e936aeda2b711b0f54bbb538bb9799fc57d7",
+            "connectionFingerprint": "0584ba2e0662e10529f91acbea6e447d47622e072b8f99d265e95810d4262c08",
             "source": "test-fixture",
             "sni": "node.example.invalid",
             "flow": "",
-            "fingerprint": "x25519"
+            "fingerprint": "360"
           }
         ],
         "quarantined": [],
         "authoritativeEmpty": false
       },
       "outbounds": [
-        null
+        {
+          "tag": "proxy",
+          "protocol": "vless",
+          "settings": {
+            "vnext": [
+              {
+                "address": "node.example.invalid",
+                "port": 443,
+                "users": [
+                  {
+                    "id": "00000000-0000-4000-8000-000000000001",
+                    "encryption": "none",
+                    "flow": ""
+                  }
+                ]
+              }
+            ]
+          },
+          "streamSettings": {
+            "network": "tcp",
+            "security": "tls",
+            "tlsSettings": {
+              "serverName": "node.example.invalid",
+              "allowInsecure": false,
+              "fingerprint": "hellochrome_133"
+            }
+          }
+        }
       ],
       "probes": [
-        null
+        {
+          "log": {
+            "loglevel": "none",
+            "access": "none",
+            "error": "none"
+          },
+          "inbounds": [
+            {
+              "tag": "health",
+              "listen": "127.0.0.1",
+              "port": 49152,
+              "protocol": "socks",
+              "settings": {
+                "auth": "password",
+                "accounts": [
+                  {
+                    "user": "random-session",
+                    "pass": "random-session-password"
+                  }
+                ],
+                "udp": false
+              }
+            }
+          ],
+          "outbounds": [
+            {
+              "tag": "proxy",
+              "protocol": "vless",
+              "settings": {
+                "vnext": [
+                  {
+                    "address": "node.example.invalid",
+                    "port": 443,
+                    "users": [
+                      {
+                        "id": "00000000-0000-4000-8000-000000000001",
+                        "encryption": "none",
+                        "flow": ""
+                      }
+                    ]
+                  }
+                ]
+              },
+              "streamSettings": {
+                "network": "tcp",
+                "security": "tls",
+                "tlsSettings": {
+                  "serverName": "node.example.invalid",
+                  "allowInsecure": false,
+                  "fingerprint": "hellochrome_133"
+                }
+              }
+            }
+          ],
+          "routing": {
+            "domainStrategy": "AsIs",
+            "rules": [
+              {
+                "type": "field",
+                "inboundTag": [
+                  "health"
+                ],
+                "outboundTag": "proxy"
+              }
+            ]
+          }
+        }
       ]
     },
     {
@@ -1463,7 +1556,7 @@
             "tlsSettings": {
               "serverName": "node.invalid",
               "allowInsecure": false,
-              "fingerprint": "hellochrome_120"
+              "fingerprint": "hellochrome_133"
             }
           }
         }
@@ -1512,7 +1605,7 @@
                 "tlsSettings": {
                   "serverName": "node.invalid",
                   "allowInsecure": false,
-                  "fingerprint": "hellochrome_120"
+                  "fingerprint": "hellochrome_133"
                 }
               }
             }
@@ -1594,7 +1687,7 @@
             "tlsSettings": {
               "serverName": "node.invalid",
               "allowInsecure": false,
-              "fingerprint": "hellochrome_120"
+              "fingerprint": "hellochrome_133"
             }
           }
         }
@@ -1643,7 +1736,7 @@
                 "tlsSettings": {
                   "serverName": "node.invalid",
                   "allowInsecure": false,
-                  "fingerprint": "hellochrome_120"
+                  "fingerprint": "hellochrome_133"
                 }
               }
             }
@@ -1725,7 +1818,7 @@
             "tlsSettings": {
               "serverName": "hello world",
               "allowInsecure": false,
-              "fingerprint": "hellochrome_120"
+              "fingerprint": "hellochrome_133"
             }
           }
         }
@@ -1774,7 +1867,7 @@
                 "tlsSettings": {
                   "serverName": "hello world",
                   "allowInsecure": false,
-                  "fingerprint": "hellochrome_120"
+                  "fingerprint": "hellochrome_133"
                 }
               }
             }
@@ -1856,7 +1949,7 @@
             "tlsSettings": {
               "serverName": "��",
               "allowInsecure": false,
-              "fingerprint": "hellochrome_120"
+              "fingerprint": "hellochrome_133"
             }
           }
         }
@@ -1905,7 +1998,7 @@
                 "tlsSettings": {
                   "serverName": "��",
                   "allowInsecure": false,
-                  "fingerprint": "hellochrome_120"
+                  "fingerprint": "hellochrome_133"
                 }
               }
             }
@@ -1987,7 +2080,7 @@
             "tlsSettings": {
               "serverName": "�",
               "allowInsecure": false,
-              "fingerprint": "hellochrome_120"
+              "fingerprint": "hellochrome_133"
             }
           }
         }
@@ -2036,7 +2129,7 @@
                 "tlsSettings": {
                   "serverName": "�",
                   "allowInsecure": false,
-                  "fingerprint": "hellochrome_120"
+                  "fingerprint": "hellochrome_133"
                 }
               }
             }
@@ -2118,7 +2211,7 @@
             "tlsSettings": {
               "serverName": "���",
               "allowInsecure": false,
-              "fingerprint": "hellochrome_120"
+              "fingerprint": "hellochrome_133"
             }
           }
         }
@@ -2167,7 +2260,7 @@
                 "tlsSettings": {
                   "serverName": "���",
                   "allowInsecure": false,
-                  "fingerprint": "hellochrome_120"
+                  "fingerprint": "hellochrome_133"
                 }
               }
             }
@@ -2255,7 +2348,7 @@
             "tlsSettings": {
               "serverName": "node.example.invalid",
               "allowInsecure": false,
-              "fingerprint": "hellochrome_120"
+              "fingerprint": "hellochrome_133"
             }
           }
         }
@@ -2310,7 +2403,7 @@
                 "tlsSettings": {
                   "serverName": "node.example.invalid",
                   "allowInsecure": false,
-                  "fingerprint": "hellochrome_120"
+                  "fingerprint": "hellochrome_133"
                 }
               }
             }
@@ -2398,7 +2491,7 @@
             "tlsSettings": {
               "serverName": "node.example.invalid",
               "allowInsecure": false,
-              "fingerprint": "hellochrome_120"
+              "fingerprint": "hellochrome_133"
             }
           }
         }
@@ -2453,7 +2546,7 @@
                 "tlsSettings": {
                   "serverName": "node.example.invalid",
                   "allowInsecure": false,
-                  "fingerprint": "hellochrome_120"
+                  "fingerprint": "hellochrome_133"
                 }
               }
             }
@@ -2833,7 +2926,7 @@
             "tlsSettings": {
               "serverName": "node.invalid",
               "allowInsecure": false,
-              "fingerprint": "hellochrome_120"
+              "fingerprint": "hellochrome_133"
             },
             "wsSettings": {
               "path": "/",
@@ -2894,7 +2987,7 @@
                 "tlsSettings": {
                   "serverName": "node.invalid",
                   "allowInsecure": false,
-                  "fingerprint": "hellochrome_120"
+                  "fingerprint": "hellochrome_133"
                 },
                 "wsSettings": {
                   "path": "/",
@@ -2990,7 +3083,7 @@
             "tlsSettings": {
               "serverName": "node.invalid",
               "allowInsecure": false,
-              "fingerprint": "safari"
+              "fingerprint": "hellosafari_26_3"
             },
             "wsSettings": {
               "path": "/path?x=<>&\"\\  🚄",
@@ -3051,7 +3144,7 @@
                 "tlsSettings": {
                   "serverName": "node.invalid",
                   "allowInsecure": false,
-                  "fingerprint": "safari"
+                  "fingerprint": "hellosafari_26_3"
                 },
                 "wsSettings": {
                   "path": "/path?x=<>&\"\\  🚄",
@@ -3147,7 +3240,7 @@
             "tlsSettings": {
               "serverName": "node.invalid",
               "allowInsecure": false,
-              "fingerprint": "hellochrome_120"
+              "fingerprint": "hellochrome_133"
             },
             "wsSettings": {
               "path": "/unpaired-\ud800-and-\udfff-paired-🚄",
@@ -3208,7 +3301,7 @@
                 "tlsSettings": {
                   "serverName": "node.invalid",
                   "allowInsecure": false,
-                  "fingerprint": "hellochrome_120"
+                  "fingerprint": "hellochrome_133"
                 },
                 "wsSettings": {
                   "path": "/unpaired-\ud800-and-\udfff-paired-🚄",
@@ -3304,7 +3397,7 @@
             "tlsSettings": {
               "serverName": "node.invalid",
               "allowInsecure": false,
-              "fingerprint": "hellochrome_120"
+              "fingerprint": "hellochrome_133"
             },
             "wsSettings": {
               "path": "/",
@@ -3365,7 +3458,7 @@
                 "tlsSettings": {
                   "serverName": "node.invalid",
                   "allowInsecure": false,
-                  "fingerprint": "hellochrome_120"
+                  "fingerprint": "hellochrome_133"
                 },
                 "wsSettings": {
                   "path": "/",
@@ -3461,7 +3554,7 @@
             "tlsSettings": {
               "serverName": "node.invalid",
               "allowInsecure": false,
-              "fingerprint": "hellochrome_120"
+              "fingerprint": "hellochrome_133"
             },
             "wsSettings": {
               "path": "/",
@@ -3522,7 +3615,7 @@
                 "tlsSettings": {
                   "serverName": "node.invalid",
                   "allowInsecure": false,
-                  "fingerprint": "hellochrome_120"
+                  "fingerprint": "hellochrome_133"
                 },
                 "wsSettings": {
                   "path": "/",
@@ -3618,7 +3711,7 @@
             "tlsSettings": {
               "serverName": "node.invalid",
               "allowInsecure": false,
-              "fingerprint": "hellochrome_120"
+              "fingerprint": "hellochrome_133"
             },
             "wsSettings": {
               "path": "/",
@@ -3679,7 +3772,7 @@
                 "tlsSettings": {
                   "serverName": "node.invalid",
                   "allowInsecure": false,
-                  "fingerprint": "hellochrome_120"
+                  "fingerprint": "hellochrome_133"
                 },
                 "wsSettings": {
                   "path": "/",
@@ -3775,7 +3868,7 @@
             "tlsSettings": {
               "serverName": "node.invalid",
               "allowInsecure": false,
-              "fingerprint": "hellochrome_120"
+              "fingerprint": "hellochrome_133"
             },
             "wsSettings": {
               "path": "/",
@@ -3836,7 +3929,7 @@
                 "tlsSettings": {
                   "serverName": "node.invalid",
                   "allowInsecure": false,
-                  "fingerprint": "hellochrome_120"
+                  "fingerprint": "hellochrome_133"
                 },
                 "wsSettings": {
                   "path": "/",
@@ -4054,7 +4147,7 @@
             "tlsSettings": {
               "serverName": "node.example.invalid",
               "allowInsecure": false,
-              "fingerprint": "hellochrome_120"
+              "fingerprint": "hellochrome_133"
             }
           }
         },
@@ -4082,7 +4175,7 @@
             "tlsSettings": {
               "serverName": "node.invalid",
               "allowInsecure": false,
-              "fingerprint": "hellochrome_120"
+              "fingerprint": "hellochrome_133"
             },
             "wsSettings": {
               "path": "/",
@@ -4143,7 +4236,7 @@
                 "tlsSettings": {
                   "serverName": "node.example.invalid",
                   "allowInsecure": false,
-                  "fingerprint": "hellochrome_120"
+                  "fingerprint": "hellochrome_133"
                 }
               }
             }
@@ -4210,7 +4303,7 @@
                 "tlsSettings": {
                   "serverName": "node.invalid",
                   "allowInsecure": false,
-                  "fingerprint": "hellochrome_120"
+                  "fingerprint": "hellochrome_133"
                 },
                 "wsSettings": {
                   "path": "/",
@@ -4309,7 +4402,7 @@
             "tlsSettings": {
               "serverName": "node.example.invalid",
               "allowInsecure": false,
-              "fingerprint": "hellochrome_120"
+              "fingerprint": "hellochrome_133"
             }
           }
         }
@@ -4364,7 +4457,7 @@
                 "tlsSettings": {
                   "serverName": "node.example.invalid",
                   "allowInsecure": false,
-                  "fingerprint": "hellochrome_120"
+                  "fingerprint": "hellochrome_133"
                 }
               }
             }
@@ -4452,7 +4545,7 @@
             "tlsSettings": {
               "serverName": "node.example.invalid",
               "allowInsecure": false,
-              "fingerprint": "hellochrome_120"
+              "fingerprint": "hellochrome_133"
             }
           }
         }
@@ -4507,7 +4600,7 @@
                 "tlsSettings": {
                   "serverName": "node.example.invalid",
                   "allowInsecure": false,
-                  "fingerprint": "hellochrome_120"
+                  "fingerprint": "hellochrome_133"
                 }
               }
             }

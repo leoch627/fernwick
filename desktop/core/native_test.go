@@ -137,11 +137,15 @@ func TestNativePrepareSendsOnlyFrozenCandidateFields(t *testing.T) {
 			if node["credential"] != "secret" {
 				t.Error(node)
 			}
+			// The subscription asked for 360; the helper gets the client's own choice.
+			if node["fingerprint"] != ChromeTLSFingerprint {
+				t.Errorf("fingerprint = %v", node["fingerprint"])
+			}
 			return nativeReply{OK: true, Ticket: "owner-ticket", State: "Prepared"}
 		}
 		return nativeReply{OK: true}
 	})
-	ticket, err := driver.Prepare(context.Background(), Candidate{Node: ProxyNode{ID: "private-id", Credential: "secret", Protocol: "trojan", Host: "node.invalid", Port: 443, Transport: "tcp", Security: "tls"}, Mode: "rule", Rules: EmptyRules(), AuthorizedUntil: time.Now().Add(time.Hour).UnixMilli()})
+	ticket, err := driver.Prepare(context.Background(), Candidate{Node: ProxyNode{ID: "private-id", Credential: "secret", Protocol: "trojan", Host: "node.invalid", Port: 443, Transport: "tcp", Security: "tls", Fingerprint: nodeString("360")}, Mode: "rule", Rules: EmptyRules(), AuthorizedUntil: time.Now().Add(time.Hour).UnixMilli()})
 	if err != nil || ticket != "owner-ticket" {
 		t.Fatal(ticket, err)
 	}

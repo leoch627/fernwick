@@ -56,7 +56,7 @@ var testRules = Rules{SchemaVersion: 2, Sections: []RuleSection{
 
 func TestCompileCoreRuleMode(t *testing.T) {
 	c := validCandidate()
-	c.Node.Fingerprint = "hellochrome_120"
+	c.Node.Fingerprint = "hellochrome_133"
 	c.Node.AI = true
 	c.Rules = testRules
 	cfg := compile(t, c)
@@ -75,7 +75,7 @@ func TestCompileCoreRuleMode(t *testing.T) {
 		t.Errorf("proxy dials %v instead of the pre-resolved address", server["address"])
 	}
 	tls := proxy.StreamSettings["tlsSettings"].(map[string]any)
-	if tls["allowInsecure"] != false || tls["serverName"] != "node.example.com" || tls["fingerprint"] != "hellochrome_120" {
+	if tls["allowInsecure"] != false || tls["serverName"] != "node.example.com" || tls["fingerprint"] != "hellochrome_133" {
 		t.Errorf("tls settings = %v", tls)
 	}
 	// Linux binds the proxy itself; on Windows and macOS the core binds every outbound

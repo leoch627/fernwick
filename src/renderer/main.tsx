@@ -125,7 +125,7 @@ function NodeSheet({ state, close, run }: { state: AppView; close(): void; run(c
     {[...groups].map(([region, nodes]) => <section key={region} className="node-group">
       <h3>{flag(region || null)} {regionName(region || null)}</h3>
       {nodes.map(node => <button key={node.id} className={`node-row ${state.selectedNode === node.id ? 'selected' : ''}`} disabled={!node.compatible} onClick={() => choose(node.id)}>
-        <span className="node-name"><strong>{label(node)}</strong>{!node.compatible && <small>暂不可用</small>}</span>
+        <span className="node-name"><strong>{label(node)}</strong>{!node.compatible && <small>暂不可用{node.reason ? `：${node.reason}` : ''}</small>}</span>
         <span className={`latency ${node.latency !== null ? latencyClass(node.latency) : ''}`}>{node.probe === 'testing' ? '测速中' : node.latency !== null ? `${Math.round(node.latency)} ms` : node.probe === 'timeout' ? '超时' : ''}</span>
         {state.selectedNode === node.id && <Icon name="check" size={18}/>}
       </button>)}

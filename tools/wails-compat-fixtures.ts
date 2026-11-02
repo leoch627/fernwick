@@ -20,7 +20,7 @@ const cases = [
   ['vless-numeric-custom-scheme-host', uri.replace('node.example.invalid:443', '127.000.000.001:443')],
   ['vless-utf16-name', uri.replace('Tokyo', encodeURIComponent('Tokyo 🚄 東京'))],
   ['vless-neutral-fields', uri.replace('#Tokyo', '&host=&path=&headerType=none&quicSecurity=none&serviceName=&insecure=0&pcs=#Tokyo')],
-  ['vless-bad-fingerprint', uri.replace('#Tokyo', '&fp=x25519#Tokyo')],
+  ['vless-any-fingerprint', uri.replace('#Tokyo', '&fp=360#Tokyo')],
   ['vless-insecure', uri.replace('#Tokyo', '&insecure=1#Tokyo')],
   ['trojan-default', 'trojan://secret@node.invalid:443?allowInsecure=0&peer=node.invalid&sni=node.invalid&pcs=&type=tcp#node'],
   ['trojan-escaping', 'trojan://' + encodeURIComponent('quotes" slash\\ <>& / \u2028\u2029 🚄') + '@node.invalid:443#escaped'],

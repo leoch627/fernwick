@@ -4,7 +4,7 @@ import type { ParsedNodes, ProxyNode } from './model';
 import type { BuildConfig } from '../shared/schema';
 import { AppError, assert } from '../shared/errors';
 import { strictJson } from './json';
-import { defaultTlsProfile, supportedFingerprints } from './tls-defaults';
+import { defaultTlsProfile } from './tls-defaults';
 const bad = () => new AppError('SUBSCRIPTION_INVALID');
 export function decodeBase64(value: string): Buffer {
   assert(value.length > 0 && /^[A-Za-z0-9+/_-]+={0,2}$/.test(value) && value.replace(/=+$/, '').length % 4 !== 1, 'SUBSCRIPTION_INVALID');
@@ -69,7 +69,6 @@ function parseLine(line: string, index: number, options: ParserOptions): ProxyNo
     node.connectionFingerprint = hash(line); node.id = node.connectionFingerprint; return node;
   } else { throw bad(); }
   if (node.security === 'tls' || node.security === 'reality') node.fingerprint ??= defaultTlsProfile.fingerprint;
-  if (node.fingerprint && !supportedFingerprints.includes(node.fingerprint)) node.incompatibility = '未验证的 TLS 指纹';
   if (capability && !options.capabilities.includes(capability)) node.incompatibility = '此协议模板尚未通过部署验证';
   if (!options.confirmedTcpUdp) node.incompatibility ||= '尚未确认节点 TCP / UDP 能力';
   const { id: _id, name: _name, order: _order, group: _group, region: _region, compatible: _compatible, incompatibility: _reason, source: _source, connectionFingerprint: _fp, ...connection } = node;

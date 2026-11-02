@@ -928,6 +928,11 @@ func (c *ClientController) connect(ctx context.Context) error {
 	nodes := append([]ProxyNode{}, c.snapshot.Nodes...)
 	manual, current, tunnel := c.preferences.NodeID, c.actualNode, c.preferences.Tunnel
 	c.mu.Unlock()
+	// A node that cannot be used fails before TUN asks for a password to install the
+	// network service, not after.
+	if err := Selectable(nodes, c.policy.Active(), manual); err != nil {
+		return err
+	}
 	// Only TUN needs the network service; system proxy mode never asks for a password.
 	if !c.network.ReadyFor(tunnel) {
 		if err := c.network.EnsureReadyFor(ctx, tunnel); err != nil {
@@ -1233,6 +1238,11 @@ func (c *ClientController) downloadThenInstall(selected Artifact) {
 	wanted := c.installWhenReady
 	c.installWhenReady = false
 	c.mu.Unlock()
+	// Start reports a failed transfer in the download's status, not as an error: say
+	// so, or the button comes back as if it had not been pressed.
+	if status := c.deps.Download.View().Status; err == nil && wanted && status == "failed" {
+		err = NewAppError("UPDATE_DOWNLOAD_FAILED")
+	}
 	if err == nil && wanted && c.deps.Download.View().Status == "ready" {
 		err = c.installUpdate(c.publicCtx, selected)
 	}

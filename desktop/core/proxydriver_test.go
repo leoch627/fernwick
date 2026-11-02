@@ -324,6 +324,17 @@ func TestControllerConnectsThroughChosenTunnel(t *testing.T) {
 	}
 }
 
+func TestControllerChecksNodeBeforeInstallingTheService(t *testing.T) {
+	proxy, tun := &tunnelTestDriver{verified: true}, &tunnelTestDriver{}
+	h := newControllerHarness(t, func(deps *ControllerDeps) { deps.NetworkDriver = NewTunnelDriver(proxy, tun) }, true)
+	change := h.controller.View().Preferences
+	change.Tunnel, change.NodeID = "tun", authPointer("removed-node")
+	result := commandForTest(h.controller, map[string]any{"type": "preferences", "preferences": change})
+	if result.OK || result.Error != "NO_AUTHORIZED_NODES" || tun.ensures.Load() != 0 {
+		t.Fatalf("a node that cannot be used must fail before the password prompt: %+v ensures=%d", result.Error, tun.ensures.Load())
+	}
+}
+
 func TestFreeLoopbackPortFallsBackWhenBusy(t *testing.T) {
 	busy, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {

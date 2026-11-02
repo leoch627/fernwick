@@ -29,6 +29,26 @@ func Eligible(node ProxyNode, policy *Policy, automatic bool) bool {
 	return node.Compatible && node.TCP && node.UDP && (flag == nil || !flag.DisabledForConnection && (!automatic || flag.EligibleForAuto))
 }
 
+// Selectable says whether SelectNode has a node to try, without probing: a chosen node
+// that cannot be used, or no usable node at all, fails here.
+func Selectable(nodes []ProxyNode, policy *Policy, manual *string) error {
+	manualID := selectedID(manual)
+	for _, node := range nodes {
+		if (manualID == "" || node.ID == manualID) && Eligible(node, policy, manualID == "") {
+			return nil
+		}
+	}
+	if manualID != "" {
+		for _, node := range nodes {
+			if node.ID == manualID {
+				return NewAppError("NO_COMPATIBLE_NODES")
+			}
+		}
+		return NewAppError("NO_AUTHORIZED_NODES")
+	}
+	return NewAppError("NO_COMPATIBLE_NODES")
+}
+
 func selectedID(id *string) string {
 	if id == nil {
 		return ""
@@ -40,6 +60,9 @@ func selectedID(id *string) string {
 // lower-ranked response never preempts a healthy current/manual selection.
 func SelectNode(nodes []ProxyNode, policy *Policy, manual, current, recentHealthy *string, probe ProbeFunc, parent context.Context) (ProxyNode, error) {
 	manualID, currentID, recentID := selectedID(manual), selectedID(current), selectedID(recentHealthy)
+	if err := Selectable(nodes, policy, manual); err != nil {
+		return ProxyNode{}, err
+	}
 	candidates := make([]ProxyNode, 0, len(nodes))
 	for _, node := range nodes {
 		if Eligible(node, policy, manualID == "") {

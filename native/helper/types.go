@@ -224,6 +224,17 @@ func contains(values []string, value string) bool {
 	}
 	return false
 }
+
+// modernFingerprint is the ClientHello the core sends, whatever the node asks for:
+// Safari 26.3 for Safari or iOS, else Chrome 133. Both send an X25519 key share, which
+// REALITY needs. The application chooses the same; this keeps the core's input fixed.
+func modernFingerprint(requested string) string {
+	value := strings.ToLower(requested)
+	if value == "safari" || value == "ios" || strings.HasPrefix(value, "hellosafari") || strings.HasPrefix(value, "helloios") {
+		return "hellosafari_26_3"
+	}
+	return "hellochrome_133"
+}
 func stringHash(value string) string {
 	h := sha256.Sum256([]byte(value))
 	return hex.EncodeToString(h[:])
@@ -256,12 +267,7 @@ func (n *Node) validate() error {
 	if !host(n.Host) || n.Port < 1 || n.Port > 65535 || len(n.Credential) < 1 || len(n.Credential) > 2048 || !contains([]string{"tcp", "ws", "xhttp"}, n.Transport) {
 		return failure("INVALID_INPUT")
 	}
-	if n.Fingerprint == "" {
-		n.Fingerprint = "hellochrome_120"
-	}
-	if !contains([]string{"hellochrome_120", "chrome", "firefox", "safari", "edge", "ios", "android", "randomized"}, n.Fingerprint) {
-		return failure("NO_COMPATIBLE_NODES")
-	}
+	n.Fingerprint = modernFingerprint(n.Fingerprint)
 	if n.Security != "none" && !host(n.SNI) {
 		return failure("NO_COMPATIBLE_NODES")
 	}

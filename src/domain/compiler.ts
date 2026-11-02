@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { isIP } from 'node:net';
 import type { ProxyNode } from './model';
 import { assert } from '../shared/errors';
-import { defaultTlsProfile } from './tls-defaults';
+import { modernFingerprint } from './tls-defaults';
 const domain = z.string().min(1).max(253).refine(value => value.split('.').every(label => /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/.test(label)));
 const ip = z.string().max(64).refine(value => {
   const parts = value.split('/'); if (parts.length > 2) return false;
@@ -27,8 +27,8 @@ export const lanCIDRs = ['127.0.0.0/8', '10.0.0.0/8', '172.16.0.0/12', '192.168.
 export function compileOutbound(node: ProxyNode) {
   assert(node.compatible && node.tcp && node.udp, 'NO_COMPATIBLE_NODES');
   const streamSettings: Record<string, unknown> = { network: node.transport, security: node.security };
-  if (node.security === 'tls') streamSettings.tlsSettings = { serverName: node.sni, allowInsecure: false, fingerprint: node.fingerprint ?? defaultTlsProfile.fingerprint };
-  if (node.security === 'reality') streamSettings.realitySettings = { serverName: node.sni, fingerprint: node.fingerprint ?? defaultTlsProfile.fingerprint, publicKey: node.publicKey, shortId: node.shortId };
+  if (node.security === 'tls') streamSettings.tlsSettings = { serverName: node.sni, allowInsecure: false, fingerprint: modernFingerprint(node.fingerprint) };
+  if (node.security === 'reality') streamSettings.realitySettings = { serverName: node.sni, fingerprint: modernFingerprint(node.fingerprint), publicKey: node.publicKey, shortId: node.shortId };
   if (node.transport === 'ws') streamSettings.wsSettings = { path: node.wsPath, headers: { Host: node.wsHost } };
   let settings: unknown;
   if (node.protocol === 'vless' || node.protocol === 'vmess') settings = { vnext: [{ address: node.host, port: node.port, users: [{ id: node.credential, ...(node.protocol === 'vless' ? { encryption: 'none', flow: node.flow ?? '' } : { alterId: 0, security: node.method ?? 'auto' }) }] }] };

@@ -39,7 +39,7 @@ func TestCandidateValidate(t *testing.T) {
 		{"oversized credential", func(c *Candidate) { c.Node.Protocol = "trojan"; c.Node.Credential = strings.Repeat("a", 2049) }, "INVALID_INPUT"},
 		{"unsupported transport", func(c *Candidate) { c.Node.Transport = "grpc" }, "INVALID_INPUT"},
 		{"explicit fingerprint", func(c *Candidate) { c.Node.Fingerprint = "firefox" }, ""},
-		{"x25519 is not a fingerprint", func(c *Candidate) { c.Node.Fingerprint = "x25519" }, "NO_COMPATIBLE_NODES"},
+		{"any fingerprint name", func(c *Candidate) { c.Node.Fingerprint = "360" }, ""},
 		{"tls without sni", func(c *Candidate) { c.Node.SNI = "" }, "NO_COMPATIBLE_NODES"},
 		{"vless needs uuid", func(c *Candidate) { c.Node.Credential = "password" }, "NO_COMPATIBLE_NODES"},
 		{"vless without security", func(c *Candidate) { c.Node.Security = "none" }, "NO_COMPATIBLE_NODES"},
@@ -145,17 +145,13 @@ func TestCandidateValidate(t *testing.T) {
 	}
 }
 
-func TestCandidateValidateDefaultsFingerprint(t *testing.T) {
-	c := validCandidate()
-	if e := c.validate(); e != nil {
-		t.Fatal(e)
-	}
-	if c.Node.Fingerprint != "hellochrome_120" {
-		t.Fatalf("fingerprint = %q", c.Node.Fingerprint)
-	}
-	c.Node.Fingerprint = "safari"
-	if e := c.validate(); e != nil || c.Node.Fingerprint != "safari" {
-		t.Fatalf("explicit fingerprint changed to %q (%v)", c.Node.Fingerprint, e)
+func TestCandidateValidateChoosesModernFingerprint(t *testing.T) {
+	for requested, want := range map[string]string{"": "hellochrome_133", "hellochrome_120": "hellochrome_133", "chrome": "hellochrome_133", "360": "hellochrome_133", "x25519": "hellochrome_133", "firefox": "hellochrome_133", "safari": "hellosafari_26_3", "iOS": "hellosafari_26_3", "hellosafari_16_0": "hellosafari_26_3"} {
+		c := validCandidate()
+		c.Node.Fingerprint = requested
+		if e := c.validate(); e != nil || c.Node.Fingerprint != want {
+			t.Errorf("fingerprint %q became %q (%v), want %q", requested, c.Node.Fingerprint, e, want)
+		}
 	}
 	var missing *Candidate
 	if errorCode(missing.validate()) != "INVALID_INPUT" {

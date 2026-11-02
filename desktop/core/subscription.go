@@ -744,9 +744,6 @@ func parseSubscriptionLine(line string, index int, options ParserOptions) (Proxy
 	if (node.Security == "tls" || node.Security == "reality") && node.Fingerprint == nil {
 		node.Fingerprint = nodeString(DefaultTLSFingerprint)
 	}
-	if node.Fingerprint != nil && *node.Fingerprint != "" && !supportedTLSFingerprints[*node.Fingerprint] {
-		node.Incompatibility = nodeString("未验证的 TLS 指纹")
-	}
 	if capability != "" && !slices.Contains(options.Capabilities, capability) {
 		node.Incompatibility = nodeString("此协议模板尚未通过部署验证")
 	}

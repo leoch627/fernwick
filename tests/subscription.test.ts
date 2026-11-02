@@ -2,11 +2,13 @@ import { expect, it } from 'vitest';
 import { parseSubscription } from '../src/domain/subscription';
 import { compileOutbound, compileRouting } from '../src/domain/compiler';
 import { uri, options } from './fixtures';
-it('uses the X25519 ClientHello profile by default and preserves an explicit supported fingerprint', () => {
+it('sends Chrome 133 or Safari 26.3 whatever fingerprint the subscription names', () => {
   const node = parseSubscription(uri, options).nodes[0]!;
-  expect(node.fingerprint).toBe('hellochrome_120'); expect(compileOutbound(node).streamSettings.tlsSettings).toMatchObject({ fingerprint: 'hellochrome_120', allowInsecure: false });
-  expect(parseSubscription(uri.replace('#Tokyo', '&fp=firefox#Tokyo'), options).nodes[0]?.fingerprint).toBe('firefox');
-  expect(parseSubscription(uri.replace('#Tokyo', '&fp=x25519#Tokyo'), options).nodes[0]?.compatible).toBe(false);
+  expect(node.fingerprint).toBe('hellochrome_120'); expect(compileOutbound(node).streamSettings.tlsSettings).toMatchObject({ fingerprint: 'hellochrome_133', allowInsecure: false });
+  const named = (fp: string) => parseSubscription(uri.replace('#Tokyo', `&fp=${fp}#Tokyo`), options).nodes[0]!;
+  expect(named('firefox').fingerprint).toBe('firefox');
+  expect(named('360').compatible).toBe(true); expect(compileOutbound(named('360')).streamSettings.tlsSettings).toMatchObject({ fingerprint: 'hellochrome_133' });
+  expect(compileOutbound(named('safari')).streamSettings.tlsSettings).toMatchObject({ fingerprint: 'hellosafari_26_3' });
 });
 it('AC-19 accepts only explicitly authoritative empty lists', () => { expect(parseSubscription('', { ...options, authoritativeEmpty: true }).authoritativeEmpty).toBe(true); });
 it.each(['', '  ', '<html>WAF</html>', 'dHJ1bmNhdGVk', '###', uri + '\nbroken boundary'])('AC-20 rejects empty, malformed and truncated responses: %s', raw => { expect(() => parseSubscription(raw, options)).toThrow(); });

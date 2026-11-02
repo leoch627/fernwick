@@ -7,10 +7,11 @@ import (
 	"work.starrail/client/desktop/core"
 )
 
-var errSecretMissing = errors.New("keychain item missing")
+var errSecretMissing = errors.New("session key missing")
 
 type systemKeyProvider struct {
 	mu      sync.Mutex
+	dir     string
 	service string
 	cached  []byte
 }
@@ -21,11 +22,11 @@ func (p *systemKeyProvider) Key(create bool) ([]byte, error) {
 	if len(p.cached) == 32 {
 		return append([]byte{}, p.cached...), nil
 	}
-	key, err := readSystemSecret(p.service, "session-key")
+	key, err := readSystemSecret(p.dir, p.service, "session-key")
 	if errors.Is(err, errSecretMissing) && create {
 		key = make([]byte, 32)
 		if _, err = rand.Read(key); err == nil {
-			err = writeSystemSecret(p.service, "session-key", key)
+			err = writeSystemSecret(p.dir, p.service, "session-key", key)
 		}
 	}
 	if err != nil {

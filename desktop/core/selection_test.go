@@ -42,6 +42,23 @@ func TestManualSelectionNeverFallsBack(t *testing.T) {
 	}
 }
 
+func TestSelectableNamesWhyTheChosenNodeFails(t *testing.T) {
+	nodes := selectionNodes(t, 2)
+	nodes[0].Compatible, nodes[0].Incompatibility = false, nodeString("不支持的 flow")
+	if err := Selectable(nodes, nil, &nodes[0].ID); CodeOf(err) != "NO_COMPATIBLE_NODES" {
+		t.Fatalf("chosen incompatible node: %v", err)
+	}
+	if err := Selectable(nodes, nil, authPointer("removed-node")); CodeOf(err) != "NO_AUTHORIZED_NODES" {
+		t.Fatalf("chosen node gone: %v", err)
+	}
+	if err := Selectable(nodes, nil, nil); err != nil {
+		t.Fatalf("automatic with one usable node: %v", err)
+	}
+	if err := Selectable(nodes[:1], nil, nil); CodeOf(err) != "NO_COMPATIBLE_NODES" {
+		t.Fatalf("automatic with none usable: %v", err)
+	}
+}
+
 func TestAutomaticSelectionCapsProbesAndConcurrency(t *testing.T) {
 	nodes := selectionNodes(t, 100)
 	var mu sync.Mutex
@@ -100,7 +117,7 @@ func TestSelectionOperationsAndRegion(t *testing.T) {
 	}
 	policy.NodeOperations[0].DisabledForConnection = true
 	_, err = SelectNode(nodes, &policy, &nodes[0].ID, nil, nil, probe, nil)
-	if CodeOf(err) != "NO_AUTHORIZED_NODES" {
+	if CodeOf(err) != "NO_COMPATIBLE_NODES" {
 		t.Fatal("disabled node remained manually selectable")
 	}
 	probe = func(_ context.Context, node ProxyNode) (ProbeResult, error) {
