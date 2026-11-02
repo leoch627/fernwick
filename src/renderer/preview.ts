@@ -16,12 +16,12 @@ export function previewBridge(): ClientBridge {
   // A pretend download, so the update card can be seen working; nothing is installed.
   let timer: ReturnType<typeof setInterval> | undefined;
   const download = (install: boolean) => {
-    if (timer || state.download.status === 'ready') { if (install) publish({ installing: true, update: '正在安装更新，完成后会自动重新打开' }); return; }
+    if (timer || state.download.status === 'ready') { if (install) publish({ installing: true, update: '正在安装更新' }); return; }
     publish({ installing: install, download: { ...state.download, status: 'downloading' } });
     timer = setInterval(() => {
       const received = Math.min(state.download.total, state.download.received + state.download.total / 8);
       const done = received >= state.download.total;
-      publish({ download: { ...state.download, received, status: done ? 'ready' : 'downloading' }, ...(done && state.installing ? { update: '正在安装更新，完成后会自动重新打开' } : {}) });
+      publish({ download: { ...state.download, received, status: done ? 'ready' : 'downloading' }, ...(done && state.installing ? { update: '正在安装更新' } : {}) });
       if (done) { clearInterval(timer); timer = undefined; }
     }, 300);
   };

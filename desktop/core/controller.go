@@ -1293,7 +1293,7 @@ func (c *ClientController) installUpdate(ctx context.Context, selected Artifact)
 		c.installing = false
 		c.updateStatus = "更新没有完成，可以重试或从官网下载"
 	} else {
-		c.updateStatus = "正在安装更新，完成后会自动重新打开"
+		c.updateStatus = "正在安装更新"
 	}
 	c.mu.Unlock()
 	return err

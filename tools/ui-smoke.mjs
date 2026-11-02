@@ -34,7 +34,7 @@ try {
   const update = page.getByRole('region', { name: '推荐更新' });
   await update.getByText('新版本 0.3.0').waitFor();
   await update.getByRole('button', { name: '立即更新' }).click();
-  await update.getByText('正在安装，完成后会自动重新打开').waitFor();
+  await update.getByText('正在安装', { exact: true }).waitFor();
   assert.equal(await update.getByRole('button', { name: '立即更新' }).count(), 0);
   await page.screenshot({ path: 'work/preview-update.png' });
 
@@ -114,7 +114,7 @@ try {
   assert.equal(await other.getByRole('note').locator('img').count(), 0);
   await other.getByText('剩余 2 天').waitFor();
   assert.match(await other.getByRole('region', { name: '套餐' }).getAttribute('class'), /warn/);
-  await other.getByRole('region', { name: '推荐更新' }).getByText('已下载，更新时会短暂断开连接').waitFor();
+  await other.getByRole('region', { name: '推荐更新' }).getByText('已下载', { exact: true }).waitFor();
   await other.getByRole('region', { name: '推荐更新' }).getByRole('button', { name: '立即更新' }).click();
   await other.getByRole('button', { name: '设置' }).click();
   await other.getByRole('button', { name: /上报问题/ }).click();

@@ -118,7 +118,7 @@ function NodeSheet({ state, close, run }: { state: AppView; close(): void; run(c
   for (const node of visible) groups.set(node.region ?? '', [...groups.get(node.region ?? '') ?? [], node]);
   return <Sheet title="选择线路" close={close}>
     <button className={`node-row auto ${state.selectedNode === null ? 'selected' : ''}`} onClick={() => choose(null)}>
-      <span className="flag"><Icon name="sparkle"/></span><span className="node-name"><strong>自动选择</strong><small>推荐 · 一直使用最快的线路</small></span>
+      <span className="flag"><Icon name="sparkle"/></span><span className="node-name"><strong>自动选择</strong></span>
       {state.selectedNode === null && <Icon name="check" size={18}/>}
     </button>
     {state.nodes.length > 12 && <label className="search"><Icon name="search" size={16}/><input aria-label="搜索线路" placeholder="搜索地区或线路" value={search} onChange={e => setSearch(e.target.value)}/></label>}
@@ -130,7 +130,7 @@ function NodeSheet({ state, close, run }: { state: AppView; close(): void; run(c
         {state.selectedNode === node.id && <Icon name="check" size={18}/>}
       </button>)}
     </section>)}
-    {!state.nodes.length && <p className="empty">暂时没有线路，稍后会自动刷新</p>}
+    {!state.nodes.length && <p className="empty">暂无线路</p>}
   </Sheet>;
 }
 
@@ -140,14 +140,13 @@ function ReportPanel({ state, run }: { state: AppView; run(command: Command): Pr
   if (status === 'sent' && code) return <div className="report sent">
     <p>问题编号</p><strong className="code" aria-label="问题编号">{code}</strong>
     <button className="secondary" onClick={() => { void navigator.clipboard?.writeText(code).then(() => setCopied(true)); }}>{copied ? '已复制' : '复制编号'}</button>
-    <p className="muted">把编号发给客服，我们能看到你的连接情况</p>
+    <p className="muted">把编号发给客服</p>
   </div>;
   if (!state.reportAvailable) return <div className="report"><p className="muted">导出诊断文件后发给客服</p><button className="secondary" onClick={() => void run({ type: 'diagnostics' })}>导出诊断文件</button></div>;
   return <div className="report">
     <textarea aria-label="问题描述" placeholder="遇到了什么问题？（可以不填）" maxLength={500} value={note} onChange={e => setNote(e.target.value)} disabled={status === 'sending'}/>
     <button className="primary" disabled={status === 'sending'} onClick={() => void run({ type: 'report', note })}>{status === 'sending' ? '正在检查网络并上传…' : '发送'}</button>
     {status === 'failed' && <p className="warn">发送失败。可以导出诊断文件发给客服：<button className="link" onClick={() => void run({ type: 'diagnostics' })}>导出</button></p>}
-    <p className="muted">会上传连接记录和网络检查结果，不包含浏览记录和密码</p>
   </div>;
 }
 
@@ -156,7 +155,7 @@ function SettingsSheet({ state, busy, report, close, run, prefs }: { state: AppV
   const download = state.download;
   return <Sheet title="设置" close={close}>
     <div className="group">
-      <div className="row appearance"><span><strong>外观</strong><small>亮色为三月七配色，暗色为黑塔配色</small></span>
+      <div className="row appearance"><span><strong>外观</strong></span>
         <div className="segmented" role="radiogroup" aria-label="外观">
           {([['system', '跟随系统'], ['light', '亮色'], ['dark', '暗色']] as const).map(([theme, name]) => <button key={theme} role="radio" aria-checked={state.preferences.theme === theme} className={state.preferences.theme === theme ? 'on' : ''} onClick={() => prefs({ theme })}>{name}</button>)}
         </div>
@@ -164,18 +163,18 @@ function SettingsSheet({ state, busy, report, close, run, prefs }: { state: AppV
     </div>
     <div className="group">
       <div className="row"><span><strong>开机自动启动</strong></span><button role="switch" aria-checked={state.preferences.launchAtLogin} aria-label="开机自动启动" className={`toggle ${state.preferences.launchAtLogin ? 'on' : ''}`} onClick={() => prefs({ launchAtLogin: !state.preferences.launchAtLogin })}/></div>
-      <div className="row"><span><strong>全局代理</strong><small>一般不用打开。个别网站打不开时可以试试</small></span><button role="switch" aria-checked={state.preferences.mode === 'global'} aria-label="全局代理" className={`toggle ${state.preferences.mode === 'global' ? 'on' : ''}`} onClick={() => prefs({ mode: state.preferences.mode === 'global' ? 'rule' : 'global' })}/></div>
+      <div className="row"><span><strong>全局代理</strong></span><button role="switch" aria-checked={state.preferences.mode === 'global'} aria-label="全局代理" className={`toggle ${state.preferences.mode === 'global' ? 'on' : ''}`} onClick={() => prefs({ mode: state.preferences.mode === 'global' ? 'rule' : 'global' })}/></div>
     </div>
     <div className="group">
-      <button className="row" onClick={() => setReporting(!reporting)} aria-expanded={reporting}><span><strong>上报问题</strong><small>连不上、很慢时点这里</small></span><Icon name="chevron" size={16}/></button>
+      <button className="row" onClick={() => setReporting(!reporting)} aria-expanded={reporting}><span><strong>上报问题</strong></span><Icon name="chevron" size={16}/></button>
       {reporting && <ReportPanel state={state} run={run}/>}
     </div>
     <div className="group">
-      <div className="row"><span><strong>检查更新</strong><small>{state.installing ? (download.status === 'downloading' ? `正在下载 ${Math.round(download.received / Math.max(1, download.total) * 100)}%` : '正在安装，完成后自动重新打开') : download.status === 'ready' ? `新版本 ${download.version} 已下载` : state.update}</small></span>
+      <div className="row"><span><strong>检查更新</strong><small>{state.installing ? (download.status === 'downloading' ? `正在下载 ${Math.round(download.received / Math.max(1, download.total) * 100)}%` : '正在安装') : download.status === 'ready' ? `新版本 ${download.version} 已下载` : state.update}</small></span>
         {download.version && download.status !== 'idle' && !state.installing ? <button className="secondary" onClick={() => void run({ type: 'install-update' })}>{state.manualUpdate ? '去下载' : '立即更新'}</button>
           : <button className="secondary" disabled={!!busy || state.installing || download.status === 'downloading'} onClick={() => void run({ type: 'check-update' })}>检查</button>}
       </div>
-      <div className="row"><span><strong>修复网络组件</strong><small>{state.preferences.tunnel === 'proxy' ? '系统代理模式用不到，TUN 模式才需要' : state.helperReady ? '组件正常' : '第一次连接时会自动安装'}</small></span><button className="secondary" disabled={!!busy} onClick={() => void run({ type: 'repair' })}>修复</button></div>
+      <div className="row"><span><strong>修复网络组件</strong></span><button className="secondary" disabled={!!busy} onClick={() => void run({ type: 'repair' })}>修复</button></div>
       {state.links.help && <button className="row" onClick={() => void run({ type: 'open-link', link: 'help' })}><span><strong>使用帮助</strong></span><Icon name="chevron" size={16}/></button>}
     </div>
     {state.loggedIn && <button className="danger" onClick={() => { close(); void run({ type: 'logout' }); }}>退出登录</button>}
@@ -205,15 +204,15 @@ function UpdateCard({ state, run }: { state: AppView; run(command: Command): Pro
   const percent = Math.min(100, Math.round(received / Math.max(1, total) * 100));
   const downloading = status === 'downloading';
   const detail = state.manualUpdate ? '这个安装位置不能自动更新，请从官网下载'
-    : state.installing ? (downloading ? `正在下载 ${percent}%` : '正在安装，完成后会自动重新打开')
+    : state.installing ? (downloading ? `正在下载 ${percent}%` : '正在安装')
     : status === 'failed' ? error ?? '下载没有完成，可以重试'
-    : status === 'ready' ? '已下载，更新时会短暂断开连接'
-    : '不用重新下载安装包，更新后自动重新打开';
+    : status === 'ready' ? '已下载'
+    : '';
   return <section className="card update-card" aria-label="推荐更新">
     <span className="update-icon"><Icon name="update"/></span>
     <span className="update-text">
       <span className="update-title"><span className="update-badge">推荐更新</span><strong>新版本 {version}</strong></span>
-      <small aria-live="polite">{detail}</small>
+      {detail && <small aria-live="polite">{detail}</small>}
       {state.installing && <span className="progress" role="progressbar" aria-label="更新进度" aria-valuenow={downloading ? percent : 100} aria-valuemin={0} aria-valuemax={100}><span className={downloading ? '' : 'indeterminate'} style={{ width: `${downloading ? percent : 100}%` }}/></span>}
     </span>
     {!state.installing && <button className="primary small" onClick={() => void run({ type: 'install-update' })}>{state.manualUpdate ? '去下载' : status === 'failed' ? '重试' : '立即更新'}</button>}
@@ -242,6 +241,7 @@ function Home({ state, busy, run, open, prefs }: { state: AppView; busy: string 
     else void run({ type: 'connect' });
   };
   const toggle = () => void run({ type: recovery ? 'repair' : connected || working ? 'disconnect' : 'connect' });
+  const status = connected ? (state.preferences.mode === 'global' ? '全局代理' : '智能分流') : working && state.preferences.tunnel === 'tun' && !state.helperReady ? '第一次使用 TUN 需要管理员授权' : '';
   return <main className="home">
     <UpdateCard state={state} run={run}/>
     {state.announcement && <p className="announcement" role="note">{state.announcement}</p>}
@@ -249,7 +249,7 @@ function Home({ state, busy, run, open, prefs }: { state: AppView; busy: string 
       <button className="power-button" aria-label={connected || working ? '断开连接' : recovery ? '修复网络' : '连接'} onClick={toggle}><Icon name="power" size={48}/></button>
       <h1 aria-live="polite">{connected ? '已连接' : working ? (state.connection === 'Disconnecting' ? '正在断开…' : '正在连接…') : recovery ? '网络需要修复' : '未连接'}</h1>
       {issue ? <p className="problem" role="status">{issue.text}{issue.action && <button className="link" onClick={() => act(issue.action!)}>{actionLabels[issue.action]}</button>}</p>
-        : <p className="muted">{connected ? (state.preferences.mode === 'global' ? '全局代理' : '智能分流 · 国内网站不受影响') : working ? (state.preferences.tunnel === 'tun' && !state.helperReady ? '第一次使用 TUN 需要管理员授权' : '请稍候') : '点击按钮开始'}</p>}
+        : status && <p className="muted">{status}</p>}
     </section>
     <button className="card node-card" onClick={() => open('nodes')}>
       <span className="flag">{shown ? flag(shown.region) : <Icon name="sparkle"/>}</span>
