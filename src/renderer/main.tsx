@@ -145,7 +145,7 @@ function NodeSheet({ state, close, run }: { state: AppView; close(): void; run(c
     </div>
     {state.nodes.length > 0 && <label className="search"><Icon name="search" size={16}/><input aria-label="搜索线路" placeholder="搜索地区或线路" value={search} onChange={e => setSearch(e.target.value)}/></label>}
     {[...groups].map(([region, nodes]) => <section key={region} className="node-group">
-      <h3>{region === 'recent' ? '最近成功连接 · 最多 8 条' : `${flag(region || null)} ${regionName(region || null)}`}</h3>
+      <h3>{region === 'recent' ? '最近连接' : `${flag(region || null)} ${regionName(region || null)}`}</h3>
       {nodes.map(node => <div key={node.id} className="node-row-wrap">
         <button className={`node-row ${state.selectedNode === node.id ? 'selected' : ''}`} disabled={!node.compatible} onClick={() => choose(node.id)}>
           <span className="node-name"><strong>{label(node)}</strong>{!node.compatible && <small>暂不可用{node.reason ? `：${node.reason}` : ''}</small>}</span>
@@ -155,7 +155,7 @@ function NodeSheet({ state, close, run }: { state: AppView; close(): void; run(c
         <button className={`favorite-button ${favorites.has(node.id) ? 'on' : ''}`} aria-label={favorites.has(node.id) ? `取消收藏 ${label(node)}` : `收藏 ${label(node)}`} aria-pressed={favorites.has(node.id)} disabled={savingFavorite} onClick={() => void toggleFavorite(node)}><Icon name="star" size={17}/></button>
       </div>)}
     </section>)}
-    {!visible.length && <p className="empty">{search ? '没有找到匹配的线路' : tab === 'favorite' ? '还没有可显示的收藏，点星标收藏线路' : tab === 'recent' ? '连接成功后会显示在这里' : '暂无线路'}</p>}
+    {!visible.length && <p className="empty">{search ? '没有找到匹配的线路' : tab === 'favorite' ? '暂无收藏' : tab === 'recent' ? '暂无最近连接' : '暂无线路'}</p>}
   </Sheet>;
 }
 
@@ -199,7 +199,7 @@ function SettingsSheet({ state, busy, report, close, run, prefs }: { state: AppV
         {download.version && download.status !== 'idle' && !state.installing ? <button className="secondary" onClick={() => void run({ type: 'install-update' })}>{state.manualUpdate ? '去下载' : download.status === 'failed' ? '重试' : '立即更新'}</button>
           : <button className="secondary" disabled={!!busy || state.installing || download.status === 'downloading'} onClick={() => void run({ type: 'check-update' })}>检查</button>}
       </div>
-      <div className="row"><span><strong>手动下载安装包</strong><small>自动更新失败时，也可以从这里下载</small></span><button className="secondary" onClick={() => void run({ type: 'open-download-page' })}>手动下载</button></div>
+      <div className="row"><span><strong>手动下载安装包</strong></span><button className="secondary" onClick={() => void run({ type: 'open-download-page' })}>手动下载</button></div>
       <div className="row"><span><strong>修复网络组件</strong></span><button className="secondary" disabled={!!busy} onClick={() => void run({ type: 'repair' })}>修复</button></div>
       {state.links.help && <button className="row" onClick={() => void run({ type: 'open-link', link: 'help' })}><span><strong>使用帮助</strong></span><Icon name="chevron" size={16}/></button>}
     </div>

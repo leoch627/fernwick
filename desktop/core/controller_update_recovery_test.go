@@ -191,7 +191,26 @@ func TestConcurrentUpdateFailuresOpenBrowserOnce(t *testing.T) {
 	}
 	wg.Wait()
 	status := h.controller.View().Update
-	if opened.Load() != 1 || strings.Count(status, "已打开手动下载页") != 1 || strings.Contains(status, "未能打开") {
+	if opened.Load() != 1 || strings.Count(status, "已打开手动下载页") > 1 || strings.Contains(status, "未能打开") {
+		t.Fatal(opened.Load(), status)
+	}
+}
+
+// After the page opened once, a later failure reports itself without claiming the
+// browser opened again.
+func TestLaterUpdateFailureDoesNotClaimPageOpenedAgain(t *testing.T) {
+	var opened atomic.Int32
+	h := newControllerHarness(t, func(d *ControllerDeps) {
+		d.Build.TrustedUpdateOrigins = []string{"https://host.leiterup.de"}
+		d.Build.TrustedWebOrigins = []string{"https://host.leiterup.de"}
+		d.OpenExternal = func(string, string) (bool, error) { opened.Add(1); return true, nil }
+	}, false)
+	h.controller.updateFailed(NewAppError("UPDATE_DOWNLOAD_FAILED"))
+	if status := h.controller.View().Update; !strings.Contains(status, "已打开手动下载页") {
+		t.Fatal(status)
+	}
+	h.controller.updateFailed(NewAppError("UPDATE_CHECK_FAILED"))
+	if status := h.controller.View().Update; opened.Load() != 1 || status != Messages["UPDATE_CHECK_FAILED"] {
 		t.Fatal(opened.Load(), status)
 	}
 }

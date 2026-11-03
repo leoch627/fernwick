@@ -118,7 +118,7 @@ try {
   assert.equal((await lists.evaluate(() => window.__commands)).includes('connect'), false);
   await lists.getByRole('tab', { name: '收藏 1', exact: true }).click();
   await lists.getByRole('button', { name: '取消收藏 Singapore 01', exact: true }).click();
-  await lists.getByText('还没有可显示的收藏，点星标收藏线路').waitFor();
+  await lists.getByText('暂无收藏').waitFor();
   await lists.getByRole('tab', { name: '最近 3', exact: true }).click();
   assert.equal(await lists.evaluate(() => document.querySelector('dialog').scrollWidth <= innerWidth), true);
   await lists.screenshot({ path: 'work/preview-recent-narrow.png' });

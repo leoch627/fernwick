@@ -356,6 +356,9 @@ func run() error {
 	})
 	var panel core.Panel = core.NewV2BoardAdapter(build, contract, core.NewObservedTransport(core.NewHelperTransport(native), telemetry))
 	var key core.KeyProvider = &systemKeyProvider{dir: dataDir, service: build.AppID}
+	if !demo {
+		forgetKeychainSession(dataDir, "session-key", filepath.Join(dataDir, "session.v2.enc"))
+	}
 	if demo {
 		driver = core.UnavailableDriver{}
 		panel = core.NewDemoPanel()

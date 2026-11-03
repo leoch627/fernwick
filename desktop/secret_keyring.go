@@ -22,3 +22,6 @@ func readSystemSecret(_, service, account string) ([]byte, error) {
 func writeSystemSecret(_, service, account string, key []byte) error {
 	return keyring.Set(service, account, base64.StdEncoding.EncodeToString(key))
 }
+
+// forgetKeychainSession is for macOS, which stopped using its Keychain.
+func forgetKeychainSession(string, string, string) {}

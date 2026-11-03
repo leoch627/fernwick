@@ -1311,9 +1311,12 @@ func (c *ClientController) updateFailed(err error) {
 		c.mu.Unlock()
 	}
 	c.mu.Lock()
-	if c.fallbackSucceeded {
+	// Only the failure that opened the page says so; a later one would otherwise claim
+	// a page opened long before.
+	switch {
+	case open && c.fallbackSucceeded:
 		c.updateStatus += "。已打开手动下载页"
-	} else {
+	case !c.fallbackSucceeded:
 		c.updateStatus += "。未能打开下载页，请点“手动下载”重试"
 	}
 	c.mu.Unlock()
