@@ -39,6 +39,7 @@ export interface ControllerDeps {
 }
 export class ClientController {
   private session: Session | null = null; private snapshot: Snapshot | null = null; private account: Account | null = null;
+  private preferenceQueue: Promise<unknown> = Promise.resolve();
   private restrictions = new Set<ErrorCode>(); private preferences: Preferences = { ...defaultPreferences };
   private startupAttempted = false; private syncStatus: AppView['sync'] = 'Idle'; private error: ErrorCode | null = null;
   private clock = new ConservativeClock(); private pool: EndpointPool; private sync: SyncCoordinator;
@@ -117,7 +118,7 @@ export class ClientController {
         const saved = this.probeResults.get(n.id), result = saved?.fingerprint === n.connectionFingerprint ? saved : null;
         return { id: n.id, name: n.name, group: active?.nodeOperations.find(o => o.nodeId === n.id)?.group ?? n.group, region: n.region, protocol: n.protocol, compatible: eligible(n, active, false), reason: active?.nodeOperations.find(o => o.nodeId === n.id)?.disabledForConnection ? '运营暂时停用' : n.incompatibility, latency: result?.latency ?? null, probe: result?.state ?? 'untested' };
       }),
-      preferences: { ...this.preferences }, storage: this.deps.secure.mode, helperReady: this.network.ready, proxyPort: 0,
+      preferences: { ...this.preferences, favoriteNodeIds: [...this.preferences.favoriteNodeIds], recentNodeIds: [...this.preferences.recentNodeIds] }, storage: this.deps.secure.mode, helperReady: this.network.ready, proxyPort: 0,
       policy: active ? `已验证策略 v${active.policyVersion}` : '使用内置设置', announcement: active?.ui.announcement?.text ?? null,
       update: this.updateStatus, manualUpdate: this.manualUpdate, installing: false, pendingRenewal: this.renewalUntil > this.clock.now(),
       download: this.deps.download?.view ?? { status: 'idle', version: null, received: 0, total: 0, error: null },
@@ -210,14 +211,25 @@ export class ClientController {
     const node = await selectNode(this.snapshot!.nodes, this.policy.active, this.preferences.nodeId, this.actualNode, null, this.deps.probe);
     if (this.closing || this.gate() || networkGeneration !== this.network.generation || generation !== this.policy.generation || session !== this.session?.generation) throw new AppError('CANCELLED');
     const candidate = { node, mode: this.preferences.mode, rules: this.deps.resources?.rules ?? { schemaVersion: 2, sections: [] }, authorizedUntil: this.snapshot!.usableUntil };
-    await this.network.connect(candidate, () => !this.gate() && generation === this.policy.generation && session === this.session?.generation && eligible(node, this.policy.active, false)); this.actualNode = node.id;
+    await this.network.connect(candidate, () => !this.gate() && generation === this.policy.generation && session === this.session?.generation && eligible(node, this.policy.active, false));
+    this.actualNode = node.id;
+    await this.updatePreferences(p => ({ ...p, recentNodeIds: [node.id, ...p.recentNodeIds.filter(id => id !== node.id)].slice(0, 8) })).catch(() => this.fail('STORAGE_FAILED'));
+  }
+  private updatePreferences(change: (current: Preferences) => Preferences | Promise<Preferences>) {
+    const next = this.preferenceQueue.then(async () => {
+      const candidate = await change(this.preferences);
+      await this.deps.preferences.save(candidate);
+      this.preferences = candidate;
+    });
+    this.preferenceQueue = next.catch(() => {});
+    return next;
   }
   private link(key: 'website' | 'renew' | 'help') { return this.policy.active?.links[key] ?? this.deps.build.links[key]; }
   // The native updater requires Authenticode/Developer ID signatures; unsigned Windows/macOS builds update from the download page.
   private get manualUpdate() { return this.updateArtifact?.signatureIdentity === 'unsigned' && process.platform !== 'linux'; }
   private async openDownloadPage() {
-    const feed = this.deps.build.updateFeedUrls[0]; if (!feed) throw new AppError('CONFIGURATION_REQUIRED');
-    await this.deps.openExternal(trustedUrl(`${new URL(feed).origin}/`, this.deps.build.trustedWebOrigins));
+    const feed = this.deps.build.trustedUpdateOrigins[0]; if (!feed) throw new AppError('CONFIGURATION_REQUIRED');
+    if (!await this.deps.openExternal(trustedUrl(`${new URL(feed).origin}/`, this.deps.build.trustedWebOrigins))) throw new AppError('UPDATE_OPEN_FAILED');
   }
   private async checkPolicy() {
     if (this.policyBusy) return; this.policyBusy = true; const budget = new Budget(6000, this.publicAbort.signal);
@@ -272,12 +284,29 @@ export class ClientController {
           break;
         }
         case 'preferences': {
-          const change = command.preferences;
-          if (change.launchAtLogin !== this.preferences.launchAtLogin) await this.deps.launchAtLogin(change.launchAtLogin);
-          const changedNetwork = change.mode !== this.preferences.mode || change.nodeId !== this.preferences.nodeId;
-          const reconnect = changedNetwork && this.network.desiredConnected; if (reconnect) await this.network.disconnect();
-          await this.deps.preferences.save(change); this.preferences = change; if (reconnect) await this.connect(); break;
+          let reconnect = false;
+          await this.updatePreferences(async current => {
+            const change = { ...command.preferences, favoriteNodeIds: [...current.favoriteNodeIds], recentNodeIds: [...current.recentNodeIds] };
+            if (change.launchAtLogin !== current.launchAtLogin) await this.deps.launchAtLogin(change.launchAtLogin);
+            const changedNetwork = change.mode !== current.mode || change.nodeId !== current.nodeId;
+            reconnect = changedNetwork && this.network.desiredConnected;
+            if (reconnect) await this.network.disconnect();
+            return change;
+          });
+          if (reconnect) await this.connect();
+          break;
         }
+        case 'favorite-node': {
+          await this.updatePreferences(current => {
+            if (command.favorite && !this.snapshot?.nodes.some(n => n.id === command.nodeId)) throw new AppError('NO_AUTHORIZED_NODES');
+            const ids = current.favoriteNodeIds.filter(id => id !== command.nodeId);
+            if (command.favorite) ids.push(command.nodeId);
+            if (ids.length > 256) throw new AppError('FAVORITES_FULL');
+            return { ...current, favoriteNodeIds: ids };
+          });
+          break;
+        }
+        case 'open-download-page': await this.openDownloadPage(); break;
         case 'check-update': await this.checkUpdate(); break;
         case 'download-update': {
           if (!this.updateArtifact || !this.deps.download) throw new AppError('CONFIGURATION_REQUIRED');

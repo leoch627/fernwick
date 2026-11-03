@@ -185,11 +185,13 @@ type Preferences struct {
 	// Tunnel is how traffic reaches the core: "proxy" sets the system proxy and needs no
 	// administrator rights; "tun" captures every app through the network service.
 	// Files written before these fields existed load with the defaults.
-	Tunnel  string `json:"tunnel" default:"\"proxy\""`
-	AdBlock bool   `json:"adBlock" default:"true"`
+	Tunnel          string   `json:"tunnel" default:"\"proxy\""`
+	AdBlock         bool     `json:"adBlock" default:"true"`
+	FavoriteNodeIDs []string `json:"favoriteNodeIds" default:"[]"`
+	RecentNodeIDs   []string `json:"recentNodeIds" default:"[]"`
 }
 
-var DefaultPreferences = Preferences{Mode: "rule", CloseBehavior: "tray", Theme: "system", Tunnel: "proxy", AdBlock: true}
+var DefaultPreferences = Preferences{Mode: "rule", CloseBehavior: "tray", Theme: "system", Tunnel: "proxy", AdBlock: true, FavoriteNodeIDs: []string{}, RecentNodeIDs: []string{}}
 
 // Command is decoded with ParseCommand, which enforces its discriminated shape.
 type Command struct {
@@ -200,6 +202,8 @@ type Command struct {
 	NodeIDs     []string     `json:"nodeIds,omitempty"`
 	Link        string       `json:"link,omitempty"`
 	Note        string       `json:"note,omitempty"`
+	NodeID      string       `json:"nodeId,omitempty"`
+	Favorite    bool         `json:"favorite,omitempty"`
 }
 
 const MaxSafeInteger int64 = 9007199254740991
@@ -408,5 +412,17 @@ func (p Policy) Validate() error {
 	return nil
 }
 func (p Preferences) Validate() error {
-	return invalidUnless(oneOf(p.Mode, "rule", "global") && nullableCheck(p.NodeID, textField) && oneOf(p.CloseBehavior, "tray", "ask") && oneOf(p.Theme, "light", "dark", "system") && oneOf(p.Tunnel, "proxy", "tun"))
+	if !oneOf(p.Mode, "rule", "global") || !nullableCheck(p.NodeID, textField) || !oneOf(p.CloseBehavior, "tray", "ask") || !oneOf(p.Theme, "light", "dark", "system") || !oneOf(p.Tunnel, "proxy", "tun") || len(p.FavoriteNodeIDs) > 256 || len(p.RecentNodeIDs) > 8 {
+		return NewAppError("INVALID_INPUT")
+	}
+	for _, ids := range [][]string{p.FavoriteNodeIDs, p.RecentNodeIDs} {
+		seen := map[string]bool{}
+		for _, id := range ids {
+			if !textField(id) || seen[id] {
+				return NewAppError("INVALID_INPUT")
+			}
+			seen[id] = true
+		}
+	}
+	return nil
 }

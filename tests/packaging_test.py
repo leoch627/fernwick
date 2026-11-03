@@ -1,6 +1,10 @@
 """Packaging contracts: no installation or network changes are performed."""
 import importlib.util
 from pathlib import Path
+import plistlib
+import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -40,6 +44,32 @@ class PackagingContracts(unittest.TestCase):
             with patch.object(packager, 'expected_resources', return_value=expected):
                 with self.assertRaisesRegex(ValueError, 'modified'):
                     packager.verify_resources(root, 'linux-x64', self.manifest)
+
+    @unittest.skipUnless(sys.platform == 'darwin', 'Requires macOS codesign and ditto')
+    def test_final_dmg_rejects_finder_metadata_added_after_signing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            app = root / 'image/Fixture.app'
+            binary = app / 'Contents/MacOS/fixture'
+            binary.parent.mkdir(parents=True)
+            shutil.copyfile('/usr/bin/true', binary)
+            binary.chmod(0o755)
+            (app / 'Contents/Info.plist').write_bytes(plistlib.dumps({
+                'CFBundleIdentifier': 'work.starrail.packaging.fixture', 'CFBundleExecutable': 'fixture',
+                'CFBundleName': 'Fixture', 'CFBundleVersion': '1', 'CFBundlePackageType': 'APPL',
+            }))
+            subprocess.run(['codesign', '--force', '--sign', '-', app], check=True, capture_output=True)
+            archive = root / 'fixture.zip'
+            with patch.object(packager, 'verify_resources'):
+                subprocess.run(['ditto', '-c', '-k', '--sequesterRsrc', '--keepParent', app, archive], check=True)
+                packager.verify_macos_artifact(archive, app, 'darwin-arm64', self.manifest)
+                # dmgbuild's hide_extensions uses SetFile -a E, producing this flag.
+                subprocess.run(['xattr', '-wx', 'com.apple.FinderInfo', '00' * 9 + '10' + '00' * 22, app], check=True)
+                image = root / 'fixture.dmg'
+                subprocess.run(['hdiutil', 'create', '-srcfolder', app.parent, '-fs', 'HFS+',
+                                '-format', 'UDZO', image], check=True, capture_output=True)
+                with self.assertRaises(subprocess.CalledProcessError):
+                    packager.verify_macos_artifact(image, app, 'darwin-arm64', self.manifest)
 
     def test_linux_upgrade_preserves_helper_recovery_and_no_chromium(self):
         scripts = packager.linux_scripts(self.config)

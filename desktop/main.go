@@ -356,9 +356,6 @@ func run() error {
 	})
 	var panel core.Panel = core.NewV2BoardAdapter(build, contract, core.NewObservedTransport(core.NewHelperTransport(native), telemetry))
 	var key core.KeyProvider = &systemKeyProvider{dir: dataDir, service: build.AppID}
-	if !demo {
-		forgetKeychainSession(dataDir, "session-key", filepath.Join(dataDir, "session.v2.enc"))
-	}
 	if demo {
 		driver = core.UnavailableDriver{}
 		panel = core.NewDemoPanel()
@@ -384,7 +381,7 @@ func run() error {
 	deps := core.ControllerDeps{
 		Build: build, Version: strings.TrimSpace(string(version)), Panel: panel, Demo: demo, NetworkDriver: driver, Installer: updater, HTTP: transport,
 		Secure:       core.NewSecureStore[core.Persisted](filepath.Join(dataDir, "session.v2.enc"), key),
-		Preferences:  core.NewJSONStore[core.Preferences](filepath.Join(dataDir, "preferences.json"), 16384),
+		Preferences:  core.NewJSONStore[core.Preferences](filepath.Join(dataDir, "preferences.json"), 131072),
 		PolicyStore:  core.NewJSONStore[core.PolicyRecord](filepath.Join(dataDir, "policy.json"), 1048576),
 		ReleaseStore: core.NewJSONStore[core.PolicyRecord](filepath.Join(dataDir, "release-index.json"), 1048576),
 		Resources:    rules, Reminders: reminders, Download: core.NewArtifactDownload(filepath.Join(dataDir, "updates"), build),

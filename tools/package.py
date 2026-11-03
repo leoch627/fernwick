@@ -12,6 +12,7 @@ import shutil
 import struct
 import subprocess
 import sys
+import tempfile
 from urllib.parse import urlsplit
 import zlib
 
@@ -196,6 +197,37 @@ def package_macos(config, version, target, binary, stage, manifest):
     dmg = ROOT / 'release' / (stem + '.dmg')
     dmg.unlink(missing_ok=True)
     build_dmg(product, app, resources / 'icon.icns', target, dmg)
+    for artifact in (archive, dmg):
+        verify_macos_artifact(artifact, app, target, manifest)
+
+
+def verify_macos_artifact(artifact, source_app, target, manifest):
+    """Check what users extract or mount, after the archive/DMG tools have run."""
+    with tempfile.TemporaryDirectory(prefix='starrail-package-') as directory:
+        extracted = Path(directory) / 'contents'
+        extracted.mkdir()
+        mounted = False
+        try:
+            if artifact.suffix == '.dmg':
+                run(['/usr/bin/hdiutil', 'attach', '-readonly', '-nobrowse', '-noautoopen',
+                     '-mountpoint', extracted, artifact])
+                mounted = True
+            elif artifact.suffix == '.zip':
+                run(['/usr/bin/ditto', '-x', '-k', artifact, extracted])
+            else:
+                raise ValueError('Expected a macOS ZIP or DMG')
+            app = extracted / source_app.name
+            run(['/usr/bin/codesign', '--verify', '--deep', '--strict', app])
+            expected_info = plistlib.loads((source_app / 'Contents/Info.plist').read_bytes())
+            if plistlib.loads((app / 'Contents/Info.plist').read_bytes()) != expected_info:
+                raise ValueError('Archived application metadata differs from the signed bundle')
+            executable = Path('Contents/MacOS') / expected_info['CFBundleExecutable']
+            if sha(app / executable) != sha(source_app / executable):
+                raise ValueError('Archived application executable differs from the signed bundle')
+            verify_resources(app / 'Contents/Resources', target, manifest)
+        finally:
+            if mounted:
+                run(['/usr/bin/hdiutil', 'detach', extracted])
 
 
 # The DMG window: packaging/macos/dmg-background.html draws the drop targets at these points.
@@ -229,7 +261,8 @@ def build_dmg(product, app, icns, target, dmg):
         'show_status_bar': False, 'show_tab_view': False, 'show_toolbar': False, 'show_pathbar': False, 'show_sidebar': False,
         'show_icon_preview': False, 'arrange_by': None, 'label_pos': 'bottom', 'icon_size': 112, 'text_size': 13,
         'icon_locations': {app.name: DMG_ICONS['app'], 'Applications': DMG_ICONS['Applications']},
-        'hide_extensions': [app.name],
+        # Hiding .app writes com.apple.FinderInfo to the already signed bundle.
+        # That makes the delivered app fail codesign --strict (even if staging passed).
     }
     print(f'+ dmgbuild {dmg.name}', flush=True)
     dmgbuild.build_dmg(str(dmg), product, settings=settings)

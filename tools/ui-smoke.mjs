@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 const server = await createServer({ server: { host: '127.0.0.1', port: 5173, strictPort: true } });
 await server.listen();
 const browser = await chromium.launch({ executablePath: process.env.STARRAIL_TEST_CHROMIUM || '/usr/bin/chromium', headless: true, args: ['--no-sandbox'] });
-const page = await browser.newPage({ viewport: { width: 420, height: 700 }, deviceScaleFactor: 1, timezoneId: 'Asia/Shanghai' });
+const page = await browser.newPage({ viewport: { width: 420, height: 700 }, deviceScaleFactor: 1, timezoneId: 'Asia/Shanghai', userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/130.0.0.0 Safari/537.36' });
 const failures = []; page.on('pageerror', error => failures.push(error.message));
 await mkdir('work', { recursive: true });
 
@@ -19,6 +19,12 @@ const fakeBridge = initial => {
       window.__commands.push(command.type);
       if (command.type === 'report') { window.__set({ report: { status: 'sending', code: null } }); state = { ...state, report: { status: 'sent', code: 'K7M3QX' } }; }
       if (command.type === 'login') state = { ...state, loggedIn: true };
+      if (command.type === 'preferences') state = { ...state, preferences: { ...command.preferences, favoriteNodeIds: state.preferences.favoriteNodeIds, recentNodeIds: state.preferences.recentNodeIds }, selectedNode: command.preferences.nodeId };
+      if (command.type === 'favorite-node') {
+        const ids = state.preferences.favoriteNodeIds.filter(id => id !== command.nodeId);
+        if (command.favorite) ids.push(command.nodeId);
+        state = { ...state, preferences: { ...state.preferences, favoriteNodeIds: ids } };
+      }
       return { ok: true, state };
     },
   };
@@ -49,7 +55,15 @@ try {
   await page.getByRole('heading', { name: '选择线路' }).waitFor();
   await page.getByRole('heading', { name: /新加坡/ }).waitFor();
   assert.equal(await page.getByText(/^[0-9]+ ms$/).count(), 0);
-  await page.getByRole('button', { name: /Singapore 01/ }).click();
+  await page.getByRole('button', { name: '收藏 Singapore 01', exact: true }).click();
+  await page.getByRole('heading', { name: '选择线路' }).waitFor();
+  await page.getByRole('tab', { name: '收藏 1', exact: true }).click();
+  assert.equal(await page.locator('.node-row-wrap').count(), 1);
+  await page.getByRole('textbox', { name: '搜索线路' }).fill('does-not-exist');
+  await page.getByText('没有找到匹配的线路').waitFor();
+  await page.getByRole('textbox', { name: '搜索线路' }).fill('');
+  await page.screenshot({ path: 'work/preview-favorites.png' });
+  await page.getByRole('button', { name: 'Singapore 01', exact: true }).click();
   await page.getByRole('heading', { name: '选择线路' }).waitFor({ state: 'detached' });
   await page.getByText('Singapore 01', { exact: true }).waitFor();
 
@@ -86,6 +100,46 @@ try {
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
 
   const fixture = await page.evaluate(async () => (await (await import('/preview.ts')).previewBridge().command({ type: 'state' })).state);
+
+  // Recent connections preserve MRU order across regions, hide disappeared nodes,
+  // and favorite actions never choose a node or connect.
+  const lists = await browser.newPage({ viewport: { width: 360, height: 640 } });
+  lists.on('pageerror', error => failures.push(error.message));
+  const recentIds = [fixture.nodes[2].id, fixture.nodes[1].id, fixture.nodes[0].id];
+  const listFixture = { ...fixture, nodes: fixture.nodes.map((node, i) => ({ ...node, region: i === 2 ? 'JP' : node.region })), preferences: { ...fixture.preferences, favoriteNodeIds: ['disappeared'], recentNodeIds: [...recentIds, 'disappeared'] } };
+  await lists.addInitScript(fakeBridge, listFixture);
+  await lists.goto('http://127.0.0.1:5173/');
+  await lists.getByRole('button', { name: /^线路/ }).click();
+  await lists.getByRole('tab', { name: '最近 3', exact: true }).click();
+  assert.deepEqual(await lists.locator('.node-row-wrap .node-name strong').allTextContents(), ['Hong Kong 01', 'Singapore 01', 'Tokyo 01']);
+  await lists.getByRole('button', { name: '收藏 Singapore 01', exact: true }).click();
+  assert.equal(await lists.getByRole('heading', { name: '选择线路' }).count(), 1);
+  assert.equal((await lists.evaluate(() => window.__commands)).includes('preferences'), false);
+  assert.equal((await lists.evaluate(() => window.__commands)).includes('connect'), false);
+  await lists.getByRole('tab', { name: '收藏 1', exact: true }).click();
+  await lists.getByRole('button', { name: '取消收藏 Singapore 01', exact: true }).click();
+  await lists.getByText('还没有可显示的收藏，点星标收藏线路').waitFor();
+  await lists.getByRole('tab', { name: '最近 3', exact: true }).click();
+  assert.equal(await lists.evaluate(() => document.querySelector('dialog').scrollWidth <= innerWidth), true);
+  await lists.screenshot({ path: 'work/preview-recent-narrow.png' });
+  await lists.close();
+
+  // Failed update checks are visible even before an artifact is selected.
+  const recovery = await browser.newPage({ viewport: { width: 360, height: 640 } });
+  recovery.on('pageerror', error => failures.push(error.message));
+  await recovery.addInitScript(fakeBridge, { ...fixture, updateError: 'UPDATE_CHECK_FAILED', update: '无法连接更新服务器，请检查网络后重试。已打开手动下载页', download: { status: 'idle', version: null, received: 0, total: 0, error: null } });
+  await recovery.goto('http://127.0.0.1:5173/');
+  const recoveryCard = recovery.getByRole('region', { name: '推荐更新' });
+  await recoveryCard.getByText('更新未完成', { exact: true }).waitFor();
+  await recoveryCard.getByRole('button', { name: '手动下载', exact: true }).click();
+  await recoveryCard.getByRole('button', { name: '重试', exact: true }).click();
+  assert.deepEqual((await recovery.evaluate(() => window.__commands)).filter(type => type !== 'state'), ['open-download-page', 'check-update']);
+  assert.equal(await recovery.getByRole('status').count(), 0);
+  await recovery.screenshot({ path: 'work/preview-update-recovery.png' });
+  await recovery.evaluate(() => window.__set({ error: 'SNAPSHOT_EXPIRED' }));
+  await recovery.getByRole('status').getByRole('button', { name: '刷新线路' }).click();
+  assert.equal((await recovery.evaluate(() => window.__commands)).at(-1), 'sync');
+  await recovery.close();
 
   // Signed out: only the login form.
   const login = await browser.newPage({ viewport: { width: 420, height: 700 } });
@@ -161,4 +215,8 @@ try {
 
   assert.deepEqual(failures, []);
   console.log('UI smoke passed: connection refusal with next step, grouped node selection, tunnel and ad blocking switches, system proxy port and fallback, settings switches, report fallback, dark and narrow layouts, login, text-only announcements, renewal warning, home update card with one-click update, Windows title bar, 三月七/黑塔 appearance, and report code; no page errors.');
+} catch (error) {
+  await page.screenshot({ path: 'work/preview-test-failure.png', fullPage: true }).catch(() => {});
+  console.error('UI at failure:', await page.locator('body').innerText().catch(() => 'unavailable'), failures);
+  throw error;
 } finally { await browser.close(); await server.close(); }

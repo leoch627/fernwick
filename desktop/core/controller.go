@@ -114,11 +114,14 @@ type ClientController struct {
 	// installWhenReady: the user asked to update before the download finished;
 	// installing marks the update being applied, after which the app quits.
 	installWhenReady, installing bool
-	updateDone                   chan struct{}
+	updateFuture                 *controllerFuture
+	updateError                  ErrorCode
+	fallbackSucceeded            bool
 	releaseWatermark             *Watermark
 	releaseIndex                 *ReleaseIndex
 	updateArtifact               *Artifact
 	releaseEnvelope              string
+	manualFallbackOpened         bool
 	lastPolicyVersion            int64
 	installedRules               string
 	recovery                     *controllerFuture
@@ -129,6 +132,8 @@ type ClientController struct {
 	tickDone                     chan struct{}
 	stopMu                       sync.Mutex
 	persistMu                    sync.Mutex
+	preferencesMu                sync.Mutex
+	updateRecoveryMu             sync.Mutex
 	intentGeneration             uint64
 	probeResults                 map[string]savedProbe
 	dirty                        chan struct{}
@@ -156,7 +161,7 @@ func NewClientController(deps ControllerDeps) *ClientController {
 		}
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	c := &ClientController{deps: deps, preferences: DefaultPreferences, clock: NewConservativeClock(0), restrictions: map[ErrorCode]bool{}, syncStatus: "Idle", updateStatus: "尚未检查", report: ReportView{Status: "idle"}, publicCtx: ctx, cancelPublic: cancel, probeResults: map[string]savedProbe{}, dirty: make(chan struct{}, 1), listeners: map[uint64]func(AppView){}, diagnosticEvents: []map[string]any{}}
+	c := &ClientController{deps: deps, preferences: clonePreferences(DefaultPreferences), clock: NewConservativeClock(0), restrictions: map[ErrorCode]bool{}, syncStatus: "Idle", updateStatus: "尚未检查", report: ReportView{Status: "idle"}, publicCtx: ctx, cancelPublic: cancel, probeResults: map[string]savedProbe{}, dirty: make(chan struct{}, 1), listeners: map[uint64]func(AppView){}, diagnosticEvents: []map[string]any{}}
 	c.pool = NewEndpointPool(deps.Build.APIEndpoints, c.now)
 	c.policy = NewPolicyService(deps.Build, func(record PolicyRecord) error { return deps.PolicyStore.Save(record, nil) }, c.now)
 	c.network = NewNetworkController(deps.NetworkDriver, c.emit)
@@ -509,7 +514,11 @@ func (c *ClientController) View() AppView {
 	defer c.mu.Unlock()
 	now := c.clock.Now()
 	gate := c.gateLocked()
-	view := AppView{Brand: c.deps.Build.Name, Version: c.deps.Version, Environment: c.deps.Build.Environment, Demo: c.deps.Demo, LoggedIn: c.session != nil, Connection: network.State, SelectedNode: c.preferences.NodeID, ActualNode: c.actualNode, Sync: c.syncStatus, Nodes: []NodeView{}, Preferences: c.preferences, Storage: storage, HelperReady: c.network.Ready(), ProxyPort: c.network.ProxyPort(), Policy: "使用内置设置", Update: c.updateStatus, ManualUpdate: c.manualUpdateLocked(), Installing: c.installing || c.installWhenReady, PendingRenewal: c.renewalUntil > now, Download: download, Rules: rules, ShowTrafficSummary: true, Links: ViewLinks{c.linkLocked("website", p) != nil, c.linkLocked("renew", p) != nil, c.linkLocked("help", p) != nil}, Report: c.report, ReportAvailable: c.deps.Telemetry.Enabled(), Now: now}
+	view := AppView{Brand: c.deps.Build.Name, Version: c.deps.Version, Environment: c.deps.Build.Environment, Demo: c.deps.Demo, LoggedIn: c.session != nil, Connection: network.State, SelectedNode: c.preferences.NodeID, ActualNode: c.actualNode, Sync: c.syncStatus, Nodes: []NodeView{}, Preferences: clonePreferences(c.preferences), Storage: storage, HelperReady: c.network.Ready(), ProxyPort: c.network.ProxyPort(), Policy: "使用内置设置", Update: c.updateStatus, ManualUpdate: c.manualUpdateLocked(), Installing: c.installing || c.installWhenReady, PendingRenewal: c.renewalUntil > now, Download: download, Rules: rules, ShowTrafficSummary: true, Links: ViewLinks{c.linkLocked("website", p) != nil, c.linkLocked("renew", p) != nil, c.linkLocked("help", p) != nil}, Report: c.report, ReportAvailable: c.deps.Telemetry.Enabled(), Now: now}
+	if c.updateError != "" {
+		code := c.updateError
+		view.UpdateError = &code
+	}
 	if c.failure != "" {
 		e := c.failure
 		view.Error = &e
@@ -997,6 +1006,7 @@ func (c *ClientController) connect(ctx context.Context) error {
 	id := node.ID
 	c.actualNode = &id
 	c.mu.Unlock()
+	c.rememberRecent(id)
 	return nil
 }
 func (c *ClientController) probeNodes(ctx context.Context, ids []string) error {
@@ -1136,30 +1146,45 @@ func (c *ClientController) checkPolicy() {
 		}
 	}
 }
-func (c *ClientController) checkUpdate(parent context.Context) error {
+func (c *ClientController) checkUpdate(parent context.Context) (result error) {
 	c.mu.Lock()
 	if c.closing {
 		c.mu.Unlock()
 		return NewAppError("CANCELLED")
 	}
 	if c.updateBusy {
-		done := c.updateDone
+		future := c.updateFuture
 		c.mu.Unlock()
 		select {
-		case <-done:
-			return nil
+		case <-future.done:
+			return future.err
 		case <-parent.Done():
 			return NewAppError("CANCELLED")
 		}
 	}
 	c.updateBusy = true
-	c.updateDone = make(chan struct{})
-	done := c.updateDone
+	c.updateFuture = &controllerFuture{done: make(chan struct{})}
+	future := c.updateFuture
 	c.updateStatus = "正在检查更新"
 	watermark := c.releaseWatermark
 	c.mu.Unlock()
 	c.emit()
-	defer func() { c.mu.Lock(); c.updateBusy = false; close(done); c.mu.Unlock(); c.emit() }()
+	defer func() {
+		c.mu.Lock()
+		c.updateBusy = false
+		future.err = result
+		if result == nil {
+			c.updateError = ""
+		} else if CodeOf(result) != "CANCELLED" {
+			c.updateError = CodeOf(result)
+			c.updateStatus = Messages[c.updateError]
+		} else {
+			c.updateStatus = "已取消更新检查"
+		}
+		close(future.done)
+		c.mu.Unlock()
+		c.emit()
+	}()
 	if len(c.deps.Build.UpdateFeedURLs) == 0 {
 		c.mu.Lock()
 		c.updateStatus = "更新发布源尚未配置"
@@ -1168,6 +1193,7 @@ func (c *ClientController) checkUpdate(parent context.Context) error {
 	}
 	ctx, cancel := context.WithTimeout(parent, 12*time.Second)
 	defer cancel()
+	failure := ErrorCode("UPDATE_CHECK_FAILED")
 	for _, raw := range c.deps.Build.UpdateFeedURLs {
 		response, err := c.deps.HTTP.Request(ctx, HTTPRequest{URL: raw, MaxBytes: 262144})
 		if err == nil {
@@ -1176,9 +1202,15 @@ func (c *ClientController) checkUpdate(parent context.Context) error {
 		var verified VerifiedRelease
 		if err == nil {
 			verified, err = VerifyRelease(response.Body, c.deps.Build, watermark, c.now())
+			if err != nil {
+				failure = "UPDATE_VERIFY_FAILED"
+			}
 		}
 		if err == nil {
 			err = c.deps.ReleaseStore.Save(PolicyRecord{Envelope: response.Body, Watermark: verified.Watermark}, func() bool { return ctx.Err() == nil })
+			if err != nil {
+				failure = "UPDATE_STORAGE_FAILED"
+			}
 		}
 		if err != nil {
 			if ctx.Err() != nil {
@@ -1189,7 +1221,7 @@ func (c *ClientController) checkUpdate(parent context.Context) error {
 		artifact := SelectUpdate(verified.Index, UpdateTarget{Platform: c.deps.Platform, Arch: c.deps.Arch, Version: c.deps.Version, OSCompatible: c.deps.OSCompatible})
 		if c.deps.Download != nil {
 			if err := c.deps.Download.Select(artifact); err != nil {
-				return err
+				return NewAppError(updateFailureCode(err))
 			}
 		}
 		c.mu.Lock()
@@ -1212,15 +1244,15 @@ func (c *ClientController) checkUpdate(parent context.Context) error {
 		c.mu.Unlock()
 		return nil
 	}
-	c.mu.Lock()
-	c.updateStatus = "无法验证更新，请稍后重试"
-	c.mu.Unlock()
-	return NewAppError("UPDATE_VERIFY_FAILED")
+	if parent.Err() != nil {
+		return NewAppError("CANCELLED")
+	}
+	return NewAppError(failure)
 }
 
 // openDownloadPage opens the first download domain, which also serves the download page.
 func (c *ClientController) openDownloadPage() error {
-	if len(c.deps.Build.TrustedUpdateOrigins) == 0 {
+	if len(c.deps.Build.TrustedUpdateOrigins) == 0 || c.deps.OpenExternal == nil {
 		return NewAppError("CONFIGURATION_REQUIRED")
 	}
 	u, err := url.Parse(c.deps.Build.TrustedUpdateOrigins[0])
@@ -1231,28 +1263,90 @@ func (c *ClientController) openDownloadPage() error {
 	if err != nil {
 		return err
 	}
-	_, err = c.deps.OpenExternal(target, "")
-	return err
+	opened, err := c.deps.OpenExternal(target, "")
+	if err != nil || !opened {
+		return NewAppError("UPDATE_OPEN_FAILED")
+	}
+	return nil
+}
+
+func updateFailureCode(err error) ErrorCode {
+	code := CodeOf(err)
+	switch code {
+	case "STORAGE_FAILED":
+		return "UPDATE_STORAGE_FAILED"
+	case "PERMISSION_REQUIRED":
+		return "UPDATE_PERMISSION_REQUIRED"
+	case "CONTROL_UNAVAILABLE":
+		return "UPDATE_INSTALL_FAILED"
+	default:
+		return code
+	}
+}
+
+// Only a requested update opens the browser; passive periodic checks stay in the UI.
+// At most one automatic attempt per launch, even if the browser itself fails to open.
+func (c *ClientController) updateFailed(err error) {
+	if err == nil || CodeOf(err) == "CANCELLED" {
+		return
+	}
+	c.updateRecoveryMu.Lock()
+	defer c.updateRecoveryMu.Unlock()
+	code := updateFailureCode(err)
+	c.mu.Lock()
+	if c.closing {
+		c.mu.Unlock()
+		return
+	}
+	c.updateError = code
+	c.updateStatus = Messages[code]
+	open := !c.manualFallbackOpened
+	c.manualFallbackOpened = true
+	c.mu.Unlock()
+	c.record("update", string(code))
+	if open {
+		openErr := c.openDownloadPage()
+		c.mu.Lock()
+		c.fallbackSucceeded = openErr == nil
+		c.mu.Unlock()
+	}
+	c.mu.Lock()
+	if c.fallbackSucceeded {
+		c.updateStatus += "。已打开手动下载页"
+	} else {
+		c.updateStatus += "。未能打开下载页，请点“手动下载”重试"
+	}
+	c.mu.Unlock()
+	c.emit()
+}
+
+func (c *ClientController) downloadFailure(err error) error {
+	if err != nil {
+		return err
+	}
+	view := c.deps.Download.View()
+	if view.Status != "failed" {
+		return nil
+	}
+	if view.ErrorCode != nil {
+		return NewAppError(*view.ErrorCode)
+	}
+	return NewAppError("UPDATE_DOWNLOAD_FAILED")
 }
 
 // downloadThenInstall finishes the download the user asked to install, then installs
 // it unless they cancelled in the meantime.
 func (c *ClientController) downloadThenInstall(selected Artifact) {
-	err := c.deps.Download.Start(c.publicCtx)
+	err := c.downloadFailure(c.deps.Download.Start(c.publicCtx))
 	c.mu.Lock()
 	wanted := c.installWhenReady
 	c.installWhenReady = false
 	c.mu.Unlock()
-	// Start reports a failed transfer in the download's status, not as an error: say
-	// so, or the button comes back as if it had not been pressed.
-	if status := c.deps.Download.View().Status; err == nil && wanted && status == "failed" {
-		err = NewAppError("UPDATE_DOWNLOAD_FAILED")
-	}
 	if err == nil && wanted && c.deps.Download.View().Status == "ready" {
 		err = c.installUpdate(c.publicCtx, selected)
 	}
 	if err != nil {
-		c.fail(CodeOf(err))
+		c.updateFailed(err)
 	}
 	c.emit()
 }
@@ -1266,6 +1360,7 @@ func (c *ClientController) installUpdate(ctx context.Context, selected Artifact)
 		return nil
 	}
 	c.installing = true
+	c.updateError = ""
 	c.releaseIndex = nil
 	c.mu.Unlock()
 	c.emit()
@@ -1291,12 +1386,15 @@ func (c *ClientController) installUpdate(ctx context.Context, selected Artifact)
 		if err != nil {
 			return err
 		}
-		return c.deps.Installer.Install(ctx, selected, path, envelope)
+		if err := c.deps.Installer.Install(ctx, selected, path, envelope); err != nil {
+			return NewAppError(updateFailureCode(err))
+		}
+		return nil
 	}()
 	c.mu.Lock()
 	if err != nil {
 		c.installing = false
-		c.updateStatus = "更新没有完成，可以重试或从官网下载"
+		c.updateStatus = "更新没有完成，可以重试或手动下载"
 	} else {
 		c.updateStatus = "正在安装更新"
 	}
@@ -1317,7 +1415,11 @@ func (c *ClientController) Command(ctx context.Context, raw json.RawMessage) Com
 	}
 	if err != nil {
 		code := CodeOf(err)
-		c.fail(code)
+		if cmd.Type == "check-update" || cmd.Type == "download-update" || cmd.Type == "install-update" {
+			c.updateFailed(err)
+		} else if cmd.Type != "open-download-page" {
+			c.fail(code)
+		}
 		return CommandResult{OK: false, State: c.View(), Error: code}
 	}
 	c.emit()
@@ -1513,31 +1615,46 @@ func (c *ClientController) execute(ctx context.Context, cmd Command) error {
 		}
 		return nil
 	case "preferences":
-		change := *cmd.Preferences
-		c.mu.Lock()
-		before := c.preferences
-		c.mu.Unlock()
-		if change.LaunchAtLogin != before.LaunchAtLogin {
-			if err := c.deps.LaunchAtLogin(change.LaunchAtLogin); err != nil {
+		reconnect := false
+		err := func() error {
+			c.preferencesMu.Lock()
+			defer c.preferencesMu.Unlock()
+			change := clonePreferences(*cmd.Preferences)
+			c.mu.Lock()
+			before := clonePreferences(c.preferences)
+			c.mu.Unlock()
+			// These lists are controller-owned; a stale settings view cannot erase them.
+			change.FavoriteNodeIDs, change.RecentNodeIDs = before.FavoriteNodeIDs, before.RecentNodeIDs
+			if change.LaunchAtLogin != before.LaunchAtLogin {
+				if err := c.deps.LaunchAtLogin(change.LaunchAtLogin); err != nil {
+					return err
+				}
+			}
+			reconnect = (change.Mode != before.Mode || change.Tunnel != before.Tunnel || change.AdBlock != before.AdBlock || selectedID(change.NodeID) != selectedID(before.NodeID)) && c.network.View().DesiredConnected
+			if reconnect {
+				if err := c.network.Disconnect(ctx); err != nil {
+					return err
+				}
+			}
+			if err := c.deps.Preferences.Save(change, func() bool { return ctx.Err() == nil }); err != nil {
 				return err
 			}
-		}
-		reconnect := (change.Mode != before.Mode || change.Tunnel != before.Tunnel || change.AdBlock != before.AdBlock || selectedID(change.NodeID) != selectedID(before.NodeID)) && c.network.View().DesiredConnected
-		if reconnect {
-			if err := c.network.Disconnect(ctx); err != nil {
-				return err
-			}
-		}
-		if err := c.deps.Preferences.Save(change, func() bool { return ctx.Err() == nil }); err != nil {
+			c.mu.Lock()
+			c.preferences = change
+			c.mu.Unlock()
+			return nil
+		}()
+		if err != nil {
 			return err
 		}
-		c.mu.Lock()
-		c.preferences = change
-		c.mu.Unlock()
 		if reconnect {
 			return c.connect(ctx)
 		}
 		return nil
+	case "favorite-node":
+		return c.rememberFavorite(cmd.NodeID, cmd.Favorite)
+	case "open-download-page":
+		return c.openDownloadPage()
 	case "check-update":
 		return c.checkUpdate(ctx)
 	case "download-update":
@@ -1551,11 +1668,11 @@ func (c *ClientController) execute(ctx context.Context, cmd Command) error {
 		if manual {
 			return c.openDownloadPage()
 		}
-		go func() {
-			if err := c.deps.Download.Start(c.publicCtx); err != nil {
-				c.fail("UPDATE_DOWNLOAD_FAILED")
-			}
-		}()
+		c.mu.Lock()
+		c.updateError = ""
+		c.updateStatus = "正在下载更新"
+		c.mu.Unlock()
+		go func() { c.updateFailed(c.downloadFailure(c.deps.Download.Start(c.publicCtx))) }()
 		return nil
 	case "pause-update":
 		if c.deps.Download != nil {
@@ -1589,6 +1706,8 @@ func (c *ClientController) execute(ctx context.Context, cmd Command) error {
 		if c.deps.Download.View().Status != "ready" {
 			c.mu.Lock()
 			c.installWhenReady = true
+			c.updateError = ""
+			c.updateStatus = "正在下载更新"
 			c.mu.Unlock()
 			go c.downloadThenInstall(*artifact)
 			return nil
@@ -1839,18 +1958,89 @@ func (c *ClientController) recordConnect(err error, took time.Duration) {
 	c.deps.Telemetry.Record("connect", fields, err != nil)
 }
 
-func (c *ClientController) rememberConnected(connected bool) {
-	c.mu.Lock()
-	change := c.preferences
-	c.mu.Unlock()
-	if change.AutoConnect == connected {
-		return
+func clonePreferences(p Preferences) Preferences {
+	p.FavoriteNodeIDs = append([]string{}, p.FavoriteNodeIDs...)
+	p.RecentNodeIDs = append([]string{}, p.RecentNodeIDs...)
+	if p.NodeID != nil {
+		id := *p.NodeID
+		p.NodeID = &id
 	}
-	change.AutoConnect = connected
-	if c.deps.Preferences.Save(change, nil) == nil {
-		c.mu.Lock()
-		c.preferences.AutoConnect = connected
-		c.mu.Unlock()
+	return p
+}
+
+// updatePreferences serializes read/modify/save/commit with ordinary settings writes.
+func (c *ClientController) updatePreferences(change func(*Preferences) error) error {
+	c.preferencesMu.Lock()
+	defer c.preferencesMu.Unlock()
+	c.mu.Lock()
+	p := clonePreferences(c.preferences)
+	err := change(&p)
+	c.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	if err := c.deps.Preferences.Save(p, nil); err != nil {
+		return err
+	}
+	c.mu.Lock()
+	c.preferences = p
+	c.mu.Unlock()
+	return nil
+}
+
+func (c *ClientController) rememberRecent(nodeID string) {
+	err := c.updatePreferences(func(p *Preferences) error {
+		list := []string{nodeID}
+		for _, id := range p.RecentNodeIDs {
+			if id != nodeID && len(list) < 8 {
+				list = append(list, id)
+			}
+		}
+		p.RecentNodeIDs = list
+		return nil
+	})
+	if err != nil {
+		c.fail("STORAGE_FAILED")
+	}
+}
+
+func (c *ClientController) rememberFavorite(nodeID string, favorite bool) error {
+	return c.updatePreferences(func(p *Preferences) error {
+		// Removing a saved favorite still works after the node leaves the subscription.
+		if favorite {
+			found := false
+			if c.snapshot != nil {
+				for _, n := range c.snapshot.Nodes {
+					if n.ID == nodeID {
+						found = true
+						break
+					}
+				}
+			}
+			if !found {
+				return NewAppError("NO_AUTHORIZED_NODES")
+			}
+		}
+		ids := []string{}
+		for _, id := range p.FavoriteNodeIDs {
+			if id != nodeID {
+				ids = append(ids, id)
+			}
+		}
+		if favorite {
+			ids = append(ids, nodeID)
+		}
+		if len(ids) > 256 {
+			return NewAppError("FAVORITES_FULL")
+		}
+		p.FavoriteNodeIDs = ids
+		return nil
+	})
+}
+
+func (c *ClientController) rememberConnected(connected bool) {
+	if err := c.updatePreferences(func(p *Preferences) error { p.AutoConnect = connected; return nil }); err != nil {
+		c.fail("STORAGE_FAILED")
 	}
 }
 

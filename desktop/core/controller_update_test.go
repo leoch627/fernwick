@@ -225,11 +225,11 @@ func TestControllerReportsAFailedUpdateDownload(t *testing.T) {
 	deadline := time.Now().Add(3 * time.Second)
 	for {
 		view := h.controller.View()
-		if view.Error != nil && *view.Error == "UPDATE_DOWNLOAD_FAILED" && !view.Installing {
+		if view.UpdateError != nil && *view.UpdateError == "UPDATE_DOWNLOAD_FAILED" && !view.Installing {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("a failed download went unreported: error=%v installing=%v", view.Error, view.Installing)
+			t.Fatalf("a failed download went unreported: error=%v installing=%v", view.UpdateError, view.Installing)
 		}
 		time.Sleep(10 * time.Millisecond)
 	}

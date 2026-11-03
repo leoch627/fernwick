@@ -18,11 +18,12 @@ import (
 )
 
 type DownloadView struct {
-	Status   string  `json:"status"`
-	Version  *string `json:"version"`
-	Received int64   `json:"received"`
-	Total    int64   `json:"total"`
-	Error    *string `json:"error"`
+	Status    string     `json:"status"`
+	Version   *string    `json:"version"`
+	Received  int64      `json:"received"`
+	Total     int64      `json:"total"`
+	Error     *string    `json:"error"`
+	ErrorCode *ErrorCode `json:"errorCode"`
 }
 type DownloadResponse struct {
 	Status  int
@@ -141,6 +142,10 @@ func (d *ArtifactDownload) View() DownloadView {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	value := d.state
+	if value.ErrorCode != nil {
+		code := *value.ErrorCode
+		value.ErrorCode = &code
+	}
 	if value.Version != nil {
 		s := *value.Version
 		value.Version = &s
@@ -316,13 +321,21 @@ func (d *ArtifactDownload) Start(parent context.Context) error {
 		stopped := d.stopped
 		d.mu.Unlock()
 		d.set(func(v *DownloadView) {
-			if stopped {
+			if stopped || parent.Err() != nil {
 				v.Status = "paused"
 				v.Error = nil
+				v.ErrorCode = nil
 			} else {
 				v.Status = "failed"
-				message := "更新下载或校验失败，可重试"
-				v.Error = &message
+				code := CodeOf(err)
+				if code == "STORAGE_FAILED" {
+					code = "UPDATE_STORAGE_FAILED"
+				}
+				if code == "CONTROL_UNAVAILABLE" || code == "CANCELLED" {
+					code = "UPDATE_DOWNLOAD_FAILED"
+				}
+				message := Messages[code]
+				v.Error, v.ErrorCode = &message, &code
 			}
 		})
 	}
@@ -342,14 +355,17 @@ func (d *ArtifactDownload) saveRecord(ctx context.Context) error {
 }
 func (d *ArtifactDownload) transfer(ctx context.Context, artifact Artifact) error {
 	if err := os.MkdirAll(d.directory, 0700); err != nil {
-		return NewAppError("UPDATE_DOWNLOAD_FAILED")
+		return NewAppError("UPDATE_STORAGE_FAILED")
 	}
 	if info, err := os.Lstat(d.directory); err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-		return NewAppError("UPDATE_DOWNLOAD_FAILED")
+		return NewAppError("UPDATE_STORAGE_FAILED")
 	}
 	free, err := d.freeBytes(d.directory)
-	if err != nil || free < uint64(RequiredDiskBytes(artifact)) {
-		return NewAppError("UPDATE_DOWNLOAD_FAILED")
+	if err != nil {
+		return NewAppError("UPDATE_STORAGE_FAILED")
+	}
+	if free < uint64(RequiredDiskBytes(artifact)) {
+		return NewAppError("UPDATE_DISK_FULL")
 	}
 	if ctx.Err() != nil {
 		return NewAppError("CANCELLED")
@@ -382,7 +398,7 @@ func (d *ArtifactDownload) transfer(ctx context.Context, artifact Artifact) erro
 		return NewAppError("UPDATE_VERIFY_FAILED")
 	}
 	offset := info.Size()
-	d.set(func(v *DownloadView) { v.Status = "downloading"; v.Received = offset; v.Error = nil })
+	d.set(func(v *DownloadView) { v.Status = "downloading"; v.Received = offset; v.Error = nil; v.ErrorCode = nil })
 	if offset < artifact.Bytes {
 		d.mu.Lock()
 		etag := d.record.ETag
@@ -460,7 +476,7 @@ func (d *ArtifactDownload) transfer(ctx context.Context, artifact Artifact) erro
 				}
 				written, err := file.WriteAt(buffer[:n], offset)
 				if err != nil || written != n {
-					return NewAppError("UPDATE_DOWNLOAD_FAILED")
+					return NewAppError("UPDATE_STORAGE_FAILED")
 				}
 				offset += int64(n)
 				d.set(func(v *DownloadView) { v.Received = offset })
@@ -480,7 +496,7 @@ func (d *ArtifactDownload) transfer(ctx context.Context, artifact Artifact) erro
 		return NewAppError("UPDATE_DOWNLOAD_FAILED")
 	}
 	if err := file.Sync(); err != nil {
-		return err
+		return NewAppError("UPDATE_STORAGE_FAILED")
 	}
 	d.set(func(v *DownloadView) { v.Status = "verifying" })
 	if err := file.Close(); err != nil {
@@ -494,7 +510,7 @@ func (d *ArtifactDownload) transfer(ctx context.Context, artifact Artifact) erro
 		return NewAppError("CANCELLED")
 	}
 	if err := os.Rename(d.path("pending.part"), d.path("pending.bin")); err != nil {
-		return err
+		return NewAppError("UPDATE_STORAGE_FAILED")
 	}
 	d.mu.Lock()
 	d.record.Complete = true
@@ -502,7 +518,12 @@ func (d *ArtifactDownload) transfer(ctx context.Context, artifact Artifact) erro
 	if err := d.saveRecord(ctx); err != nil {
 		return err
 	}
-	d.set(func(v *DownloadView) { v.Status = "ready"; v.Received = artifact.Bytes; v.Error = nil })
+	d.set(func(v *DownloadView) {
+		v.Status = "ready"
+		v.Received = artifact.Bytes
+		v.Error = nil
+		v.ErrorCode = nil
+	})
 	return nil
 }
 func (d *ArtifactDownload) Cancel() error {

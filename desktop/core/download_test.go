@@ -201,7 +201,7 @@ func TestDownloadRemovesWrongHashAndExcessBytes(t *testing.T) {
 			return DownloadResponse{Status: 200, Headers: map[string]string{}, Body: io.NopCloser(bytes.NewReader(body))}, nil
 		}))
 		_ = d.Start(context.Background())
-		if d.View().Status != "failed" {
+		if d.View().Status != "failed" || d.View().ErrorCode == nil || *d.View().ErrorCode != "UPDATE_VERIFY_FAILED" {
 			t.Fatal(d.View())
 		}
 		for _, name := range []string{"pending.bin", "pending.part"} {
@@ -219,7 +219,7 @@ func TestDownloadWithdrawalDiskAndOriginGates(t *testing.T) {
 	}))
 	d.freeBytes = func(string) (uint64, error) { return 10, nil }
 	_ = d.Start(context.Background())
-	if calls.Load() != 0 || d.View().Status != "failed" {
+	if calls.Load() != 0 || d.View().Status != "failed" || d.View().ErrorCode == nil || *d.View().ErrorCode != "UPDATE_DISK_FULL" {
 		t.Fatal(d.View())
 	}
 	evil := downloadTestArtifact()

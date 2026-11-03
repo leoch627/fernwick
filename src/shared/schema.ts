@@ -59,18 +59,21 @@ export const PolicySchema = z.object({
   update: z.object({ checkIntervalSec: z.number().int().min(3600).max(86400), noticeText: z.string().max(1000).nullable() }).strict(),
 }).strict();
 export type Policy = z.infer<typeof PolicySchema>;
+const nodeIds = (max: number) => z.array(text).max(max).refine(ids => new Set(ids).size === ids.length).default([]);
 export const PreferencesSchema = z.object({
   mode: z.enum(['rule', 'global']), nodeId: text.nullable(), autoConnect: z.boolean(), launchAtLogin: z.boolean(),
   closeBehavior: z.enum(['tray', 'ask']), theme: z.enum(['light', 'dark', 'system']),
   // Older preference files have neither field and load with these defaults.
   tunnel: z.enum(['proxy', 'tun']).default('proxy'), adBlock: z.boolean().default(true),
+  favoriteNodeIds: nodeIds(256), recentNodeIds: nodeIds(8),
 }).strict();
 export type Preferences = z.infer<typeof PreferencesSchema>;
-export const defaultPreferences: Preferences = { mode: 'rule', nodeId: null, autoConnect: false, launchAtLogin: false, closeBehavior: 'tray', theme: 'system', tunnel: 'proxy', adBlock: true };
+export const defaultPreferences: Preferences = { mode: 'rule', nodeId: null, autoConnect: false, launchAtLogin: false, closeBehavior: 'tray', theme: 'system', tunnel: 'proxy', adBlock: true, favoriteNodeIds: [], recentNodeIds: [] };
 export const CommandSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('login'), email: z.string().email().max(254), password: z.string().min(1).max(1024) }).strict(),
-  ...(['state', 'sync', 'connect', 'disconnect', 'logout', 'repair', 'check-update', 'download-update', 'pause-update', 'cancel-update', 'install-update', 'diagnostics', 'renewal-return'] as const).map(type => z.object({ type: z.literal(type) }).strict()),
+  ...(['state', 'sync', 'connect', 'disconnect', 'logout', 'repair', 'check-update', 'download-update', 'pause-update', 'cancel-update', 'install-update', 'diagnostics', 'renewal-return', 'open-download-page'] as const).map(type => z.object({ type: z.literal(type) }).strict()),
   z.object({ type: z.literal('preferences'), preferences: PreferencesSchema }).strict(),
+  z.object({ type: z.literal('favorite-node'), nodeId: text, favorite: z.boolean() }).strict(),
   z.object({ type: z.literal('probe-nodes'), nodeIds: z.array(text).min(1).max(64) }).strict(),
   z.object({ type: z.literal('report'), note: z.string().max(500) }).strict(),
   z.object({ type: z.literal('open-link'), link: z.enum(['website', 'renew', 'help']) }).strict(),

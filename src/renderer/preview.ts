@@ -28,10 +28,15 @@ export function previewBridge(): ClientBridge {
   return {
     async command(command) {
       let error: AppView['error'] = null;
-      if (command.type === 'preferences') state = { ...state, preferences: command.preferences, selectedNode: command.preferences.nodeId };
+      if (command.type === 'preferences') state = { ...state, preferences: { ...command.preferences, favoriteNodeIds: [...state.preferences.favoriteNodeIds], recentNodeIds: [...state.preferences.recentNodeIds] }, selectedNode: command.preferences.nodeId };
+      if (command.type === 'favorite-node') {
+        const ids = state.preferences.favoriteNodeIds.filter(id => id !== command.nodeId);
+        if (command.favorite) ids.push(command.nodeId);
+        state = { ...state, preferences: { ...state.preferences, favoriteNodeIds: ids } };
+      }
       if (command.type === 'connect' || command.type === 'repair' || command.type === 'probe-nodes') error = 'COMPONENTS_UNAVAILABLE';
       if (command.type === 'sync' || command.type === 'renewal-return') { state.lastSync = Date.now(); state.sync = 'Fresh'; }
-      if (command.type === 'open-link' || command.type === 'diagnostics') error = 'CONFIGURATION_REQUIRED';
+      if (command.type === 'open-link' || command.type === 'open-download-page' || command.type === 'diagnostics') error = 'CONFIGURATION_REQUIRED';
       if (command.type === 'logout') { state.loggedIn = false; state.account = null; state.nodes = []; }
       if (command.type === 'login') error = 'CONFIGURATION_REQUIRED';
       if (command.type === 'install-update' || command.type === 'download-update') download(command.type === 'install-update');

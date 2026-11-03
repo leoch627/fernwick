@@ -39,7 +39,7 @@ for (const email of ['alice@example.invalid', "o'hara@example.com", 'a+b@example
 for (const password of ['', 'x', 'x'.repeat(1024), 'x'.repeat(1025), '🚄'.repeat(512), '🚄'.repeat(513), '🚄'.repeat(1024), '🚄'.repeat(1025), '\ud800'.repeat(1024), '\ud800'.repeat(1025)]) {
   add(`password ${password.length} code units ${JSON.stringify(password.slice(0, 2))}`, 'command', { type: 'login', email: account.email, password });
 }
-for (const type of ['state', 'sync', 'connect', 'disconnect', 'logout', 'repair', 'check-update', 'download-update', 'pause-update', 'cancel-update', 'install-update', 'diagnostics', 'renewal-return']) {
+for (const type of ['state', 'sync', 'connect', 'disconnect', 'logout', 'repair', 'check-update', 'download-update', 'pause-update', 'cancel-update', 'install-update', 'diagnostics', 'renewal-return', 'open-download-page']) {
   add(`command ${type}`, 'command', { type });
 }
 add('command unknown type', 'command', { type: 'execute' });
@@ -64,6 +64,15 @@ add('preferences TUN tunnel', 'preferences', { ...defaultPreferences, tunnel: 't
 add('preferences unknown tunnel', 'preferences', { ...defaultPreferences, tunnel: 'vpn' });
 add('preferences null tunnel', 'preferences', { ...defaultPreferences, tunnel: null });
 add('preferences ad blocking as text', 'preferences', { ...defaultPreferences, adBlock: 'yes' });
+add('preferences before node lists', 'preferences', absent(absent(defaultPreferences, 'favoriteNodeIds'), 'recentNodeIds'));
+for (const [key, limit] of [['favoriteNodeIds', 256], ['recentNodeIds', 8]] as const) {
+  for (const count of [0, limit, limit + 1]) add(`${key} count ${count}`, 'preferences', { ...defaultPreferences, [key]: Array.from({ length: count }, (_, i) => `node-${i}`) });
+  for (const ids of [null, [''], ['x'.repeat(257)], ['node', 'node']]) add(`${key} rejects ${JSON.stringify(ids)}`, 'preferences', { ...defaultPreferences, [key]: ids });
+}
+add('favorite also recently connected', 'preferences', { ...defaultPreferences, favoriteNodeIds: ['node'], recentNodeIds: ['node'] });
+add('favorite command', 'command', { type: 'favorite-node', nodeId: 'node', favorite: true });
+add('unfavorite command', 'command', { type: 'favorite-node', nodeId: 'node', favorite: false });
+for (const data of [{ nodeId: '' }, { nodeId: 'x'.repeat(257) }, { favorite: null }, { favorite: 'yes' }, { extra: true }]) add(`invalid favorite ${JSON.stringify(data)}`, 'command', { type: 'favorite-node', nodeId: 'node', favorite: true, ...data });
 add('refresh valid', 'refresh', policy.refresh);
 add('refresh interval beyond window', 'refresh', { ...policy.refresh, maxSnapshotAgeSec: 600 });
 add('refresh polling too slow', 'refresh', { ...policy.refresh, accountIntervalSec: 3000 });

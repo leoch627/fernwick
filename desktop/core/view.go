@@ -50,6 +50,7 @@ type AppView struct {
 	ProxyPort    int             `json:"proxyPort"`
 	Policy       string          `json:"policy"`
 	Announcement *string         `json:"announcement"`
+	UpdateError  *ErrorCode      `json:"updateError"`
 	Update       string          `json:"update"`
 	ManualUpdate bool            `json:"manualUpdate"`
 	// Installing: the user asked to update; the download (if any) and installation run

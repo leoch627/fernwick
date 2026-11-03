@@ -3,6 +3,7 @@ package core
 import (
 	"encoding/json"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -104,7 +105,7 @@ func TestOlderPreferencesLoadWithDefaults(t *testing.T) {
 	if err := DecodeStrict([]byte(raw), &prefs, 16384); err != nil {
 		t.Fatal(err)
 	}
-	if prefs != DefaultPreferences {
+	if !reflect.DeepEqual(prefs, DefaultPreferences) {
 		t.Fatalf("got %+v, want %+v", prefs, DefaultPreferences)
 	}
 	if !prefs.AdBlock || prefs.Tunnel != "proxy" {

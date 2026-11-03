@@ -1,6 +1,7 @@
 package core
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
@@ -179,6 +180,18 @@ func TestSelfUpdaterWindowsRunsTheInstallerElevated(t *testing.T) {
 
 func TestSelfUpdaterReplacesAUserOwnedBundle(t *testing.T) {
 	u, commands, _, _ := testUpdater(t, "darwin")
+	dataDir := t.TempDir()
+	u.Work = filepath.Join(dataDir, "updates")
+	credentials := map[string][]byte{
+		"session.v2.enc":   writeLegacySessionFixture(t, dataDir),
+		"session-key.key":  bytes.Repeat([]byte{7}, 32),
+		"preferences.json": []byte(`{"theme":"dark"}`),
+	}
+	for name, raw := range credentials {
+		if err := os.WriteFile(filepath.Join(dataDir, name), raw, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
 	applications := t.TempDir()
 	u.AppRoot = filepath.Join(applications, "StarRail.app")
 	if err := os.MkdirAll(filepath.Join(u.AppRoot, "Contents"), 0755); err != nil {
@@ -208,6 +221,12 @@ func TestSelfUpdaterReplacesAUserOwnedBundle(t *testing.T) {
 	entries, _ := os.ReadDir(applications)
 	if len(entries) != 1 || strings.Join(*commands, " ") != "/usr/bin/ditto /usr/bin/codesign" {
 		t.Fatalf("left %v, ran %v", entries, *commands)
+	}
+	for name, before := range credentials {
+		after, err := os.ReadFile(filepath.Join(dataDir, name))
+		if err != nil || !bytes.Equal(before, after) {
+			t.Fatalf("bundle replacement changed user data %s: %v", name, err)
+		}
 	}
 	// A root-owned bundle takes one administrator prompt.
 	*commands = nil

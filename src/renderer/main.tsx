@@ -28,6 +28,8 @@ function Icon({ name, size = 20 }: { name: string; size?: number }) {
     sparkle: <path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5z"/>,
     info: <><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10h.01"/></>,
     update: <><circle cx="12" cy="12" r="9"/><path d="M12 16.5v-9m-4 4 4-4 4 4"/></>,
+    star: <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-2.9-5.6 2.9 1.1-6.2L3 9.6l6.2-.9z"/>,
+    history: <><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/></>,
   };
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name] ?? paths.info}</svg>;
 }
@@ -57,27 +59,31 @@ function remaining(expires: string | null, now: number, kind: string) {
 }
 const gb = (value: bigint) => `${Number(value * 10n / 1073741824n) / 10} GB`;
 
-type Action = 'nodes' | 'renew' | 'repair' | 'report' | 'connect' | 'tun';
+type Action = 'nodes' | 'renew' | 'repair' | 'report' | 'connect' | 'tun' | 'sync';
 /** Problems in the words a user understands, each with the one thing to try next. */
 const problems: Partial<Record<ErrorCode, { text: string; action?: Action }>> = {
-  CONNECT_TIMEOUT: { text: '这条线路暂时连不上', action: 'nodes' },
+  CONNECT_TIMEOUT: { text: '这条线路连接超时，请换一条线路重试', action: 'nodes' },
   NO_COMPATIBLE_NODES: { text: '这条线路暂时用不了', action: 'nodes' },
-  NO_AUTHORIZED_NODES: { text: '暂时没有可用线路', action: 'report' },
+  NO_AUTHORIZED_NODES: { text: '当前订阅没有可用线路，请刷新；仍为空请联系客服', action: 'sync' },
   ACCOUNT_EXPIRED: { text: '套餐已到期', action: 'renew' },
   QUOTA_EXHAUSTED: { text: '本期流量已用完', action: 'renew' },
   NO_SERVICE: { text: '账号还没有可用套餐', action: 'renew' },
   ACCOUNT_BANNED: { text: '账号暂不可用，请联系客服', action: 'report' },
   PERMISSION_REQUIRED: { text: '需要允许系统授权才能连接', action: 'connect' },
-  COMPONENTS_UNAVAILABLE: { text: '网络组件需要修复', action: 'repair' },
-  NETWORK_RECOVERY_REQUIRED: { text: '网络需要修复', action: 'repair' },
+  COMPONENTS_UNAVAILABLE: { text: '网络组件需要修复，请修复后重新连接', action: 'repair' },
+  NETWORK_RECOVERY_REQUIRED: { text: '系统网络设置还没恢复，请先修复网络', action: 'repair' },
   SYSTEM_PROXY_FAILED: { text: '没能设置系统代理', action: 'tun' },
-  NETWORK_CONFLICT: { text: '其他加速软件正在占用网络，请先关闭它' },
-  CONTROL_UNAVAILABLE: { text: '暂时连不上服务器，请检查网络', action: 'report' },
-  SNAPSHOT_EXPIRED: { text: '线路信息太久没更新，请检查网络', action: 'report' },
+  NETWORK_CONFLICT: { text: '网络正被其他会话占用，请关闭其他客户端或 VPN 后重试' },
+  CONTROL_UNAVAILABLE: { text: '无法连接账号服务器，请检查网络后刷新', action: 'sync' },
+  SNAPSHOT_EXPIRED: { text: '保存的线路信息已过期，需要联网刷新后再连接', action: 'sync' },
   CLOCK_UNTRUSTED: { text: '电脑时间不准，请校正后重试' },
   CANCELLED: { text: '已取消' },
+  SUBSCRIPTION_INVALID: { text: '服务器返回的线路信息无法读取，请刷新；仍失败请上报问题', action: 'sync' },
+  SUBSCRIPTION_CREDENTIAL_INVALID: { text: '订阅凭据已失效，请刷新线路信息', action: 'sync' },
+  STORAGE_FAILED: { text: '设置未能保存，请检查磁盘空间和文件夹权限' },
+  AUTH_INVALID: { text: '登录已失效，请重新登录' },
 };
-const actionLabels: Record<Action, string> = { nodes: '换个线路', renew: '去续费', repair: '修复', report: '上报问题', connect: '重新连接', tun: '改用 TUN 模式' };
+const actionLabels: Record<Action, string> = { nodes: '换个线路', renew: '去续费', repair: '修复', report: '上报问题', connect: '重新连接', tun: '改用 TUN 模式', sync: '刷新线路' };
 const problem = (code: ErrorCode) => problems[code] ?? { text: messages[code], action: 'report' as Action };
 
 function Sheet({ title, children, close }: { title: string; children: ReactNode; close(): void }) {
@@ -107,30 +113,49 @@ function Login({ state, busy, run }: { state: AppView; busy: string | null; run(
 
 function NodeSheet({ state, close, run }: { state: AppView; close(): void; run(command: Command): Promise<boolean> }) {
   const [search, setSearch] = useState('');
+  const [tab, setTab] = useState<'all' | 'favorite' | 'recent'>('all');
+  const [savingFavorite, setSavingFavorite] = useState(false);
+  const favoritePending = useRef(false);
   // Measure every node when the list opens; the core probes them in isolation.
   useEffect(() => {
     const ids = state.nodes.filter(n => n.compatible).slice(0, 64).map(n => n.id);
     if (ids.length) void bridge.command({ type: 'probe-nodes', nodeIds: ids }).catch(() => undefined);
   }, []);
   const choose = (nodeId: string | null) => { close(); void run({ type: 'preferences', preferences: { ...state.preferences, nodeId } }); };
-  const visible = state.nodes.filter(n => !search || `${n.name} ${regionName(n.region)}`.toLowerCase().includes(search.toLowerCase()));
+  const favorites = new Set(state.preferences.favoriteNodeIds);
+  const recency = new Map(state.preferences.recentNodeIds.map((id, index) => [id, index]));
+  const tabNodes = state.nodes.filter(n => tab === 'all' || (tab === 'favorite' ? favorites.has(n.id) : recency.has(n.id)))
+    .sort((a, b) => tab === 'recent' ? (recency.get(a.id)! - recency.get(b.id)!) : 0);
+  const visible = tabNodes.filter(n => !search || `${n.name} ${regionName(n.region)}`.toLowerCase().includes(search.toLowerCase()));
   const groups = new Map<string, NodeView[]>();
-  for (const node of visible) groups.set(node.region ?? '', [...groups.get(node.region ?? '') ?? [], node]);
+  for (const node of visible) { const key = tab === 'recent' ? 'recent' : node.region ?? ''; groups.set(key, [...groups.get(key) ?? [], node]); }
+  const toggleFavorite = async (node: NodeView) => {
+    if (favoritePending.current) return;
+    favoritePending.current = true; setSavingFavorite(true);
+    try { await run({ type: 'favorite-node', nodeId: node.id, favorite: !favorites.has(node.id) }); }
+    finally { favoritePending.current = false; setSavingFavorite(false); }
+  };
   return <Sheet title="选择线路" close={close}>
     <button className={`node-row auto ${state.selectedNode === null ? 'selected' : ''}`} onClick={() => choose(null)}>
       <span className="flag"><Icon name="sparkle"/></span><span className="node-name"><strong>自动选择</strong></span>
       {state.selectedNode === null && <Icon name="check" size={18}/>}
     </button>
-    {state.nodes.length > 12 && <label className="search"><Icon name="search" size={16}/><input aria-label="搜索线路" placeholder="搜索地区或线路" value={search} onChange={e => setSearch(e.target.value)}/></label>}
+    <div className="node-tabs" role="tablist" aria-label="线路筛选">
+      {([['all', `全部 ${state.nodes.length}`, ''], ['favorite', `收藏 ${state.nodes.filter(n => favorites.has(n.id)).length}`, 'star'], ['recent', `最近 ${state.nodes.filter(n => recency.has(n.id)).length}`, 'history']] as const).map(([value, text, icon]) => <button key={value} role="tab" aria-selected={tab === value} className={tab === value ? 'on' : ''} onClick={() => setTab(value)}>{icon && <Icon name={icon} size={14}/>} {text}</button>)}
+    </div>
+    {state.nodes.length > 0 && <label className="search"><Icon name="search" size={16}/><input aria-label="搜索线路" placeholder="搜索地区或线路" value={search} onChange={e => setSearch(e.target.value)}/></label>}
     {[...groups].map(([region, nodes]) => <section key={region} className="node-group">
-      <h3>{flag(region || null)} {regionName(region || null)}</h3>
-      {nodes.map(node => <button key={node.id} className={`node-row ${state.selectedNode === node.id ? 'selected' : ''}`} disabled={!node.compatible} onClick={() => choose(node.id)}>
-        <span className="node-name"><strong>{label(node)}</strong>{!node.compatible && <small>暂不可用{node.reason ? `：${node.reason}` : ''}</small>}</span>
-        <span className={`latency ${node.latency !== null ? latencyClass(node.latency) : ''}`}>{node.probe === 'testing' ? '测速中' : node.latency !== null ? `${Math.round(node.latency)} ms` : node.probe === 'timeout' ? '超时' : ''}</span>
-        {state.selectedNode === node.id && <Icon name="check" size={18}/>}
-      </button>)}
+      <h3>{region === 'recent' ? '最近成功连接 · 最多 8 条' : `${flag(region || null)} ${regionName(region || null)}`}</h3>
+      {nodes.map(node => <div key={node.id} className="node-row-wrap">
+        <button className={`node-row ${state.selectedNode === node.id ? 'selected' : ''}`} disabled={!node.compatible} onClick={() => choose(node.id)}>
+          <span className="node-name"><strong>{label(node)}</strong>{!node.compatible && <small>暂不可用{node.reason ? `：${node.reason}` : ''}</small>}</span>
+          <span className={`latency ${node.latency !== null ? latencyClass(node.latency) : ''}`}>{node.probe === 'testing' ? '测速中' : node.latency !== null ? `${Math.round(node.latency)} ms` : node.probe === 'timeout' ? '超时' : ''}</span>
+          {state.selectedNode === node.id && <Icon name="check" size={18}/>}
+        </button>
+        <button className={`favorite-button ${favorites.has(node.id) ? 'on' : ''}`} aria-label={favorites.has(node.id) ? `取消收藏 ${label(node)}` : `收藏 ${label(node)}`} aria-pressed={favorites.has(node.id)} disabled={savingFavorite} onClick={() => void toggleFavorite(node)}><Icon name="star" size={17}/></button>
+      </div>)}
     </section>)}
-    {!state.nodes.length && <p className="empty">暂无线路</p>}
+    {!visible.length && <p className="empty">{search ? '没有找到匹配的线路' : tab === 'favorite' ? '还没有可显示的收藏，点星标收藏线路' : tab === 'recent' ? '连接成功后会显示在这里' : '暂无线路'}</p>}
   </Sheet>;
 }
 
@@ -170,10 +195,11 @@ function SettingsSheet({ state, busy, report, close, run, prefs }: { state: AppV
       {reporting && <ReportPanel state={state} run={run}/>}
     </div>
     <div className="group">
-      <div className="row"><span><strong>检查更新</strong><small>{state.installing ? (download.status === 'downloading' ? `正在下载 ${Math.round(download.received / Math.max(1, download.total) * 100)}%` : '正在安装') : download.status === 'ready' ? `新版本 ${download.version} 已下载` : state.update}</small></span>
-        {download.version && download.status !== 'idle' && !state.installing ? <button className="secondary" onClick={() => void run({ type: 'install-update' })}>{state.manualUpdate ? '去下载' : '立即更新'}</button>
+      <div className="row"><span><strong>检查更新</strong><small>{state.installing ? (download.status === 'downloading' ? `正在下载 ${Math.round(download.received / Math.max(1, download.total) * 100)}%` : '正在安装') : state.updateError ? state.update : download.status === 'ready' ? `新版本 ${download.version} 已下载` : state.update}</small></span>
+        {download.version && download.status !== 'idle' && !state.installing ? <button className="secondary" onClick={() => void run({ type: 'install-update' })}>{state.manualUpdate ? '去下载' : download.status === 'failed' ? '重试' : '立即更新'}</button>
           : <button className="secondary" disabled={!!busy || state.installing || download.status === 'downloading'} onClick={() => void run({ type: 'check-update' })}>检查</button>}
       </div>
+      <div className="row"><span><strong>手动下载安装包</strong><small>自动更新失败时，也可以从这里下载</small></span><button className="secondary" onClick={() => void run({ type: 'open-download-page' })}>手动下载</button></div>
       <div className="row"><span><strong>修复网络组件</strong></span><button className="secondary" disabled={!!busy} onClick={() => void run({ type: 'repair' })}>修复</button></div>
       {state.links.help && <button className="row" onClick={() => void run({ type: 'open-link', link: 'help' })}><span><strong>使用帮助</strong></span><Icon name="chevron" size={16}/></button>}
     </div>
@@ -200,10 +226,10 @@ function ModeCard({ state, working, prefs }: { state: AppView; working: boolean;
 /** Clash Party style: a new version stays on the home screen until installed, in one click. */
 function UpdateCard({ state, run }: { state: AppView; run(command: Command): Promise<boolean> }) {
   const { status, version, received, total, error } = state.download;
-  if (!version || status === 'idle') return null;
+  if ((!version || status === 'idle') && !state.updateError) return null;
   const percent = Math.min(100, Math.round(received / Math.max(1, total) * 100));
   const downloading = status === 'downloading';
-  const detail = state.manualUpdate ? '这个安装位置不能自动更新，请从官网下载'
+  const detail = state.updateError ? state.update : state.manualUpdate ? '这个安装位置不能自动更新，请从官网下载'
     : state.installing ? (downloading ? `正在下载 ${percent}%` : '正在安装')
     : status === 'failed' ? error ?? '下载没有完成，可以重试'
     : status === 'ready' ? '已下载'
@@ -211,11 +237,14 @@ function UpdateCard({ state, run }: { state: AppView; run(command: Command): Pro
   return <section className="card update-card" aria-label="推荐更新">
     <span className="update-icon"><Icon name="update"/></span>
     <span className="update-text">
-      <span className="update-title"><span className="update-badge">推荐更新</span><strong>新版本 {version}</strong></span>
+      <span className="update-title"><span className="update-badge">{state.updateError ? '更新提示' : '推荐更新'}</span><strong>{version ? `新版本 ${version}` : '更新未完成'}</strong></span>
       {detail && <small aria-live="polite">{detail}</small>}
       {state.installing && <span className="progress" role="progressbar" aria-label="更新进度" aria-valuenow={downloading ? percent : 100} aria-valuemin={0} aria-valuemax={100}><span className={downloading ? '' : 'indeterminate'} style={{ width: `${downloading ? percent : 100}%` }}/></span>}
     </span>
-    {!state.installing && <button className="primary small" onClick={() => void run({ type: 'install-update' })}>{state.manualUpdate ? '去下载' : status === 'failed' ? '重试' : '立即更新'}</button>}
+    {!state.installing && <span className="update-actions">
+      <button className="primary small" onClick={() => void run({ type: version ? 'install-update' : 'check-update' })}>{state.manualUpdate ? '去下载' : state.updateError || status === 'failed' ? '重试' : '立即更新'}</button>
+      {(state.updateError || status === 'failed') && <button className="link" onClick={() => void run({ type: 'open-download-page' })}>手动下载</button>}
+    </span>}
   </section>;
 }
 
@@ -234,6 +263,7 @@ function Home({ state, busy, run, open, prefs }: { state: AppView; busy: string 
   const issue = state.error && !connected ? problem(state.error) : null;
   const renewSoon = !!account && (left.days <= 7 || percent >= 90 || issue?.action === 'renew');
   const act = (action: Action) => {
+    if (action === 'sync') { void run({ type: 'sync' }); return; }
     if (action === 'nodes') open('nodes'); else if (action === 'report') open('settings', true);
     else if (action === 'renew') void run({ type: 'open-link', link: 'renew' });
     else if (action === 'repair') void run({ type: 'repair' });
@@ -279,7 +309,7 @@ function App() {
     try {
       const r = await bridge.command(command); setState(r.state);
       // Connection problems are shown under the button with what to do next.
-      if (!r.ok && r.error && command.type !== 'connect' && command.type !== 'report') setToast(problem(r.error).text);
+      if (!r.ok && r.error && command.type !== 'connect' && command.type !== 'report') setToast(['check-update', 'download-update', 'install-update'].includes(command.type) && r.state.updateError ? r.state.update : problem(r.error).text);
       return r.ok;
     } catch { setToast('操作没有完成，请重试'); return false; } finally { setBusy(null); }
   };

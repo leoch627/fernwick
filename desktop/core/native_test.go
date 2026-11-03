@@ -81,6 +81,16 @@ func testRPCDriver(t *testing.T, mutate func(*nativeReply), action func(map[stri
 			reply.BuildID = driver.manifest.BuildID
 			reply.Version = "0.1.0"
 			data, _ = json.Marshal(reply)
+			if reply.HTTP != nil {
+				// Use the service's wire names independently of HTTPResponse's tags.
+				// Encoding only the client's struct hid the 0.2.7 update-check failure.
+				var wire map[string]json.RawMessage
+				_ = json.Unmarshal(data, &wire)
+				wire["http"], _ = json.Marshal(map[string]any{
+					"status": reply.HTTP.Status, "headers": reply.HTTP.Headers, "body": reply.HTTP.Body,
+				})
+				data, _ = json.Marshal(wire)
+			}
 			_, _ = server.Write(append(data, '\n'))
 		}()
 		return client, nil

@@ -426,7 +426,7 @@ func jsonField(field reflect.StructField) (name string, optional, nullable bool)
 }
 
 func ParseCommand(raw []byte) (Command, error) {
-	value, err := StrictJSON(raw, 16384)
+	value, err := StrictJSON(raw, 131072)
 	if err != nil {
 		return Command{}, err
 	}
@@ -466,6 +466,19 @@ func decodeCommand(value any) (Command, error) {
 			return Command{}, err
 		}
 		command.Preferences = &shape.Preferences
+	case "favorite-node":
+		var shape struct {
+			Type     string `json:"type"`
+			NodeID   string `json:"nodeId"`
+			Favorite bool   `json:"favorite"`
+		}
+		if err := decodeValue(value, reflect.ValueOf(&shape).Elem(), false); err != nil {
+			return Command{}, err
+		}
+		if !textField(shape.NodeID) {
+			return Command{}, NewAppError("INVALID_INPUT")
+		}
+		command.NodeID, command.Favorite = shape.NodeID, shape.Favorite
 	case "probe-nodes":
 		var shape struct {
 			Type    string   `json:"type"`
@@ -507,7 +520,7 @@ func decodeCommand(value any) (Command, error) {
 			return Command{}, NewAppError("INVALID_INPUT")
 		}
 		command.Note = shape.Note
-	case "state", "sync", "connect", "disconnect", "logout", "repair", "check-update", "download-update", "pause-update", "cancel-update", "install-update", "diagnostics", "renewal-return":
+	case "state", "sync", "connect", "disconnect", "logout", "repair", "check-update", "download-update", "pause-update", "cancel-update", "install-update", "diagnostics", "renewal-return", "open-download-page":
 		if len(object) != 1 {
 			return Command{}, NewAppError("INVALID_INPUT")
 		}

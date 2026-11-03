@@ -4,13 +4,13 @@ import { join } from 'node:path';
 import https from 'node:https';
 import { z } from 'zod';
 import type { BuildConfig } from '../shared/schema';
-import { AppError, assert } from '../shared/errors';
+import { AppError, assert, type ErrorCode } from '../shared/errors';
 import { trustedUrl } from '../domain/trust';
 import { strictJson } from '../domain/json';
 import { atomicWrite } from './storage';
 import { ArtifactSchema, requiredDiskBytes, verifyArtifact, type Artifact } from './update';
 
-export interface DownloadView { status: 'idle' | 'available' | 'downloading' | 'paused' | 'verifying' | 'ready' | 'failed'; version: string | null; received: number; total: number; error: string | null; }
+export interface DownloadView { status: 'idle' | 'available' | 'downloading' | 'paused' | 'verifying' | 'ready' | 'failed'; version: string | null; received: number; total: number; error: string | null; errorCode?: ErrorCode | null; }
 export interface DownloadResponse { status: number; headers: Record<string, string | undefined>; body: AsyncIterable<Uint8Array>; close(): void; }
 export interface DownloadTransport { open(url: string, offset: number, etag: string | null, signal: AbortSignal): Promise<DownloadResponse>; }
 export class HttpsDownloadTransport implements DownloadTransport {

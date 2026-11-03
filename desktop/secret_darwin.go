@@ -9,12 +9,16 @@ import (
 	"work.starrail/client/desktop/core"
 )
 
-// macOS keeps the session key in a file only this user can read, in the data directory
-// beside the session it seals. The Keychain asked every newly installed build for access,
-// and refusing left the session locked.
+// Keep the key outside the application bundle so replacing the app preserves login.
+// Older builds stored the same key in Keychain; migrate it only when needed to unlock
+// an existing session, without asking fresh installs for Keychain access.
 func secretPath(dir, account string) string { return filepath.Join(dir, account+".key") }
 
-func readSystemSecret(dir, _, account string) ([]byte, error) {
+func readSystemSecret(dir, service, account string) ([]byte, error) {
+	return readSessionKey(dir, service, account, readLegacyKeychainSecret)
+}
+
+func readKeyFile(dir, account string) ([]byte, error) {
 	path := secretPath(dir, account)
 	info, err := os.Lstat(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -25,15 +29,36 @@ func readSystemSecret(dir, _, account string) ([]byte, error) {
 	}
 	return os.ReadFile(path)
 }
-func writeSystemSecret(dir, _, account string, key []byte) error {
-	return core.AtomicWrite(secretPath(dir, account), key, nil)
+
+func readSessionKey(dir, service, account string, legacy func(string, string) ([]byte, error)) ([]byte, error) {
+	key, err := readKeyFile(dir, account)
+	if !errors.Is(err, errSecretMissing) {
+		return key, err
+	}
+	sessionPath := filepath.Join(dir, "session.v2.enc")
+	info, err := os.Lstat(sessionPath)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, errSecretMissing
+	}
+	if err != nil || !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("saved session unreadable")
+	}
+	key, err = legacy(service, account)
+	if err != nil || len(key) != 32 {
+		// Do not return errSecretMissing: Key(true) must not generate a replacement
+		// key while ciphertext still exists, even if Keychain access was denied.
+		return nil, fmt.Errorf("legacy session key unavailable")
+	}
+	store := core.NewSecureStore[core.Persisted](sessionPath, core.KeyProviderFunc(func(bool) ([]byte, error) { return key, nil }))
+	if saved, err := store.Load(); err != nil || saved == nil {
+		return nil, fmt.Errorf("legacy session could not be unlocked")
+	}
+	if err := writeSystemSecret(dir, service, account, key); err != nil {
+		return nil, err
+	}
+	return key, nil
 }
 
-// forgetKeychainSession removes a session sealed with a key this build cannot read: one
-// kept in the Keychain by an earlier version, or one whose key file is gone. Signing in
-// again replaces it; left in place it would stay locked.
-func forgetKeychainSession(dir, account, session string) {
-	if _, err := os.Lstat(secretPath(dir, account)); errors.Is(err, os.ErrNotExist) {
-		_ = os.Remove(session)
-	}
+func writeSystemSecret(dir, _, account string, key []byte) error {
+	return core.AtomicWrite(secretPath(dir, account), key, nil)
 }
