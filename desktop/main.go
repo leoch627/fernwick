@@ -212,6 +212,22 @@ func (s *shell) shouldQuit() bool {
 }
 
 func (s *shell) notifyExpiry(remaining int64) error {
+	body := "套餐已到期，请打开客户端续费。"
+	if remaining > 0 {
+		body = fmt.Sprintf("套餐将在 %d 天内到期，请及时续费。", (remaining+86400000-1)/86400000)
+	}
+	return s.notify("subscription-expiry", body)
+}
+
+func (s *shell) notifyQuota(percent int) error {
+	body := "本期流量已用完，请打开客户端续费。"
+	if percent < 100 {
+		body = fmt.Sprintf("本期流量已用 %d%%，用完后将无法连接。", percent)
+	}
+	return s.notify("traffic-quota", body)
+}
+
+func (s *shell) notify(id, body string) error {
 	if !s.notificationsReady.Load() {
 		return nil
 	}
@@ -225,11 +241,7 @@ func (s *shell) notifyExpiry(remaining int64) error {
 	if err != nil || !allowed {
 		return err
 	}
-	body := "套餐已到期，请打开客户端续费。"
-	if remaining > 0 {
-		body = fmt.Sprintf("套餐将在 %d 天内到期，请及时续费。", (remaining+86400000-1)/86400000)
-	}
-	return s.notifier.SendNotification(notifications.NotificationOptions{ID: "subscription-expiry", Title: s.name, Body: body, Sound: &notifications.NotificationSound{Silent: true}})
+	return s.notifier.SendNotification(notifications.NotificationOptions{ID: id, Title: s.name, Body: body, Sound: &notifications.NotificationSound{Silent: true}})
 }
 
 func run() error {
@@ -372,6 +384,7 @@ func run() error {
 	}
 	reminderStore := core.NewJSONStore[core.ReminderState](filepath.Join(dataDir, "reminders.json"), 65536)
 	reminders := core.NewExpiryReminders(build.TenantID, func(value core.ReminderState) error { return reminderStore.Save(value, nil) }, s.notifyExpiry)
+	reminders.NotifyQuota = s.notifyQuota
 	if saved, e := reminderStore.Load(); e == nil && saved != nil {
 		_ = reminders.Restore(*saved)
 	}
@@ -446,15 +459,7 @@ func run() error {
 		s.show()
 	}
 	if runtime.GOOS != "linux" {
-		tray := s.app.SystemTray.New()
-		tray.SetIcon(icon)
-		menu := application.NewMenu()
-		menu.Add("打开 " + build.Name).OnClick(func(*application.Context) { s.show() })
-		menu.Add("断开连接").OnClick(func(*application.Context) { go s.controller.Command(ctx, json.RawMessage(`{"type":"disconnect"}`)) })
-		menu.AddSeparator()
-		menu.Add("退出").OnClick(func(*application.Context) { s.app.Quit() })
-		tray.SetMenu(menu)
-		tray.OnClick(s.show)
+		newTrayMenu(ctx, s, icon)
 	}
 	s.app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
 		go func() {

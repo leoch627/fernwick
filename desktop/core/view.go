@@ -63,7 +63,10 @@ type AppView struct {
 	Links              ViewLinks    `json:"links"`
 	Report             ReportView   `json:"report"`
 	ReportAvailable    bool         `json:"reportAvailable"`
-	Now                int64        `json:"now"`
+	// Signup is what the panel asks of a new account, once the sign-up form asked; null
+	// before that or when the panel could not be reached.
+	Signup *SignupConfig `json:"signup"`
+	Now    int64         `json:"now"`
 }
 
 // ReportView is the state of the user's problem report: idle, sending, sent (with the
@@ -76,4 +79,6 @@ type CommandResult struct {
 	OK    bool      `json:"ok"`
 	State AppView   `json:"state"`
 	Error ErrorCode `json:"error,omitempty"`
+	// Message is the panel's own explanation of a refusal, e.g. "邀请码无效".
+	Message string `json:"message,omitempty"`
 }

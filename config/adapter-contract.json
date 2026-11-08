@@ -21,5 +21,12 @@
     "download": "d",
     "subscriptionUrl": "subscribe_url"
   },
-  "logoutPath": "/api/v1/user/removeActiveSession"
+  "logoutPath": "/api/v1/user/removeActiveSession",
+  "passport": {
+    "configPath": "/api/v1/guest/comm/config",
+    "emailCodePath": "/api/v1/passport/comm/sendEmailVerify",
+    "registerPath": "/api/v1/passport/auth/register",
+    "resetPath": "/api/v1/passport/auth/forget",
+    "quickLoginPath": "/api/v1/user/getQuickLoginUrl"
+  }
 }

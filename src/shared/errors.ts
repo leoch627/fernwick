@@ -28,6 +28,7 @@ export const messages = {
   STORAGE_LOCKED: '安全存储暂时无法解锁，请解锁系统钥匙串后重试',
   STORAGE_FAILED: '无法安全保存数据，本次变更未提交',
   CANCELLED: '操作已取消', INVALID_INPUT: '输入不符合要求',
+  PANEL_REJECTED: '没有成功，请检查填写的内容后重试',
 } as const;
 export type ErrorCode = keyof typeof messages;
 export class AppError extends Error {

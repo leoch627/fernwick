@@ -17,7 +17,11 @@ export interface AppView {
   download: DownloadView; rules: string; showTrafficSummary: boolean;
   links: { website: boolean; renew: boolean; help: boolean };
   /** Problem report: the code is what the user gives to support. */
-  report: { status: 'idle' | 'sending' | 'sent' | 'failed'; code: string | null }; reportAvailable: boolean; now: number;
+  report: { status: 'idle' | 'sending' | 'sent' | 'failed'; code: string | null }; reportAvailable: boolean;
+  /** What the panel asks of a new account; null until the sign-up form asks, or when unreachable. */
+  signup: SignupView | null; now: number;
 }
-export interface CommandResult { ok: boolean; state: AppView; error?: ErrorCode; }
+export interface SignupView { emailCode: boolean; inviteRequired: boolean; emailSuffixes: string[]; inApp: boolean; }
+/** message: the panel's own explanation of a refusal, e.g. 邀请码无效. */
+export interface CommandResult { ok: boolean; state: AppView; error?: ErrorCode; message?: string; }
 export interface ClientBridge { command(command: Command): Promise<CommandResult>; subscribe(listener: (state: AppView) => void): () => void; }

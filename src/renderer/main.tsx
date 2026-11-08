@@ -95,18 +95,66 @@ function Sheet({ title, children, close }: { title: string; children: ReactNode;
   </dialog>;
 }
 
+type AuthMode = 'login' | 'register' | 'reset';
+/** The panel waits a minute before it sends another code to the same address. */
+const CODE_INTERVAL = 60;
+
 function Login({ state, busy, run }: { state: AppView; busy: string | null; run(command: Command): Promise<boolean> }) {
+  const [mode, setMode] = useState<AuthMode>('login');
+  const [email, setEmail] = useState('');
+  const [wait, setWait] = useState(0);
+  useEffect(() => { if (wait <= 0) return; const id = setTimeout(() => setWait(wait - 1), 1000); return () => clearTimeout(id); }, [wait]);
+  // Sign-up and reset run in the app; a panel that wants a captcha (or a build without
+  // these calls) sends people to the website, as before.
+  const enter = async (next: Exclude<AuthMode, 'login'>) => {
+    setMode(next);
+    const r = await bridge.command({ type: 'signup-config' }).catch(() => null);
+    if (r && (r.error === 'CONFIGURATION_REQUIRED' || r.state.signup && !r.state.signup.inApp)) {
+      setMode('login');
+      if (state.links.website) void run({ type: 'open-link', link: 'website' });
+    }
+  };
+  const signup = state.signup ?? { emailCode: true, inviteRequired: false, emailSuffixes: [], inApp: true };
+  const domain = email.includes('@') ? email.slice(email.lastIndexOf('@') + 1).trim().toLowerCase() : '';
+  const domainRefused = mode === 'register' && domain.includes('.') && signup.emailSuffixes.length > 0 && !signup.emailSuffixes.includes(domain);
+  const needsCode = mode === 'reset' || signup.emailCode;
+  const sendCode = async () => {
+    const value = email.trim();
+    if (!value || domainRefused) return;
+    if (await run({ type: 'send-email-code', email: value, purpose: mode === 'reset' ? 'reset' : 'register' })) setWait(CODE_INTERVAL);
+  };
+  const submit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault(); const form = event.currentTarget; const data = new FormData(form);
+    const value = String(data.get('email')).trim(), password = String(data.get('password'));
+    const emailCode = String(data.get('emailCode') ?? '').trim();
+    const command: Command = mode === 'login' ? { type: 'login', email: value, password }
+      : mode === 'register' ? { type: 'register', email: value, password, emailCode, inviteCode: String(data.get('inviteCode') ?? '').trim() }
+      : { type: 'reset-password', email: value, password, emailCode };
+    void run(command).then(ok => { if (ok) form.reset(); });
+  };
+  const label = mode === 'login' ? (busy === 'login' ? '正在登录…' : '登录')
+    : mode === 'register' ? (busy === 'register' ? '正在注册…' : '注册并登录')
+    : busy === 'reset-password' ? '正在重置…' : '重置密码并登录';
   return <main className="login">
     <BrandMark size={56}/><h1>{state.brand}</h1>
-    <form onSubmit={event => {
-      event.preventDefault(); const form = event.currentTarget; const data = new FormData(form);
-      void run({ type: 'login', email: String(data.get('email')).trim(), password: String(data.get('password')) }).then(ok => { if (ok) form.reset(); });
-    }}>
-      <input name="email" type="email" aria-label="邮箱" autoComplete="username" placeholder="邮箱" required maxLength={254}/>
-      <input name="password" type="password" aria-label="密码" autoComplete="current-password" placeholder="密码" required maxLength={1024}/>
-      <button className="primary" disabled={!!busy}>{busy === 'login' ? '正在登录…' : '登录'}</button>
+    {mode !== 'login' && <h2 className="login-title">{mode === 'register' ? '注册账号' : '找回密码'}</h2>}
+    <form key={mode} onSubmit={submit}>
+      <input name="email" type="email" aria-label="邮箱" autoComplete="username" placeholder="邮箱" required maxLength={254} value={email} onChange={e => setEmail(e.target.value)}/>
+      {domainRefused && <p className="warn" role="alert">只能用这些邮箱注册：{signup.emailSuffixes.join('、')}</p>}
+      {mode !== 'login' && needsCode && <div className="code-row">
+        <input name="emailCode" aria-label="邮箱验证码" autoComplete="one-time-code" inputMode="numeric" placeholder="邮箱验证码" required pattern="[0-9]{6}" maxLength={6}/>
+        <button type="button" className="secondary" disabled={wait > 0 || busy === 'send-email-code' || !email.includes('@') || domainRefused} onClick={() => void sendCode()}>
+          {busy === 'send-email-code' ? '正在发送…' : wait > 0 ? `${wait} 秒后重发` : '获取验证码'}
+        </button>
+      </div>}
+      <input name="password" type="password" aria-label={mode === 'reset' ? '新密码' : '密码'} autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+        placeholder={mode === 'login' ? '密码' : mode === 'reset' ? '新密码（至少 8 位）' : '密码（至少 8 位）'} required minLength={mode === 'login' ? 1 : 8} maxLength={mode === 'login' ? 1024 : 64}/>
+      {mode === 'register' && <input name="inviteCode" aria-label="邀请码" autoComplete="off" placeholder={signup.inviteRequired ? '邀请码' : '邀请码（选填）'} required={signup.inviteRequired} maxLength={64}/>}
+      <button className="primary" disabled={!!busy || domainRefused}>{label}</button>
     </form>
-    {state.links.website && <p className="login-links"><button className="link" onClick={() => void run({ type: 'open-link', link: 'website' })}>注册账号</button><span>·</span><button className="link" onClick={() => void run({ type: 'open-link', link: 'website' })}>忘记密码</button></p>}
+    {mode === 'login'
+      ? <p className="login-links"><button className="link" onClick={() => void enter('register')}>注册账号</button><span>·</span><button className="link" onClick={() => void enter('reset')}>忘记密码</button></p>
+      : <p className="login-links"><button className="link" onClick={() => setMode('login')}>{mode === 'register' ? '已有账号？登录' : '返回登录'}</button></p>}
     {state.demo && <p className="muted">预览模式不能登录真实账号</p>}
   </main>;
 }
@@ -309,7 +357,8 @@ function App() {
     try {
       const r = await bridge.command(command); setState(r.state);
       // Connection problems are shown under the button with what to do next.
-      if (!r.ok && r.error && command.type !== 'connect' && command.type !== 'report') setToast(['check-update', 'download-update', 'install-update'].includes(command.type) && r.state.updateError ? r.state.update : problem(r.error).text);
+      // The panel's own words ("邀请码无效") say more than the generic text.
+      if (!r.ok && r.error && command.type !== 'connect' && command.type !== 'report') setToast(['check-update', 'download-update', 'install-update'].includes(command.type) && r.state.updateError ? r.state.update : r.message || problem(r.error).text);
       return r.ok;
     } catch { setToast('操作没有完成，请重试'); return false; } finally { setBusy(null); }
   };

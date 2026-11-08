@@ -42,6 +42,11 @@ button:disabled{cursor:default;opacity:.55}
 .login input{width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--line-strong);background:var(--surface)}
 .login input:focus{border-color:var(--accent);outline:none}
 .login-links{display:flex;align-items:center;gap:6px;color:var(--muted);margin:0}
+.login-title{font-size:16px;margin:-8px 0 0}
+.login .code-row{display:flex;gap:8px}
+.login .code-row input{flex:1;min-width:0}
+.login .code-row .secondary{border-radius:12px;padding:0 12px;min-width:104px}
+.login form .warn{text-align:left}
 .home{flex:1;display:flex;flex-direction:column;gap:12px}
 .announcement{margin:0;padding:10px 14px;border-radius:12px;background:var(--blue-tint);font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere}
 .power{display:flex;flex-direction:column;align-items:center;gap:6px;padding:28px 0 20px;text-align:center}

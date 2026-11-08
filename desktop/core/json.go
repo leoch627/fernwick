@@ -425,6 +425,10 @@ func jsonField(field reflect.StructField) (name string, optional, nullable bool)
 	return
 }
 
+// optionalEmailCode is the panel's six-digit email code, or nothing when the panel
+// does not send one.
+var optionalEmailCode = regexp.MustCompile(`^([0-9]{6})?$`)
+
 func ParseCommand(raw []byte) (Command, error) {
 	value, err := StrictJSON(raw, 131072)
 	if err != nil {
@@ -520,7 +524,49 @@ func decodeCommand(value any) (Command, error) {
 			return Command{}, NewAppError("INVALID_INPUT")
 		}
 		command.Note = shape.Note
-	case "state", "sync", "connect", "disconnect", "logout", "repair", "check-update", "download-update", "pause-update", "cancel-update", "install-update", "diagnostics", "renewal-return", "open-download-page":
+	case "send-email-code":
+		var shape struct {
+			Type    string `json:"type"`
+			Email   string `json:"email"`
+			Purpose string `json:"purpose"`
+		}
+		if err := decodeValue(value, reflect.ValueOf(&shape).Elem(), false); err != nil {
+			return Command{}, err
+		}
+		if !validEmail(shape.Email) || !oneOf(shape.Purpose, "register", "reset") {
+			return Command{}, NewAppError("INVALID_INPUT")
+		}
+		command.Email, command.Purpose = shape.Email, shape.Purpose
+	case "register":
+		var shape struct {
+			Type       string `json:"type"`
+			Email      string `json:"email"`
+			Password   string `json:"password"`
+			EmailCode  string `json:"emailCode"`
+			InviteCode string `json:"inviteCode"`
+		}
+		if err := decodeValue(value, reflect.ValueOf(&shape).Elem(), false); err != nil {
+			return Command{}, err
+		}
+		if !validEmail(shape.Email) || !boundedText(shape.Password, 8, 64) || !optionalEmailCode.MatchString(shape.EmailCode) || !boundedText(shape.InviteCode, 0, 64) {
+			return Command{}, NewAppError("INVALID_INPUT")
+		}
+		command.Email, command.Password, command.EmailCode, command.InviteCode = shape.Email, shape.Password, shape.EmailCode, shape.InviteCode
+	case "reset-password":
+		var shape struct {
+			Type      string `json:"type"`
+			Email     string `json:"email"`
+			Password  string `json:"password"`
+			EmailCode string `json:"emailCode"`
+		}
+		if err := decodeValue(value, reflect.ValueOf(&shape).Elem(), false); err != nil {
+			return Command{}, err
+		}
+		if !validEmail(shape.Email) || !boundedText(shape.Password, 8, 64) || shape.EmailCode == "" || !optionalEmailCode.MatchString(shape.EmailCode) {
+			return Command{}, NewAppError("INVALID_INPUT")
+		}
+		command.Email, command.Password, command.EmailCode = shape.Email, shape.Password, shape.EmailCode
+	case "state", "sync", "connect", "disconnect", "logout", "repair", "check-update", "download-update", "pause-update", "cancel-update", "install-update", "diagnostics", "renewal-return", "open-download-page", "signup-config":
 		if len(object) != 1 {
 			return Command{}, NewAppError("INVALID_INPUT")
 		}

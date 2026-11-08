@@ -142,6 +142,7 @@ type ClientController struct {
 	diagnosticsMu                sync.Mutex
 	diagnosticEvents             []map[string]any
 	report                       ReportView
+	signup                       *SignupConfig
 }
 
 func NewClientController(deps ControllerDeps) *ClientController {
@@ -515,6 +516,11 @@ func (c *ClientController) View() AppView {
 	now := c.clock.Now()
 	gate := c.gateLocked()
 	view := AppView{Brand: c.deps.Build.Name, Version: c.deps.Version, Environment: c.deps.Build.Environment, Demo: c.deps.Demo, LoggedIn: c.session != nil, Connection: network.State, SelectedNode: c.preferences.NodeID, ActualNode: c.actualNode, Sync: c.syncStatus, Nodes: []NodeView{}, Preferences: clonePreferences(c.preferences), Storage: storage, HelperReady: c.network.Ready(), ProxyPort: c.network.ProxyPort(), Policy: "使用内置设置", Update: c.updateStatus, ManualUpdate: c.manualUpdateLocked(), Installing: c.installing || c.installWhenReady, PendingRenewal: c.renewalUntil > now, Download: download, Rules: rules, ShowTrafficSummary: true, Links: ViewLinks{c.linkLocked("website", p) != nil, c.linkLocked("renew", p) != nil, c.linkLocked("help", p) != nil}, Report: c.report, ReportAvailable: c.deps.Telemetry.Enabled(), Now: now}
+	if c.signup != nil {
+		signup := *c.signup
+		signup.EmailSuffixes = append([]string{}, signup.EmailSuffixes...)
+		view.Signup = &signup
+	}
 	if c.updateError != "" {
 		code := c.updateError
 		view.UpdateError = &code
@@ -859,8 +865,13 @@ func (c *ClientController) tick() {
 		if p != nil {
 			thresholds = p.UI.ExpiryReminderDays
 		}
+		warn := p == nil || p.UI.ShowTrafficSummary
 		go func() {
-			if err := c.deps.Reminders.Check(*account, thresholds, now, func() bool { return c.sessionCurrent(generation) }); err != nil {
+			current := func() bool { return c.sessionCurrent(generation) }
+			if err := c.deps.Reminders.Check(*account, thresholds, now, current); err != nil {
+				c.fail("STORAGE_FAILED")
+			}
+			if err := c.deps.Reminders.CheckQuota(*account, warn, current); err != nil {
 				c.fail("STORAGE_FAILED")
 			}
 		}()
@@ -1420,97 +1431,221 @@ func (c *ClientController) Command(ctx context.Context, raw json.RawMessage) Com
 		code := CodeOf(err)
 		if cmd.Type == "check-update" || cmd.Type == "download-update" || cmd.Type == "install-update" {
 			c.updateFailed(err)
-		} else if cmd.Type != "open-download-page" {
+		} else if cmd.Type != "open-download-page" && cmd.Type != "signup-config" {
 			c.fail(code)
 		}
-		return CommandResult{OK: false, State: c.View(), Error: code}
+		return CommandResult{OK: false, State: c.View(), Error: code, Message: DetailOf(err)}
 	}
 	c.emit()
 	return CommandResult{OK: true, State: c.View()}
+}
+
+// signIn opens a session with open (login, or sign-up which signs in too), then
+// replaces the current session with it and syncs. kind names the telemetry event.
+func (c *ClientController) signIn(ctx context.Context, kind, email string, open func(context.Context, string) (Session, error)) error {
+	if c.deps.Secure.Mode() == "locked" {
+		return NewAppError("STORAGE_LOCKED")
+	}
+	endpoints := c.pool.Candidates(c.policy.Active())
+	if len(endpoints) == 0 {
+		return NewAppError("CONFIGURATION_REQUIRED")
+	}
+	c.mu.Lock()
+	if c.loginCancel != nil {
+		c.loginCancel()
+	}
+	if c.probeCancel != nil {
+		c.probeCancel()
+	}
+	c.probeResults = map[string]savedProbe{}
+	c.loginGeneration++
+	generation := c.loginGeneration
+	loginCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	c.loginCancel = cancel
+	c.mu.Unlock()
+	defer func() {
+		cancel()
+		c.mu.Lock()
+		if generation == c.loginGeneration {
+			c.loginCancel = nil
+		}
+		c.mu.Unlock()
+	}()
+	started := time.Now()
+	// A panel that does not answer moves on to the backup, as sync does; login only
+	// ever asked the primary, so one failed request there was "cannot reach server".
+	var session Session
+	attempts, err := c.eachEndpoint(loginCtx, func(endpoint string) (e error) {
+		session, e = open(loginCtx, endpoint)
+		return e
+	})
+	c.deps.Telemetry.Record(kind, map[string]any{"ok": err == nil, "code": errorCodeField(err), "ms": time.Since(started).Milliseconds(), "attempts": attempts, "email": email}, err != nil)
+	if err != nil {
+		return err
+	}
+	c.mu.Lock()
+	fresh := !c.closing && loginCtx.Err() == nil && generation == c.loginGeneration
+	c.mu.Unlock()
+	if !fresh {
+		return NewAppError("CANCELLED")
+	}
+	c.syncer.Cancel()
+	if err := c.network.Disconnect(loginCtx); err != nil {
+		return err
+	}
+	c.mu.Lock()
+	if c.closing || loginCtx.Err() != nil || generation != c.loginGeneration {
+		c.mu.Unlock()
+		return NewAppError("CANCELLED")
+	}
+	c.session = &session
+	c.snapshot = nil
+	c.account = nil
+	c.restrictions = map[ErrorCode]bool{}
+	c.startupAttempted = false
+	c.mu.Unlock()
+	if err := c.persist(); err != nil {
+		return err
+	}
+	if !c.sessionCurrent(session.Generation) {
+		return NewAppError("CANCELLED")
+	}
+	return c.refresh(loginCtx, true)
+}
+
+// eachEndpoint calls the panel entries in order, moving on only when one could not be
+// reached; any answer, a refusal included, ends the round.
+func (c *ClientController) eachEndpoint(ctx context.Context, call func(string) error) (int, error) {
+	endpoints := c.pool.Candidates(c.policy.Active())
+	if len(endpoints) == 0 {
+		return 0, NewAppError("CONFIGURATION_REQUIRED")
+	}
+	attempts := 0
+	var err error
+	for _, endpoint := range endpoints {
+		attempts++
+		if err = call(endpoint.ID); err == nil {
+			c.pool.Success(endpoint.ID)
+			return attempts, nil
+		}
+		if CodeOf(err) != "CONTROL_UNAVAILABLE" || ctx.Err() != nil {
+			return attempts, err
+		}
+		c.pool.Failure(endpoint.ID)
+	}
+	return attempts, err
+}
+func errorCodeField(err error) string {
+	if err == nil {
+		return ""
+	}
+	return string(CodeOf(err))
+}
+
+// quickLogin asks the panel for a one-time link that logs the browser in to this
+// account on the plans page; "" when it cannot, and the plain link opens instead. The
+// link must lead to the same site as link, so an operator's own renewal page wins.
+func (c *ClientController) quickLogin(parent context.Context, link string) string {
+	passport, err := c.passport()
+	session := c.sessionCopy()
+	if err != nil || session == nil || c.deps.Demo {
+		return ""
+	}
+	ctx, cancel := context.WithTimeout(parent, 8*time.Second)
+	defer cancel()
+	started := time.Now()
+	var target string
+	_, err = c.eachEndpoint(ctx, func(endpoint string) (e error) {
+		target, e = passport.QuickLoginURL(ctx, endpoint, *session, "plan")
+		return e
+	})
+	if err == nil && !sameOrigin(target, link) {
+		err = NewAppError("INVALID_INPUT")
+	}
+	c.deps.Telemetry.Record("renew-link", map[string]any{"ok": err == nil, "code": errorCodeField(err), "ms": time.Since(started).Milliseconds()}, false)
+	if err != nil {
+		return ""
+	}
+	return target
+}
+func sameOrigin(a, b string) bool {
+	x, errA := url.Parse(a)
+	y, errB := url.Parse(b)
+	return errA == nil && errB == nil && x.Scheme == y.Scheme && strings.EqualFold(x.Host, y.Host)
+}
+
+// passport is the panel's sign-up, password reset and web login, when it has them.
+func (c *ClientController) passport() (Passport, error) {
+	if passport, ok := c.deps.Panel.(Passport); ok {
+		return passport, nil
+	}
+	return nil, NewAppError("CONFIGURATION_REQUIRED")
 }
 func (c *ClientController) execute(ctx context.Context, cmd Command) error {
 	switch cmd.Type {
 	case "state":
 		return nil
 	case "login":
-		if c.deps.Secure.Mode() == "locked" {
-			return NewAppError("STORAGE_LOCKED")
-		}
-		endpoints := c.pool.Candidates(c.policy.Active())
-		if len(endpoints) == 0 {
-			return NewAppError("CONFIGURATION_REQUIRED")
-		}
-		c.mu.Lock()
-		if c.loginCancel != nil {
-			c.loginCancel()
-		}
-		if c.probeCancel != nil {
-			c.probeCancel()
-		}
-		c.probeResults = map[string]savedProbe{}
-		c.loginGeneration++
-		generation := c.loginGeneration
-		loginCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
-		c.loginCancel = cancel
-		c.mu.Unlock()
-		defer func() {
-			cancel()
-			c.mu.Lock()
-			if generation == c.loginGeneration {
-				c.loginCancel = nil
-			}
-			c.mu.Unlock()
-		}()
-		started := time.Now()
-		// A panel that does not answer moves on to the backup, as sync does; login only
-		// ever asked the primary, so one failed request there was "cannot reach server".
-		var session Session
-		var err error
-		attempts := 0
-		for _, endpoint := range endpoints {
-			attempts++
-			session, err = c.deps.Panel.Login(loginCtx, endpoint.ID, cmd.Email, cmd.Password)
-			if err == nil {
-				c.pool.Success(endpoint.ID)
-				break
-			}
-			if CodeOf(err) != "CONTROL_UNAVAILABLE" || loginCtx.Err() != nil {
-				break
-			}
-			c.pool.Failure(endpoint.ID)
-		}
-		c.deps.Telemetry.Record("login", map[string]any{"ok": err == nil, "code": string(CodeOf(err)), "ms": time.Since(started).Milliseconds(), "attempts": attempts, "email": cmd.Email}, err != nil)
+		return c.signIn(ctx, "login", cmd.Email, func(ctx context.Context, endpoint string) (Session, error) {
+			return c.deps.Panel.Login(ctx, endpoint, cmd.Email, cmd.Password)
+		})
+	case "register":
+		passport, err := c.passport()
 		if err != nil {
 			return err
 		}
-		c.mu.Lock()
-		fresh := !c.closing && loginCtx.Err() == nil && generation == c.loginGeneration
-		c.mu.Unlock()
-		if !fresh {
-			return NewAppError("CANCELLED")
+		return c.signIn(ctx, "register", cmd.Email, func(ctx context.Context, endpoint string) (Session, error) {
+			return passport.Register(ctx, endpoint, Registration{Email: cmd.Email, Password: cmd.Password, EmailCode: cmd.EmailCode, InviteCode: cmd.InviteCode})
+		})
+	case "reset-password":
+		passport, err := c.passport()
+		if err != nil {
+			return err
 		}
-		c.syncer.Cancel()
-		if err := c.network.Disconnect(loginCtx); err != nil {
+		resetCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+		defer cancel()
+		started := time.Now()
+		// The code is used up once accepted: a failed sign-in afterwards must not
+		// reset again on the backup entry, so resetting and signing in are two rounds.
+		attempts, err := c.eachEndpoint(resetCtx, func(endpoint string) error {
+			return passport.ResetPassword(resetCtx, endpoint, cmd.Email, cmd.Password, cmd.EmailCode)
+		})
+		c.deps.Telemetry.Record("reset-password", map[string]any{"ok": err == nil, "code": errorCodeField(err), "ms": time.Since(started).Milliseconds(), "attempts": attempts, "email": cmd.Email}, err != nil)
+		if err != nil {
+			return err
+		}
+		return c.signIn(ctx, "login", cmd.Email, func(ctx context.Context, endpoint string) (Session, error) {
+			return c.deps.Panel.Login(ctx, endpoint, cmd.Email, cmd.Password)
+		})
+	case "send-email-code":
+		passport, err := c.passport()
+		if err != nil {
+			return err
+		}
+		sendCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+		defer cancel()
+		_, err = c.eachEndpoint(sendCtx, func(endpoint string) error {
+			return passport.SendEmailCode(sendCtx, endpoint, cmd.Email, cmd.Purpose == "reset")
+		})
+		return err
+	case "signup-config":
+		passport, err := c.passport()
+		if err != nil {
+			return err
+		}
+		configCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+		defer cancel()
+		var config SignupConfig
+		if _, err = c.eachEndpoint(configCtx, func(endpoint string) (e error) {
+			config, e = passport.SignupConfig(configCtx, endpoint)
+			return e
+		}); err != nil {
 			return err
 		}
 		c.mu.Lock()
-		if c.closing || loginCtx.Err() != nil || generation != c.loginGeneration {
-			c.mu.Unlock()
-			return NewAppError("CANCELLED")
-		}
-		c.session = &session
-		c.snapshot = nil
-		c.account = nil
-		c.restrictions = map[ErrorCode]bool{}
-		c.startupAttempted = false
+		c.signup = &config
 		c.mu.Unlock()
-		if err := c.persist(); err != nil {
-			return err
-		}
-		if !c.sessionCurrent(session.Generation) {
-			return NewAppError("CANCELLED")
-		}
-		return c.refresh(loginCtx, true)
+		return nil
 	case "sync":
 		c.mu.Lock()
 		if !c.lastManual.IsZero() && time.Since(c.lastManual) < 10*time.Second {
@@ -1736,7 +1871,11 @@ func (c *ClientController) execute(ctx context.Context, cmd Command) error {
 		}
 		hint := ""
 		if cmd.Link == "renew" {
-			if account := c.View().Account; account != nil {
+			// A one-time link opens the plans page already logged in to this account, so
+			// there is no second login in the browser and no asking which account it shows.
+			if quick := c.quickLogin(ctx, target); quick != "" {
+				target = quick
+			} else if account := c.View().Account; account != nil {
 				hint = account.Email
 			}
 		}

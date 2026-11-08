@@ -37,3 +37,24 @@ func (*DemoPanel) FetchNodes(context.Context, SubscriptionDescriptor) (string, e
 	return strings.Join(lines, "\n"), nil
 }
 func (*DemoPanel) Logout(context.Context, string, Session) error { return nil }
+
+// The development fixture also signs people up and resets passwords; the code is 123456.
+func (*DemoPanel) SignupConfig(ctx context.Context, endpoint string) (SignupConfig, error) {
+	return SignupConfig{EmailCode: true, InviteRequired: true, EmailSuffixes: []string{"qq.com", "163.com", "gmail.com"}, InApp: true}, nil
+}
+func (*DemoPanel) SendEmailCode(context.Context, string, string, bool) error { return nil }
+func (p *DemoPanel) Register(ctx context.Context, endpoint string, form Registration) (Session, error) {
+	if form.EmailCode != "123456" {
+		return Session{}, &AppError{Code: "PANEL_REJECTED", Detail: "邮箱验证码有误"}
+	}
+	return p.Login(ctx, endpoint, form.Email, form.Password)
+}
+func (*DemoPanel) ResetPassword(ctx context.Context, endpoint, email, password, code string) error {
+	if code != "123456" {
+		return &AppError{Code: "PANEL_REJECTED", Detail: "邮箱验证码有误"}
+	}
+	return nil
+}
+func (*DemoPanel) QuickLoginURL(context.Context, string, Session, string) (string, error) {
+	return "", NewAppError("CONFIGURATION_REQUIRED")
+}

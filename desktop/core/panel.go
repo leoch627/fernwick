@@ -32,26 +32,30 @@ type PanelFields struct {
 	SubscriptionURL string `json:"subscriptionUrl"`
 }
 type PanelContract struct {
-	Verified                    bool        `json:"verified"`
-	Deployment                  string      `json:"deployment"`
-	BranchCommit                string      `json:"branchCommit"`
-	LoginPath                   string      `json:"loginPath"`
-	AccountPath                 string      `json:"accountPath"`
-	DescriptorPath              string      `json:"descriptorPath"`
-	AuthPrefix                  string      `json:"authPrefix"`
-	ExpiryUnit                  string      `json:"expiryUnit"`
-	LogoutPath                  *string     `json:"logoutPath,nullable" default:"null"`
-	ActivePlanAuthorizesService bool        `json:"activePlanAuthorizesService"`
-	NullExpiryIsUnlimited       bool        `json:"nullExpiryIsUnlimited"`
-	ZeroQuotaIsUnlimited        bool        `json:"zeroQuotaIsUnlimited"`
-	Fields                      PanelFields `json:"fields"`
+	Verified       bool    `json:"verified"`
+	Deployment     string  `json:"deployment"`
+	BranchCommit   string  `json:"branchCommit"`
+	LoginPath      string  `json:"loginPath"`
+	AccountPath    string  `json:"accountPath"`
+	DescriptorPath string  `json:"descriptorPath"`
+	AuthPrefix     string  `json:"authPrefix"`
+	ExpiryUnit     string  `json:"expiryUnit"`
+	LogoutPath     *string `json:"logoutPath,nullable" default:"null"`
+	// Passport names the sign-up, password reset and one-time web login paths; without
+	// it the client sends people to the website for those.
+	Passport                    *PassportPaths `json:"passport,nullable" default:"null"`
+	ActivePlanAuthorizesService bool           `json:"activePlanAuthorizesService"`
+	NullExpiryIsUnlimited       bool           `json:"nullExpiryIsUnlimited"`
+	ZeroQuotaIsUnlimited        bool           `json:"zeroQuotaIsUnlimited"`
+	Fields                      PanelFields    `json:"fields"`
 }
 
 var apiPathPattern = regexp.MustCompile(`^/api/[a-zA-Z0-9/_-]+$`)
 var sessionClaimPattern = regexp.MustCompile(`^[a-zA-Z0-9-]{1,128}$`)
 
 func (c PanelContract) Validate() error {
-	return invalidUnless(apiPathPattern.MatchString(c.LoginPath) && apiPathPattern.MatchString(c.AccountPath) && apiPathPattern.MatchString(c.DescriptorPath) && nullableCheck(c.LogoutPath, apiPathPattern.MatchString) && oneOf(c.AuthPrefix, "", "Bearer ") && c.ExpiryUnit == "seconds")
+	passport := c.Passport == nil || apiPathPattern.MatchString(c.Passport.ConfigPath) && apiPathPattern.MatchString(c.Passport.EmailCodePath) && apiPathPattern.MatchString(c.Passport.RegisterPath) && apiPathPattern.MatchString(c.Passport.ResetPath) && apiPathPattern.MatchString(c.Passport.QuickLoginPath)
+	return invalidUnless(apiPathPattern.MatchString(c.LoginPath) && apiPathPattern.MatchString(c.AccountPath) && apiPathPattern.MatchString(c.DescriptorPath) && nullableCheck(c.LogoutPath, apiPathPattern.MatchString) && passport && oneOf(c.AuthPrefix, "", "Bearer ") && c.ExpiryUnit == "seconds")
 }
 
 type missingValue struct{}
@@ -272,12 +276,13 @@ func (p *V2BoardAdapter) Login(ctx context.Context, endpoint, email, password st
 		Email    string `json:"email"`
 		Password string `json:"password"`
 	}{email, password})
-	response, err := p.http.Request(ctx, HTTPRequest{URL: u, Method: "POST", Headers: map[string]string{"content-type": "application/json"}, Body: string(body)})
+	// zh-CN: the panel then explains a refusal in Chinese ("邮箱或密码错误").
+	response, err := p.http.Request(ctx, HTTPRequest{URL: u, Method: "POST", Headers: map[string]string{"content-type": "application/json", "content-language": "zh-CN"}, Body: string(body)})
 	if err != nil {
 		return Session{}, err
 	}
 	if response.Status == 500 {
-		return Session{}, NewAppError("LOGIN_FAILED")
+		return Session{}, &AppError{Code: "LOGIN_FAILED", Detail: panelMessage(response.Body)}
 	}
 	if err = RequireSuccess(response, "login"); err != nil {
 		return Session{}, err
@@ -286,8 +291,14 @@ func (p *V2BoardAdapter) Login(ctx context.Context, endpoint, email, password st
 	if err != nil {
 		return Session{}, err
 	}
-	token, ok := data["auth_data"].(string)
-	if !ok || jsUTF16Length(token) > 8192 || strings.ContainsAny(token, "\r\n") {
+	return p.sessionFor(ctx, endpoint, email, data["auth_data"])
+}
+
+// sessionFor checks the account access token a login or sign-up returned and reads the
+// account it belongs to.
+func (p *V2BoardAdapter) sessionFor(ctx context.Context, endpoint, email string, value any) (Session, error) {
+	token, ok := value.(string)
+	if !ok || token == "" || jsUTF16Length(token) > 8192 || strings.ContainsAny(token, "\r\n") {
 		return Session{}, NewAppError("LOGIN_FAILED")
 	}
 	session := Session{Email: email, Token: token, Generation: newUUID()}

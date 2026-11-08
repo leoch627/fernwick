@@ -110,7 +110,7 @@ export class ClientController {
     return {
       brand: this.deps.build.name, version: this.deps.version ?? '0.1.0', environment: this.deps.build.environment, demo: this.deps.demo, loggedIn: !!this.session,
       account: a ? { email: mask(a.email), planName: a.planName, expiryKind: a.expiryKind, expiresAt: a.expiresAt, quotaKind: a.quotaKind, usedBytes: a.usedBytes, quotaBytes: a.quotaBytes, observedAt: a.observedAt, status: restriction(a, this.clock.now()) ? messages[restriction(a, this.clock.now())!] : a.serviceAllowed === 'yes' ? '套餐可用' : '权益待验证' } : null,
-      report: { status: 'idle', code: null }, reportAvailable: false,
+      report: { status: 'idle', code: null }, reportAvailable: false, signup: null,
       connection: this.network.state, selectedNode: this.preferences.nodeId, actualNode: this.actualNode,
       sync: this.syncStatus, lastSync: this.snapshot?.fullSyncCompletedAt ?? null, usableUntil: this.snapshot?.usableUntil ?? null,
       error: this.error ?? (this.session && this.startupAttempted ? gate : null),

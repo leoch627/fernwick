@@ -20,11 +20,15 @@ var Messages = map[ErrorCode]string{
 	"UPDATE_VERIFY_FAILED": "更新信息或安装包未通过安全校验，请重新下载；仍失败请联系客服", "UPDATE_DOWNLOAD_FAILED": "更新下载中断，请检查网络后重试，或手动下载安装包", "STORAGE_LOCKED": "安全存储暂时无法解锁，请解锁系统钥匙串后重试",
 	"UPDATE_OPEN_FAILED": "无法打开手动下载页，请重试或从官网下载", "UPDATE_INSTALL_FAILED": "更新安装没有完成，请关闭程序后手动安装",
 	"STORAGE_FAILED": "无法安全保存数据，本次变更未提交", "CANCELLED": "操作已取消", "INVALID_INPUT": "输入不符合要求",
+	"PANEL_REJECTED": "没有成功，请检查填写的内容后重试",
 }
 
 type AppError struct {
 	Code         ErrorCode
 	RetryAfterMs int64
+	// Detail is the panel's own explanation (in Chinese), e.g. "邀请码无效", shown in
+	// place of the generic message. It never holds secrets: the panel wrote it for users.
+	Detail string
 }
 
 func (e *AppError) Error() string {
@@ -34,6 +38,15 @@ func (e *AppError) Error() string {
 	return Messages["CONTROL_UNAVAILABLE"]
 }
 func NewAppError(code ErrorCode) error { return &AppError{Code: code} }
+
+// DetailOf is the panel's explanation carried by err, if any.
+func DetailOf(err error) string {
+	var app *AppError
+	if errors.As(err, &app) && app != nil {
+		return app.Detail
+	}
+	return ""
+}
 func CodeOf(err error) ErrorCode {
 	var app *AppError
 	if errors.As(err, &app) && app != nil {

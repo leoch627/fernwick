@@ -204,6 +204,9 @@ type Command struct {
 	Note        string       `json:"note,omitempty"`
 	NodeID      string       `json:"nodeId,omitempty"`
 	Favorite    bool         `json:"favorite,omitempty"`
+	EmailCode   string       `json:"emailCode,omitempty"`
+	InviteCode  string       `json:"inviteCode,omitempty"`
+	Purpose     string       `json:"purpose,omitempty"`
 }
 
 const MaxSafeInteger int64 = 9007199254740991

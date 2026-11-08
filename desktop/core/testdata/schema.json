@@ -434,6 +434,168 @@
       "valid": false
     },
     {
+      "name": "signup config",
+      "schema": "command",
+      "raw": "{\"type\":\"signup-config\"}",
+      "valid": true
+    },
+    {
+      "name": "signup config extra field",
+      "schema": "command",
+      "raw": "{\"type\":\"signup-config\",\"email\":\"alice@example.invalid\"}",
+      "valid": false
+    },
+    {
+      "name": "email code purpose register",
+      "schema": "command",
+      "raw": "{\"type\":\"send-email-code\",\"email\":\"alice@example.invalid\",\"purpose\":\"register\"}",
+      "valid": true
+    },
+    {
+      "name": "email code purpose reset",
+      "schema": "command",
+      "raw": "{\"type\":\"send-email-code\",\"email\":\"alice@example.invalid\",\"purpose\":\"reset\"}",
+      "valid": true
+    },
+    {
+      "name": "email code purpose login",
+      "schema": "command",
+      "raw": "{\"type\":\"send-email-code\",\"email\":\"alice@example.invalid\",\"purpose\":\"login\"}",
+      "valid": false
+    },
+    {
+      "name": "email code invalid email",
+      "schema": "command",
+      "raw": "{\"type\":\"send-email-code\",\"email\":\"not-an-email\",\"purpose\":\"register\"}",
+      "valid": false
+    },
+    {
+      "name": "register valid",
+      "schema": "command",
+      "raw": "{\"type\":\"register\",\"email\":\"alice@example.invalid\",\"password\":\"password1\",\"emailCode\":\"123456\",\"inviteCode\":\"abcd\"}",
+      "valid": true
+    },
+    {
+      "name": "register code \"\"",
+      "schema": "command",
+      "raw": "{\"type\":\"register\",\"email\":\"alice@example.invalid\",\"password\":\"password1\",\"emailCode\":\"\",\"inviteCode\":\"abcd\"}",
+      "valid": true
+    },
+    {
+      "name": "register code \"12345\"",
+      "schema": "command",
+      "raw": "{\"type\":\"register\",\"email\":\"alice@example.invalid\",\"password\":\"password1\",\"emailCode\":\"12345\",\"inviteCode\":\"abcd\"}",
+      "valid": false
+    },
+    {
+      "name": "register code \"1234567\"",
+      "schema": "command",
+      "raw": "{\"type\":\"register\",\"email\":\"alice@example.invalid\",\"password\":\"password1\",\"emailCode\":\"1234567\",\"inviteCode\":\"abcd\"}",
+      "valid": false
+    },
+    {
+      "name": "register code \"12345a\"",
+      "schema": "command",
+      "raw": "{\"type\":\"register\",\"email\":\"alice@example.invalid\",\"password\":\"password1\",\"emailCode\":\"12345a\",\"inviteCode\":\"abcd\"}",
+      "valid": false
+    },
+    {
+      "name": "register code \"１２３４５６\"",
+      "schema": "command",
+      "raw": "{\"type\":\"register\",\"email\":\"alice@example.invalid\",\"password\":\"password1\",\"emailCode\":\"１２３４５６\",\"inviteCode\":\"abcd\"}",
+      "valid": false
+    },
+    {
+      "name": "register code \" 123456\"",
+      "schema": "command",
+      "raw": "{\"type\":\"register\",\"email\":\"alice@example.invalid\",\"password\":\"password1\",\"emailCode\":\" 123456\",\"inviteCode\":\"abcd\"}",
+      "valid": false
+    },
+    {
+      "name": "register password 7 code units",
+      "schema": "command",
+      "raw": "{\"type\":\"register\",\"email\":\"alice@example.invalid\",\"password\":\"1234567\",\"emailCode\":\"123456\",\"inviteCode\":\"abcd\"}",
+      "valid": false
+    },
+    {
+      "name": "register password 8 code units",
+      "schema": "command",
+      "raw": "{\"type\":\"register\",\"email\":\"alice@example.invalid\",\"password\":\"12345678\",\"emailCode\":\"123456\",\"inviteCode\":\"abcd\"}",
+      "valid": true
+    },
+    {
+      "name": "register password 64 code units",
+      "schema": "command",
+      "raw": "{\"type\":\"register\",\"email\":\"alice@example.invalid\",\"password\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\",\"emailCode\":\"123456\",\"inviteCode\":\"abcd\"}",
+      "valid": true
+    },
+    {
+      "name": "register password 65 code units",
+      "schema": "command",
+      "raw": "{\"type\":\"register\",\"email\":\"alice@example.invalid\",\"password\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\",\"emailCode\":\"123456\",\"inviteCode\":\"abcd\"}",
+      "valid": false
+    },
+    {
+      "name": "register password 16 code units",
+      "schema": "command",
+      "raw": "{\"type\":\"register\",\"email\":\"alice@example.invalid\",\"password\":\"🚄🚄🚄🚄🚄🚄🚄🚄\",\"emailCode\":\"123456\",\"inviteCode\":\"abcd\"}",
+      "valid": true
+    },
+    {
+      "name": "register password 130 code units",
+      "schema": "command",
+      "raw": "{\"type\":\"register\",\"email\":\"alice@example.invalid\",\"password\":\"🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄🚄\",\"emailCode\":\"123456\",\"inviteCode\":\"abcd\"}",
+      "valid": false
+    },
+    {
+      "name": "register empty invitation",
+      "schema": "command",
+      "raw": "{\"type\":\"register\",\"email\":\"alice@example.invalid\",\"password\":\"password1\",\"emailCode\":\"123456\",\"inviteCode\":\"\"}",
+      "valid": true
+    },
+    {
+      "name": "register long invitation",
+      "schema": "command",
+      "raw": "{\"type\":\"register\",\"email\":\"alice@example.invalid\",\"password\":\"password1\",\"emailCode\":\"123456\",\"inviteCode\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"}",
+      "valid": false
+    },
+    {
+      "name": "register missing invitation",
+      "schema": "command",
+      "raw": "{\"type\":\"register\",\"email\":\"alice@example.invalid\",\"password\":\"password1\",\"emailCode\":\"123456\"}",
+      "valid": false
+    },
+    {
+      "name": "register unknown field",
+      "schema": "command",
+      "raw": "{\"type\":\"register\",\"email\":\"alice@example.invalid\",\"password\":\"password1\",\"emailCode\":\"123456\",\"inviteCode\":\"abcd\",\"recaptcha\":\"token\"}",
+      "valid": false
+    },
+    {
+      "name": "reset valid",
+      "schema": "command",
+      "raw": "{\"type\":\"reset-password\",\"email\":\"alice@example.invalid\",\"password\":\"password1\",\"emailCode\":\"123456\"}",
+      "valid": true
+    },
+    {
+      "name": "reset empty code",
+      "schema": "command",
+      "raw": "{\"type\":\"reset-password\",\"email\":\"alice@example.invalid\",\"password\":\"password1\",\"emailCode\":\"\"}",
+      "valid": false
+    },
+    {
+      "name": "reset short password",
+      "schema": "command",
+      "raw": "{\"type\":\"reset-password\",\"email\":\"alice@example.invalid\",\"password\":\"short\",\"emailCode\":\"123456\"}",
+      "valid": false
+    },
+    {
+      "name": "reset invitation field",
+      "schema": "command",
+      "raw": "{\"type\":\"reset-password\",\"email\":\"alice@example.invalid\",\"password\":\"password1\",\"emailCode\":\"123456\",\"inviteCode\":\"\"}",
+      "valid": false
+    },
+    {
       "name": "preferences default",
       "schema": "preferences",
       "raw": "{\"mode\":\"rule\",\"nodeId\":null,\"autoConnect\":false,\"launchAtLogin\":false,\"closeBehavior\":\"tray\",\"theme\":\"system\",\"tunnel\":\"proxy\",\"adBlock\":true,\"favoriteNodeIds\":[],\"recentNodeIds\":[]}",

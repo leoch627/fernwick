@@ -8,7 +8,7 @@ export function previewBridge(): ClientBridge {
     connection: 'Disconnected', selectedNode: null, actualNode: null, sync: 'Fresh', lastSync: Date.now(), usableUntil: Date.now() + 86400000, error: null,
     nodes: [['🇯🇵 Tokyo 01', 'JP'], ['🇸🇬 Singapore 01', 'SG'], ['🇭🇰 Hong Kong 01', 'HK'], ['🇺🇸 Los Angeles 01', 'US']].map(([name, region], i): NodeView => ({ id: String(i).padStart(64, '0'), name: name!, group: '示例节点', region: region!, protocol: 'vless', compatible: true, reason: null, latency: null, probe: 'untested' }))
       .concat({ id: '9'.repeat(64), name: '🇲🇴 Macau', group: '示例节点', region: 'MO', protocol: 'vless', compatible: false, reason: '运营暂时停用', latency: null, probe: 'untested' }),
-    preferences: { ...defaultPreferences }, storage: 'memory', helperReady: false, proxyPort: 0, policy: '使用内置设置', announcement: null, update: '发现新版本 0.3.0', manualUpdate: false, installing: false, pendingRenewal: false, links: { website: true, renew: true, help: true }, report: { status: 'idle', code: null }, reportAvailable: false, now: Date.now(),
+    preferences: { ...defaultPreferences }, storage: 'memory', helperReady: false, proxyPort: 0, policy: '使用内置设置', announcement: null, update: '发现新版本 0.3.0', manualUpdate: false, installing: false, pendingRenewal: false, links: { website: true, renew: true, help: true }, report: { status: 'idle', code: null }, reportAvailable: false, signup: null, now: Date.now(),
     download: { status: 'available', version: '0.3.0', received: 0, total: 25165824, error: null }, rules: '使用内置大陆分流规则', showTrafficSummary: true,
   };
   const listeners = new Set<(s: AppView) => void>();
@@ -27,7 +27,13 @@ export function previewBridge(): ClientBridge {
   };
   return {
     async command(command) {
-      let error: AppView['error'] = null;
+      let error: AppView['error'] = null; let message: string | undefined;
+      // Sign-up and reset accept the code 123456, so both forms can be tried here.
+      if (command.type === 'signup-config') state = { ...state, signup: { emailCode: true, inviteRequired: true, emailSuffixes: ['qq.com', '163.com', 'gmail.com'], inApp: true } };
+      if (command.type === 'register' || command.type === 'reset-password') {
+        if (command.emailCode === '123456') state = { ...state, loggedIn: true };
+        else { error = 'PANEL_REJECTED'; message = '邮箱验证码有误'; }
+      }
       if (command.type === 'preferences') state = { ...state, preferences: { ...command.preferences, favoriteNodeIds: [...state.preferences.favoriteNodeIds], recentNodeIds: [...state.preferences.recentNodeIds] }, selectedNode: command.preferences.nodeId };
       if (command.type === 'favorite-node') {
         const ids = state.preferences.favoriteNodeIds.filter(id => id !== command.nodeId);
@@ -41,7 +47,7 @@ export function previewBridge(): ClientBridge {
       if (command.type === 'login') error = 'CONFIGURATION_REQUIRED';
       if (command.type === 'install-update' || command.type === 'download-update') download(command.type === 'install-update');
       if (command.type === 'check-update') state.update = '发现新版本 0.3.0';
-      state = { ...state, now: Date.now(), error }; listeners.forEach(fn => fn(state)); return { ok: !error, state, ...(error ? { error } : {}) };
+      state = { ...state, now: Date.now(), error }; listeners.forEach(fn => fn(state)); return { ok: !error, state, ...(error ? { error } : {}), ...(message ? { message } : {}) };
     },
     subscribe(fn) { listeners.add(fn); return () => { listeners.delete(fn); }; },
   };
