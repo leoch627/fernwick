@@ -88,9 +88,12 @@ async function payload(version) {
       files.push({ key: `releases/${version}/${file}`, ...rest });
     }
   }
+  // The endpoint signs these links into the policy, which carries only these three:
+  // customer service (links.support) is fixed at build time and never sent.
+  const { website, renew, help } = config.links;
   const brand = {
     productId: config.productId, name: config.name, environment: config.environment, channel: config.channel,
-    endpointIds: config.apiEndpoints.map(e => e.id), links: config.links,
+    endpointIds: config.apiEndpoints.map(e => e.id), links: { website, renew, help },
   };
   process.stdout.write(JSON.stringify({ brand, version, files }));
 }
