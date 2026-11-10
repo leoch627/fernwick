@@ -58,6 +58,9 @@ try {
   await page.getByRole('heading', { name: '选择线路' }).waitFor();
   await page.getByRole('heading', { name: /新加坡/ }).waitFor();
   assert.equal(await page.getByText(/^[0-9]+ ms$/).count(), 0);
+  // Only the sheet scrolls while it is open: Windows would draw the page's scrollbar beside it.
+  const rootOverflow = () => page.evaluate(() => getComputedStyle(document.documentElement).overflowY);
+  assert.equal(await rootOverflow(), 'hidden');
   await page.getByRole('button', { name: '收藏 Singapore 01', exact: true }).click();
   await page.getByRole('heading', { name: '选择线路' }).waitFor();
   await page.getByRole('tab', { name: '收藏 1', exact: true }).click();
@@ -69,6 +72,7 @@ try {
   await page.getByRole('button', { name: 'Singapore 01', exact: true }).click();
   await page.getByRole('heading', { name: '选择线路' }).waitFor({ state: 'detached' });
   await page.getByText('Singapore 01', { exact: true }).waitFor();
+  assert.equal(await rootOverflow(), 'visible');
 
   // Home: system proxy by default; TUN and ad blocking are one click away.
   assert.equal(await page.getByRole('radio', { name: '系统代理' }).getAttribute('aria-checked'), 'true');
