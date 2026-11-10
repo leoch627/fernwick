@@ -53,6 +53,12 @@ type nativeReply struct {
 	Signature string        `json:"signature,omitempty"`
 	Proof     *NetworkProof `json:"proof,omitempty"`
 	HTTP      *HTTPResponse `json:"http,omitempty"`
+	// Traffic is the core's byte counters, sent with each heartbeat while connected.
+	Traffic *nativeTraffic `json:"traffic,omitempty"`
+}
+type nativeTraffic struct {
+	Up   uint64 `json:"up"`
+	Down uint64 `json:"down"`
 }
 type NativeDriver struct {
 	mu                 sync.Mutex
@@ -65,6 +71,7 @@ type NativeDriver struct {
 	ticket             string
 	deadline           int64
 	heartbeatCancel    context.CancelFunc
+	traffic            TrafficSample
 	closing            bool
 	installRunning     *networkFuture
 	dial               func(context.Context, string) (net.Conn, error)
@@ -436,6 +443,7 @@ func (n *NativeDriver) Prepare(ctx context.Context, candidate Candidate) (string
 	}
 	n.mu.Lock()
 	n.ticket = reply.Ticket
+	n.traffic = TrafficSample{}
 	if n.heartbeatCancel != nil {
 		n.heartbeatCancel()
 	}
@@ -464,6 +472,13 @@ func (n *NativeDriver) heartbeat(ctx context.Context, ticket string) {
 			reply, err := n.rpc(ctx, "heartbeat", map[string]any{"ticket": ticket, "authorizedUntil": deadline})
 			if err == nil && reply.Owned && reply.State != "Disconnected" && reply.State != "RecoveryRequired" {
 				missed = 0
+				if reply.Traffic != nil {
+					n.mu.Lock()
+					if n.ticket == ticket {
+						n.traffic = TrafficSample{Up: reply.Traffic.Up, Down: reply.Traffic.Down, At: time.Now()}
+					}
+					n.mu.Unlock()
+				}
 				continue
 			}
 			code := heartbeatFailure(reply, err)
@@ -536,9 +551,20 @@ func (n *NativeDriver) Commit(ctx context.Context, ticket string) error {
 	_, err := n.rpc(ctx, "commit", map[string]any{"ticket": ticket})
 	return err
 }
+
+// Traffic is the byte counters from the latest heartbeat, while it is recent.
+func (n *NativeDriver) Traffic(context.Context) (TrafficSample, bool) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if n.closing || n.ticket == "" || n.traffic.At.IsZero() || time.Since(n.traffic.At) > 3*time.Second {
+		return TrafficSample{}, false
+	}
+	return n.traffic, true
+}
 func (n *NativeDriver) Cleanup(ctx context.Context) error {
 	n.mu.Lock()
 	n.closing = true
+	n.traffic = TrafficSample{}
 	if n.heartbeatCancel != nil {
 		n.heartbeatCancel()
 		n.heartbeatCancel = nil

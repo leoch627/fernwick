@@ -3,8 +3,10 @@ package core
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -57,4 +59,55 @@ func (*DemoPanel) ResetPassword(ctx context.Context, endpoint, email, password, 
 }
 func (*DemoPanel) QuickLoginURL(context.Context, string, Session, string) (string, error) {
 	return "", NewAppError("CONFIGURATION_REQUIRED")
+}
+func (*DemoPanel) Invite(context.Context, string, Session) (InviteView, error) {
+	return InviteView{Code: "DEMO2026", Invited: 3}, nil
+}
+
+// DemoDriver pretends to connect for the development fixture: it changes nothing on
+// the system and makes up traffic, so the connected window and tray can be seen.
+type DemoDriver struct {
+	mu            sync.Mutex
+	started, last time.Time
+	down          float64
+}
+
+func (*DemoDriver) Verified() bool { return true }
+func (*DemoDriver) Prepare(ctx context.Context, _ Candidate) (string, error) {
+	if ctx.Err() != nil {
+		return "", NewAppError("CANCELLED")
+	}
+	return "demo", nil
+}
+func (*DemoDriver) Protect(context.Context, string, time.Time) error { return nil }
+func (d *DemoDriver) Start(context.Context, string) error {
+	d.mu.Lock()
+	d.started, d.last, d.down = time.Now(), time.Now(), 0
+	d.mu.Unlock()
+	return nil
+}
+func (*DemoDriver) Probe(context.Context, string) (NetworkProof, error) {
+	return NetworkProof{TCP: true, DNS: true}, nil
+}
+func (*DemoDriver) Commit(context.Context, string) error { return nil }
+func (d *DemoDriver) Cleanup(context.Context) error {
+	d.mu.Lock()
+	d.started = time.Time{}
+	d.mu.Unlock()
+	return nil
+}
+
+// Traffic rises and falls between 1 KB/s and 3 MB/s down every 40 seconds, on a log
+// scale; up is a tenth of it.
+func (d *DemoDriver) Traffic(context.Context) (TrafficSample, bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.started.IsZero() {
+		return TrafficSample{}, false
+	}
+	now := time.Now()
+	phase := now.Sub(d.started).Seconds() * 2 * math.Pi / 40
+	d.down += now.Sub(d.last).Seconds() * 1024 * math.Pow(3000, (1-math.Cos(phase))/2)
+	d.last = now
+	return TrafficSample{Up: uint64(d.down / 10), Down: uint64(d.down), At: now}, true
 }

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
-import type { AppView, ClientBridge, NodeView } from '../shared/view';
+import type { AppView, ClientBridge, NodeView, TrafficView } from '../shared/view';
 import type { Command, Preferences } from '../shared/schema';
 import { messages, type ErrorCode } from '../shared/errors';
 import { previewBridge } from './preview';
@@ -223,8 +223,23 @@ function ReportPanel({ state, run }: { state: AppView; run(command: Command): Pr
   </div>;
 }
 
+// New accounts need an invite code, so the account's own code is one tap away.
+function InvitePanel({ state, run }: { state: AppView; run(command: Command): Promise<boolean> }) {
+  const [copied, setCopied] = useState(false); const [failed, setFailed] = useState(false);
+  const fetch = () => { setFailed(false); void run({ type: 'invite' }).then(ok => setFailed(!ok)); };
+  useEffect(() => { if (!state.invite) fetch(); }, []);
+  const invite = state.invite;
+  if (!invite) return <div className="report">{failed ? <button className="secondary" onClick={fetch}>重试</button> : <p className="muted">正在获取邀请码…</p>}</div>;
+  return <div className="report sent">
+    <p>邀请码</p><strong className="code" aria-label="邀请码">{invite.code}</strong>
+    <button className="secondary" onClick={() => { void navigator.clipboard?.writeText(invite.code).then(() => setCopied(true)); }}>{copied ? '已复制' : '复制邀请码'}</button>
+    {invite.invited > 0 && <p className="muted">已邀请 {invite.invited} 人</p>}
+  </div>;
+}
+
 function SettingsSheet({ state, busy, report, close, run, prefs }: { state: AppView; busy: string | null; report: boolean; close(): void; run(command: Command): Promise<boolean>; prefs(change: Partial<Preferences>): void }) {
   const [reporting, setReporting] = useState(report || state.report.status !== 'idle');
+  const [inviting, setInviting] = useState(false);
   const download = state.download;
   return <Sheet title="设置" close={close}>
     <div className="group">
@@ -238,9 +253,14 @@ function SettingsSheet({ state, busy, report, close, run, prefs }: { state: AppV
       <div className="row"><span><strong>开机自动启动</strong></span><button role="switch" aria-checked={state.preferences.launchAtLogin} aria-label="开机自动启动" className={`toggle ${state.preferences.launchAtLogin ? 'on' : ''}`} onClick={() => prefs({ launchAtLogin: !state.preferences.launchAtLogin })}/></div>
       <div className="row"><span><strong>全局代理</strong></span><button role="switch" aria-checked={state.preferences.mode === 'global'} aria-label="全局代理" className={`toggle ${state.preferences.mode === 'global' ? 'on' : ''}`} onClick={() => prefs({ mode: state.preferences.mode === 'global' ? 'rule' : 'global' })}/></div>
     </div>
+    {state.loggedIn && <div className="group">
+      <button className="row" onClick={() => setInviting(!inviting)} aria-expanded={inviting}><span><strong>邀请好友</strong></span><Icon name="chevron" size={16}/></button>
+      {inviting && <InvitePanel state={state} run={run}/>}
+    </div>}
     <div className="group">
       <button className="row" onClick={() => setReporting(!reporting)} aria-expanded={reporting}><span><strong>上报问题</strong></span><Icon name="chevron" size={16}/></button>
       {reporting && <ReportPanel state={state} run={run}/>}
+      {state.links.support && <button className="row" onClick={() => void run({ type: 'open-link', link: 'support' })}><span><strong>联系客服</strong></span><Icon name="chevron" size={16}/></button>}
     </div>
     <div className="group">
       <div className="row"><span><strong>检查更新</strong><small>{state.installing ? (download.status === 'downloading' ? `正在下载 ${Math.round(download.received / Math.max(1, download.total) * 100)}%` : '正在安装') : state.updateError ? state.update : download.status === 'ready' ? `新版本 ${download.version} 已下载` : state.update}</small></span>
@@ -296,7 +316,7 @@ function UpdateCard({ state, run }: { state: AppView; run(command: Command): Pro
   </section>;
 }
 
-function Home({ state, busy, run, open, prefs }: { state: AppView; busy: string | null; run(command: Command): Promise<boolean>; open(sheet: 'nodes' | 'settings', report?: boolean): void; prefs(change: Partial<Preferences>): void }) {
+function Home({ state, traffic, busy, run, open, prefs }: { state: AppView; traffic: TrafficView | null; busy: string | null; run(command: Command): Promise<boolean>; open(sheet: 'nodes' | 'settings', report?: boolean): void; prefs(change: Partial<Preferences>): void }) {
   const connected = state.connection === 'Connected';
   const working = ['Preparing', 'Connecting', 'Switching', 'Reconnecting', 'Disconnecting'].includes(state.connection) || busy === 'connect';
   const recovery = state.connection === 'RecoveryRequired';
@@ -328,6 +348,7 @@ function Home({ state, busy, run, open, prefs }: { state: AppView; busy: string 
       <h1 aria-live="polite">{connected ? '已连接' : working ? (state.connection === 'Disconnecting' ? '正在断开…' : '正在连接…') : recovery ? '网络需要修复' : '未连接'}</h1>
       {issue ? <p className="problem" role="status">{issue.text}{issue.action && <button className="link" onClick={() => act(issue.action!)}>{actionLabels[issue.action]}</button>}</p>
         : status && <p className="muted">{status}</p>}
+      {connected && traffic && <p className="speed" aria-label={`上传 ${traffic.up}，下载 ${traffic.down}`}><span><b className="up">↑</b> {traffic.up}</span><span><b className="down">↓</b> {traffic.down}</span></p>}
     </section>
     <button className="card node-card" onClick={() => open('nodes')}>
       <span className="flag">{shown ? flag(shown.region) : <Icon name="sparkle"/>}</span>
@@ -349,6 +370,8 @@ function Home({ state, busy, run, open, prefs }: { state: AppView; busy: string 
 function App() {
   const [state, setState] = useState<AppView | null>(null); const [sheet, setSheet] = useState<'nodes' | 'settings' | null>(null);
   const [busy, setBusy] = useState<string | null>(null); const [toast, setToast] = useState<string | null>(null); const [report, setReport] = useState(false);
+  const [traffic, setTraffic] = useState<TrafficView | null>(null);
+  useEffect(() => bridge.traffic?.(setTraffic), []);
   useEffect(() => { const unsubscribe = bridge.subscribe(setState); void bridge.command({ type: 'state' }).then(r => setState(r.state)).catch(() => setToast('客户端没有正常启动，请重新打开')); return unsubscribe; }, []);
   useEffect(() => { if (state) document.documentElement.dataset.theme = state.preferences.theme; }, [state?.preferences.theme]);
   useEffect(() => { if (!toast) return; const id = setTimeout(() => setToast(null), 5000); return () => clearTimeout(id); }, [toast]);
@@ -367,7 +390,7 @@ function App() {
   if (!state) return <div className="loading"><BrandMark size={48}/><p>{toast ?? '正在打开…'}</p></div>;
   return <div className="app">
     {state.loggedIn && <header className={`topbar ${nativeTitle ? 'compact' : ''}`}>{!nativeTitle && <span className="brand"><BrandMark size={24}/>{state.brand}</span>}{state.demo && <span className="chip">预览</span>}<button className="icon-button" aria-label="设置" onClick={() => open('settings')}><Icon name="settings"/></button></header>}
-    {state.loggedIn ? <Home state={state} busy={busy} run={run} open={open} prefs={prefs}/> : <Login state={state} busy={busy} run={run}/>}
+    {state.loggedIn ? <Home state={state} traffic={traffic} busy={busy} run={run} open={open} prefs={prefs}/> : <Login state={state} busy={busy} run={run}/>}
     {sheet === 'nodes' && <NodeSheet state={state} close={() => setSheet(null)} run={run}/>}
     {sheet === 'settings' && <SettingsSheet state={state} busy={busy} report={report} close={() => setSheet(null)} run={run} prefs={prefs}/>}
     {toast && <div className="toast" role="alert"><span>{toast}</span><button className="icon-button" aria-label="关闭提示" onClick={() => setToast(null)}><Icon name="close" size={16}/></button></div>}

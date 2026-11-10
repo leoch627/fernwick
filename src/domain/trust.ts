@@ -33,7 +33,7 @@ export function validateBuild(input: unknown): BuildConfig {
     assert(config.healthTargets.length >= 2 && new Set(config.healthTargets.map(target => target.failureDomain)).size >= 2, 'CONFIGURATION_REQUIRED');
     assert(config.deploymentVerified && config.nodeCapabilitiesConfirmed && config.protocolCapabilities.length === 5, 'CONFIGURATION_REQUIRED');
     assert(config.apiEndpoints.length > 0 && config.policyUrls.length > 0 && config.updateFeedUrls.length > 0 && origins.length > 0, 'CONFIGURATION_REQUIRED');
-    assert(Object.keys(config.policyKeys).length > 0 && Object.keys(config.updateKeys).length > 0 && Object.values(config.links).every(Boolean), 'CONFIGURATION_REQUIRED');
+    assert(Object.keys(config.policyKeys).length > 0 && Object.keys(config.updateKeys).length > 0 && [config.links.website, config.links.renew, config.links.help].every(Boolean), 'CONFIGURATION_REQUIRED');
     assert(!/test|example|unconfigured/i.test(config.appId + config.productId + config.tenantId), 'CONFIGURATION_REQUIRED');
     for (const raw of [...origins, ...config.policyUrls, ...config.updateFeedUrls, ...config.apiEndpoints.map(e => e.baseUrl), ...Object.values(config.links).filter((v): v is string => !!v)]) {
       const host = httpsUrl(raw).hostname;

@@ -34,7 +34,7 @@ export const BuildSchema = z.object({
   trustedSubscriptionOrigins: z.array(z.string().url()).max(16), trustedWebOrigins: z.array(z.string().url()).max(16),
   trustedResourceOrigins: z.array(z.string().url()).max(16), policyUrls: z.array(z.string().url()).max(8), updateFeedUrls: z.array(z.string().url()).max(8),
   trustedUpdateOrigins: z.array(z.string().url()).max(16),
-  links: z.object({ website: z.string().url().nullable(), renew: z.string().url().nullable(), help: z.string().url().nullable() }).strict(),
+  links: z.object({ website: z.string().url().nullable(), renew: z.string().url().nullable(), help: z.string().url().nullable(), support: z.string().url().nullable().default(null) }).strict(),
   policyKeys: z.record(z.string(), z.string().max(2048)), updateKeys: z.record(z.string(), z.string().max(2048)),
   protocolCapabilities: z.array(z.enum(['vless-tls', 'vless-reality', 'vmess-ws-tls', 'trojan-tls', 'shadowsocks-aead'])),
   nodeCapabilitiesConfirmed: z.boolean(),
@@ -71,7 +71,7 @@ export type Preferences = z.infer<typeof PreferencesSchema>;
 export const defaultPreferences: Preferences = { mode: 'rule', nodeId: null, autoConnect: false, launchAtLogin: false, closeBehavior: 'tray', theme: 'system', tunnel: 'proxy', adBlock: true, favoriteNodeIds: [], recentNodeIds: [] };
 export const CommandSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('login'), email: z.string().email().max(254), password: z.string().min(1).max(1024) }).strict(),
-  ...(['state', 'sync', 'connect', 'disconnect', 'logout', 'repair', 'check-update', 'download-update', 'pause-update', 'cancel-update', 'install-update', 'diagnostics', 'renewal-return', 'open-download-page', 'signup-config'] as const).map(type => z.object({ type: z.literal(type) }).strict()),
+  ...(['state', 'sync', 'connect', 'disconnect', 'logout', 'repair', 'check-update', 'download-update', 'pause-update', 'cancel-update', 'install-update', 'diagnostics', 'renewal-return', 'open-download-page', 'signup-config', 'invite'] as const).map(type => z.object({ type: z.literal(type) }).strict()),
   z.object({ type: z.literal('send-email-code'), email: z.string().email().max(254), purpose: z.enum(['register', 'reset']) }).strict(),
   // The panel's six-digit email code; empty when the panel sends none.
   z.object({ type: z.literal('register'), email: z.string().email().max(254), password: z.string().min(8).max(64), emailCode: z.string().regex(/^(\d{6})?$/), inviteCode: z.string().max(64) }).strict(),
@@ -80,6 +80,6 @@ export const CommandSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('favorite-node'), nodeId: text, favorite: z.boolean() }).strict(),
   z.object({ type: z.literal('probe-nodes'), nodeIds: z.array(text).min(1).max(64) }).strict(),
   z.object({ type: z.literal('report'), note: z.string().max(500) }).strict(),
-  z.object({ type: z.literal('open-link'), link: z.enum(['website', 'renew', 'help']) }).strict(),
+  z.object({ type: z.literal('open-link'), link: z.enum(['website', 'renew', 'help', 'support']) }).strict(),
 ]);
 export type Command = z.infer<typeof CommandSchema>;

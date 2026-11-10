@@ -21,6 +21,7 @@ type service struct {
 	journal        *Journal
 	candidate      *Candidate
 	configuration  []byte
+	statsPort      int
 	core           *exec.Cmd
 	coreExit       chan error
 	ticket         string
@@ -61,6 +62,7 @@ func (s *service) request(p Peer, r Request) Response {
 	current.Ticket = response.Ticket
 	current.Proof = response.Proof
 	current.HTTP = response.HTTP
+	current.Traffic = response.Traffic
 	if e != nil {
 		current.OK = false
 		current.Error = cleanError(e)
@@ -91,14 +93,24 @@ func (s *service) perform(p Peer, r Request, response *Response) error {
 		return e
 	case "heartbeat":
 		s.mu.Lock()
-		defer s.mu.Unlock()
 		if !s.authorized(p, r.Ticket) {
+			s.mu.Unlock()
 			return failure("NETWORK_CONFLICT")
 		}
 		s.heartbeat = time.Now()
 		if r.AuthorizedUntil != s.authUntil && r.AuthorizedUntil >= 0 && r.AuthorizedUntil <= time.Now().Add(maxAuthorization).UnixMilli()+2000 {
 			s.authUntil = r.AuthorizedUntil
 			s.authDeadline = time.Now().Add(time.Duration(r.AuthorizedUntil-time.Now().UnixMilli()) * time.Millisecond)
+		}
+		port, connected := s.statsPort, s.state == "Connected"
+		s.mu.Unlock()
+		// The counters ride along with the heartbeat; without them the heartbeat still counts.
+		if connected && port != 0 {
+			ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+			if traffic, e := coreTraffic(ctx, port); e == nil {
+				response.Traffic = &traffic
+			}
+			cancel()
 		}
 		return nil
 	case "stop", "recover":
@@ -163,7 +175,11 @@ func (s *service) perform(p Peer, r Request, response *Response) error {
 		if e = platformPrepare(ctx, j); e != nil {
 			return e
 		}
-		configuration := compileCore(*r.Candidate, *j)
+		statsPort, e := freeLoopbackPort()
+		if e != nil {
+			return failure("COMPONENTS_UNAVAILABLE")
+		}
+		configuration := jsonBytes(withCoreStats(compileCoreConfig(runtime.GOOS, *r.Candidate, *j), statsPort))
 		// Validate the in-memory candidate through the immutable, hash-checked core. Never re-open a user path.
 		command := exec.CommandContext(ctx, installed.CorePath, "run", "-test", "-format", "json", "-config", "stdin:")
 		command.Stdin = bytes.NewReader(configuration)
@@ -185,6 +201,7 @@ func (s *service) perform(p Peer, r Request, response *Response) error {
 		s.journal = j
 		s.candidate = r.Candidate
 		s.configuration = configuration
+		s.statsPort = statsPort
 		s.ticket = nonce()
 		s.started = false
 		s.proven = false
@@ -451,6 +468,7 @@ func (s *service) cleanup() error {
 		s.configuration[i] = 0
 	}
 	s.configuration = nil
+	s.statsPort = 0
 	s.cancel = nil
 	s.cleaning = false
 	s.transactionEnd = time.Time{}

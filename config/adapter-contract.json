@@ -27,6 +27,8 @@
     "emailCodePath": "/api/v1/passport/comm/sendEmailVerify",
     "registerPath": "/api/v1/passport/auth/register",
     "resetPath": "/api/v1/passport/auth/forget",
-    "quickLoginPath": "/api/v1/user/getQuickLoginUrl"
+    "quickLoginPath": "/api/v1/user/getQuickLoginUrl",
+    "inviteFetchPath": "/api/v1/user/invite/fetch",
+    "inviteCreatePath": "/api/v1/user/invite/save"
   }
 }

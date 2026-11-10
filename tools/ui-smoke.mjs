@@ -11,14 +11,17 @@ await mkdir('work', { recursive: true });
 
 // A UI-only bridge for states the browser preview never reaches; the shipped application has no fixture switch.
 const fakeBridge = initial => {
-  let state = initial; const listeners = new Set(); window.__commands = [];
+  let state = initial; const listeners = new Set(); const speed = new Set(); window.__commands = [];
   window.__set = change => { state = { ...state, ...change }; listeners.forEach(listener => listener(state)); };
+  window.__traffic = traffic => speed.forEach(listener => listener(traffic));
   window.starrail = {
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
+    traffic(listener) { speed.add(listener); return () => speed.delete(listener); },
     async command(command) {
       window.__commands.push(command.type);
       if (command.type === 'report') { window.__set({ report: { status: 'sending', code: null } }); state = { ...state, report: { status: 'sent', code: 'K7M3QX' } }; }
       if (command.type === 'login') state = { ...state, loggedIn: true };
+      if (command.type === 'invite') state = { ...state, invite: { code: 'AB12CD34', invited: 2 } };
       if (command.type === 'preferences') state = { ...state, preferences: { ...command.preferences, favoriteNodeIds: state.preferences.favoriteNodeIds, recentNodeIds: state.preferences.recentNodeIds }, selectedNode: command.preferences.nodeId };
       if (command.type === 'favorite-node') {
         const ids = state.preferences.favoriteNodeIds.filter(id => id !== command.nodeId);
@@ -186,11 +189,24 @@ try {
   await proxied.goto('http://127.0.0.1:5173/');
   await proxied.getByText(/本机端口 7890/).waitFor();
   assert.equal(await proxied.getByRole('radio', { name: '系统代理' }).isDisabled(), false);
+  // The speed arrives once a second while connected.
+  await proxied.evaluate(() => window.__traffic({ up: '1.2 KB/s', down: '8.8 KB/s' }));
+  await proxied.getByLabel('上传 1.2 KB/s，下载 8.8 KB/s').waitFor();
+  await proxied.screenshot({ path: 'work/preview-speed.png' });
   await proxied.evaluate(() => window.__set({ connection: 'Disconnected', proxyPort: 0, error: 'SYSTEM_PROXY_FAILED' }));
   await proxied.getByRole('status').filter({ hasText: '没能设置系统代理' }).waitFor();
   await proxied.getByRole('status').getByRole('button', { name: '改用 TUN 模式' }).click();
   await proxied.waitForFunction(() => window.__commands.includes('connect'));
   assert.deepEqual((await proxied.evaluate(() => window.__commands)).filter(value => value !== 'state'), ['preferences', 'connect']);
+  assert.equal(await proxied.getByLabel(/^上传 /).count(), 0);
+  // The account's invite code is fetched when asked for; 联系客服 opens the operator's chat.
+  await proxied.getByRole('button', { name: '设置' }).click();
+  await proxied.getByRole('button', { name: '邀请好友' }).click();
+  assert.equal(await proxied.getByLabel('邀请码').textContent(), 'AB12CD34');
+  await proxied.getByText('已邀请 2 人').waitFor();
+  await proxied.screenshot({ path: 'work/preview-invite.png' });
+  await proxied.getByRole('button', { name: '联系客服' }).click();
+  assert.deepEqual((await proxied.evaluate(() => window.__commands)).filter(value => value !== 'state').slice(-2), ['invite', 'open-link']);
   await proxied.close();
 
   // Windows shows the name in its own title bar, so the page does not repeat it. The update cannot be dismissed.
@@ -214,7 +230,7 @@ try {
   assert.equal(await page.locator('header.topbar').getByText(fixture.brand).count(), 1);
 
   assert.deepEqual(failures, []);
-  console.log('UI smoke passed: connection refusal with next step, grouped node selection, tunnel and ad blocking switches, system proxy port and fallback, settings switches, report fallback, dark and narrow layouts, login, text-only announcements, renewal warning, home update card with one-click update, Windows title bar, 三月七/黑塔 appearance, and report code; no page errors.');
+  console.log('UI smoke passed: connection refusal with next step, grouped node selection, tunnel and ad blocking switches, system proxy port and fallback, connection speed, invite code, settings switches, report fallback, dark and narrow layouts, login, text-only announcements, renewal warning, home update card with one-click update, Windows title bar, 三月七/黑塔 appearance, and report code; no page errors.');
 } catch (error) {
   await page.screenshot({ path: 'work/preview-test-failure.png', fullPage: true }).catch(() => {});
   console.error('UI at failure:', await page.locator('body').innerText().catch(() => 'unavailable'), failures);

@@ -143,6 +143,7 @@ type ClientController struct {
 	diagnosticEvents             []map[string]any
 	report                       ReportView
 	signup                       *SignupConfig
+	invite                       *InviteView
 }
 
 func NewClientController(deps ControllerDeps) *ClientController {
@@ -439,6 +440,7 @@ func (c *ClientController) restrictCurrent(generation string, code ErrorCode) bo
 		c.session = nil
 		c.snapshot = nil
 		c.account = nil
+		c.invite = nil
 		c.probeResults = map[string]savedProbe{}
 		c.syncStatus = "NeedsLogin"
 	}
@@ -475,6 +477,10 @@ func (c *ClientController) clearSession(loginGeneration uint64) error {
 	return c.deps.Secure.Clear()
 }
 func (c *ClientController) linkLocked(key string, p *Policy) *string {
+	// Customer service is set at build time only; the policy cannot point it elsewhere.
+	if key == "support" {
+		return c.deps.Build.Links.Support
+	}
 	if p != nil {
 		switch key {
 		case "website":
@@ -498,6 +504,11 @@ func (c *ClientController) linkLocked(key string, p *Policy) *string {
 func (c *ClientController) manualUpdateLocked() bool {
 	return c.updateArtifact != nil && (c.deps.Installer == nil || !c.deps.Installer.Available())
 }
+
+// Traffic is the running core's byte counters while connected.
+func (c *ClientController) Traffic(ctx context.Context) (TrafficSample, bool) {
+	return c.network.Traffic(ctx)
+}
 func (c *ClientController) View() AppView {
 	// Service callbacks never run with their own state lock held.
 	p := c.policy.Active()
@@ -515,11 +526,15 @@ func (c *ClientController) View() AppView {
 	defer c.mu.Unlock()
 	now := c.clock.Now()
 	gate := c.gateLocked()
-	view := AppView{Brand: c.deps.Build.Name, Version: c.deps.Version, Environment: c.deps.Build.Environment, Demo: c.deps.Demo, LoggedIn: c.session != nil, Connection: network.State, SelectedNode: c.preferences.NodeID, ActualNode: c.actualNode, Sync: c.syncStatus, Nodes: []NodeView{}, Preferences: clonePreferences(c.preferences), Storage: storage, HelperReady: c.network.Ready(), ProxyPort: c.network.ProxyPort(), Policy: "使用内置设置", Update: c.updateStatus, ManualUpdate: c.manualUpdateLocked(), Installing: c.installing || c.installWhenReady, PendingRenewal: c.renewalUntil > now, Download: download, Rules: rules, ShowTrafficSummary: true, Links: ViewLinks{c.linkLocked("website", p) != nil, c.linkLocked("renew", p) != nil, c.linkLocked("help", p) != nil}, Report: c.report, ReportAvailable: c.deps.Telemetry.Enabled(), Now: now}
+	view := AppView{Brand: c.deps.Build.Name, Version: c.deps.Version, Environment: c.deps.Build.Environment, Demo: c.deps.Demo, LoggedIn: c.session != nil, Connection: network.State, SelectedNode: c.preferences.NodeID, ActualNode: c.actualNode, Sync: c.syncStatus, Nodes: []NodeView{}, Preferences: clonePreferences(c.preferences), Storage: storage, HelperReady: c.network.Ready(), ProxyPort: c.network.ProxyPort(), Policy: "使用内置设置", Update: c.updateStatus, ManualUpdate: c.manualUpdateLocked(), Installing: c.installing || c.installWhenReady, PendingRenewal: c.renewalUntil > now, Download: download, Rules: rules, ShowTrafficSummary: true, Links: ViewLinks{c.linkLocked("website", p) != nil, c.linkLocked("renew", p) != nil, c.linkLocked("help", p) != nil, c.linkLocked("support", p) != nil}, Report: c.report, ReportAvailable: c.deps.Telemetry.Enabled(), Now: now}
 	if c.signup != nil {
 		signup := *c.signup
 		signup.EmailSuffixes = append([]string{}, signup.EmailSuffixes...)
 		view.Signup = &signup
+	}
+	if c.invite != nil {
+		invite := *c.invite
+		view.Invite = &invite
 	}
 	if c.updateError != "" {
 		code := c.updateError
@@ -1431,7 +1446,8 @@ func (c *ClientController) Command(ctx context.Context, raw json.RawMessage) Com
 		code := CodeOf(err)
 		if cmd.Type == "check-update" || cmd.Type == "download-update" || cmd.Type == "install-update" {
 			c.updateFailed(err)
-		} else if cmd.Type != "open-download-page" && cmd.Type != "signup-config" {
+		} else if cmd.Type != "open-download-page" && cmd.Type != "signup-config" && (cmd.Type != "invite" || code == "AUTH_INVALID") {
+			// An invite code that could not be fetched says nothing about the connection.
 			c.fail(code)
 		}
 		return CommandResult{OK: false, State: c.View(), Error: code, Message: DetailOf(err)}
@@ -1501,6 +1517,7 @@ func (c *ClientController) signIn(ctx context.Context, kind, email string, open 
 	c.session = &session
 	c.snapshot = nil
 	c.account = nil
+	c.invite = nil
 	c.restrictions = map[ErrorCode]bool{}
 	c.startupAttempted = false
 	c.mu.Unlock()
@@ -1545,7 +1562,7 @@ func errorCodeField(err error) string {
 // quickLogin asks the panel for a one-time link that logs the browser in to this
 // account on the plans page; "" when it cannot, and the plain link opens instead. The
 // link must lead to the same site as link, so an operator's own renewal page wins.
-func (c *ClientController) quickLogin(parent context.Context, link string) string {
+func (c *ClientController) quickLogin(parent context.Context, link, redirect string) string {
 	passport, err := c.passport()
 	session := c.sessionCopy()
 	if err != nil || session == nil || c.deps.Demo {
@@ -1556,13 +1573,13 @@ func (c *ClientController) quickLogin(parent context.Context, link string) strin
 	started := time.Now()
 	var target string
 	_, err = c.eachEndpoint(ctx, func(endpoint string) (e error) {
-		target, e = passport.QuickLoginURL(ctx, endpoint, *session, "plan")
+		target, e = passport.QuickLoginURL(ctx, endpoint, *session, redirect)
 		return e
 	})
 	if err == nil && !sameOrigin(target, link) {
 		err = NewAppError("INVALID_INPUT")
 	}
-	c.deps.Telemetry.Record("renew-link", map[string]any{"ok": err == nil, "code": errorCodeField(err), "ms": time.Since(started).Milliseconds()}, false)
+	c.deps.Telemetry.Record("web-login", map[string]any{"page": redirect, "ok": err == nil, "code": errorCodeField(err), "ms": time.Since(started).Milliseconds()}, false)
 	if err != nil {
 		return ""
 	}
@@ -1628,6 +1645,33 @@ func (c *ClientController) execute(ctx context.Context, cmd Command) error {
 			return passport.SendEmailCode(sendCtx, endpoint, cmd.Email, cmd.Purpose == "reset")
 		})
 		return err
+	case "invite":
+		passport, err := c.passport()
+		session := c.sessionCopy()
+		if err != nil {
+			return err
+		}
+		if session == nil {
+			return NewAppError("AUTH_INVALID")
+		}
+		inviteCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+		defer cancel()
+		started := time.Now()
+		var invite InviteView
+		_, err = c.eachEndpoint(inviteCtx, func(endpoint string) (e error) {
+			invite, e = passport.Invite(inviteCtx, endpoint, *session)
+			return e
+		})
+		c.deps.Telemetry.Record("invite", map[string]any{"ok": err == nil, "code": errorCodeField(err), "ms": time.Since(started).Milliseconds()}, false)
+		if err != nil {
+			return err
+		}
+		c.mu.Lock()
+		if c.session != nil && c.session.Generation == session.Generation {
+			c.invite = &invite
+		}
+		c.mu.Unlock()
+		return nil
 	case "signup-config":
 		passport, err := c.passport()
 		if err != nil {
@@ -1724,6 +1768,7 @@ func (c *ClientController) execute(ctx context.Context, cmd Command) error {
 		c.session = nil
 		c.snapshot = nil
 		c.account = nil
+		c.invite = nil
 		c.probeResults = map[string]savedProbe{}
 		c.restrictions = map[ErrorCode]bool{}
 		c.renewalUntil = 0
@@ -1873,7 +1918,7 @@ func (c *ClientController) execute(ctx context.Context, cmd Command) error {
 		if cmd.Link == "renew" {
 			// A one-time link opens the plans page already logged in to this account, so
 			// there is no second login in the browser and no asking which account it shows.
-			if quick := c.quickLogin(ctx, target); quick != "" {
+			if quick := c.quickLogin(ctx, target, "plan"); quick != "" {
 				target = quick
 			} else if account := c.View().Account; account != nil {
 				hint = account.Email

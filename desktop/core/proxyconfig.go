@@ -9,9 +9,11 @@ import "strconv"
 
 // ProxyPorts are the loopback ports of one system proxy session. Local is the
 // unauthenticated HTTP+SOCKS port the system proxy points at; Health is an
-// authenticated SOCKS port that proves the proxy path before the system proxy is set.
+// authenticated SOCKS port that proves the proxy path before the system proxy is set;
+// Stats, when set, serves the core's byte counters.
 type ProxyPorts struct {
 	Local  int
+	Stats  int
 	Health ProbeAuth
 }
 
@@ -60,6 +62,9 @@ const (
 func CompileSystemProxy(c Candidate, ports ProxyPorts) (map[string]any, error) {
 	auth := ports.Health
 	if ports.Local < 1024 || ports.Local > 65535 || auth.Port < 1024 || auth.Port > 65535 || auth.Port == ports.Local || jsUTF16Length(auth.User) < 1 || jsUTF16Length(auth.User) > 255 || jsUTF16Length(auth.Password) < 16 || jsUTF16Length(auth.Password) > 255 {
+		return nil, NewAppError("INVALID_INPUT")
+	}
+	if ports.Stats != 0 && (ports.Stats < 1024 || ports.Stats > 65535 || ports.Stats == ports.Local || ports.Stats == auth.Port) {
 		return nil, NewAppError("INVALID_INPUT")
 	}
 	if c.Mode != "rule" && c.Mode != "global" {
@@ -177,6 +182,9 @@ func CompileSystemProxy(c Candidate, ports ProxyPorts) (map[string]any, error) {
 		routing["balancers"] = balancers
 		// Like Mihomo's url-test: probe every five minutes and prefer the fastest node.
 		config["observatory"] = map[string]any{"subjectSelector": observed, "probeUrl": "https://www.gstatic.com/generate_204", "probeInterval": "5m", "enableConcurrency": true}
+	}
+	if ports.Stats != 0 {
+		config["api"], config["stats"], config["policy"] = coreStatsConfig(ports.Stats)
 	}
 	return config, nil
 }

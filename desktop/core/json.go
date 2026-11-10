@@ -508,7 +508,7 @@ func decodeCommand(value any) (Command, error) {
 		if err := decodeValue(value, reflect.ValueOf(&shape).Elem(), false); err != nil {
 			return Command{}, err
 		}
-		if !oneOf(shape.Link, "website", "renew", "help") {
+		if !oneOf(shape.Link, "website", "renew", "help", "support") {
 			return Command{}, NewAppError("INVALID_INPUT")
 		}
 		command.Link = shape.Link
@@ -566,7 +566,7 @@ func decodeCommand(value any) (Command, error) {
 			return Command{}, NewAppError("INVALID_INPUT")
 		}
 		command.Email, command.Password, command.EmailCode = shape.Email, shape.Password, shape.EmailCode
-	case "state", "sync", "connect", "disconnect", "logout", "repair", "check-update", "download-update", "pause-update", "cancel-update", "install-update", "diagnostics", "renewal-return", "open-download-page", "signup-config":
+	case "state", "sync", "connect", "disconnect", "logout", "repair", "check-update", "download-update", "pause-update", "cancel-update", "install-update", "diagnostics", "renewal-return", "open-download-page", "signup-config", "invite":
 		if len(object) != 1 {
 			return Command{}, NewAppError("INVALID_INPUT")
 		}

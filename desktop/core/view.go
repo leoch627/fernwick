@@ -28,6 +28,7 @@ type ViewLinks struct {
 	Website bool `json:"website"`
 	Renew   bool `json:"renew"`
 	Help    bool `json:"help"`
+	Support bool `json:"support"`
 }
 type AppView struct {
 	Brand        string          `json:"brand"`
@@ -66,7 +67,9 @@ type AppView struct {
 	// Signup is what the panel asks of a new account, once the sign-up form asked; null
 	// before that or when the panel could not be reached.
 	Signup *SignupConfig `json:"signup"`
-	Now    int64         `json:"now"`
+	// Invite is the account's invite code once asked for; null before that.
+	Invite *InviteView `json:"invite"`
+	Now    int64       `json:"now"`
 }
 
 // ReportView is the state of the user's problem report: idle, sending, sent (with the

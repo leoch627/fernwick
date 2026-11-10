@@ -406,8 +406,15 @@ func testSystemProxySmoke(t *testing.T, core *CoreRuntime) {
 	}
 	response.Body.Close()
 	client.CloseIdleConnections()
+	// The core counts what went through it, for the speed shown while connected.
+	if sample, ok := network.Traffic(ctx); !ok || sample.Up == 0 || sample.Down == 0 {
+		t.Fatalf("traffic after a request: %+v %v", sample, ok)
+	}
 	if err = network.Disconnect(ctx); err != nil {
 		t.Fatal(err)
+	}
+	if _, ok := network.Traffic(ctx); ok {
+		t.Fatal("traffic after disconnecting")
 	}
 	if calls := system.history(); calls[len(calls)-1] != "restore" || string(system.saved) != `{"previous":true}` {
 		t.Fatalf("restore: %v %s", calls, system.saved)

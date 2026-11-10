@@ -113,6 +113,7 @@ type Response struct {
 	Ticket    string           `json:"ticket,omitempty"`
 	Proof     *Proof           `json:"proof,omitempty"`
 	HTTP      *ControlResponse `json:"http,omitempty"`
+	Traffic   *Traffic         `json:"traffic,omitempty"`
 }
 type Peer struct {
 	PID        int    `json:"pid"`

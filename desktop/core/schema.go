@@ -52,6 +52,8 @@ type BuildLinks struct {
 	Website *string `json:"website,nullable"`
 	Renew   *string `json:"renew,nullable"`
 	Help    *string `json:"help,nullable"`
+	// Support is the operator's customer service chat (e.g. a Crisp chat page).
+	Support *string `json:"support,nullable" default:"null"`
 }
 
 type Links struct {
@@ -276,7 +278,7 @@ func (e APIEndpoint) Validate() error {
 	return invalidUnless(textField(e.ID) && validURL(e.BaseURL) && int64(e.Priority) >= -MaxSafeInteger && int64(e.Priority) <= MaxSafeInteger)
 }
 func (l BuildLinks) Validate() error {
-	return invalidUnless(nullableCheck(l.Website, validURL) && nullableCheck(l.Renew, validURL) && nullableCheck(l.Help, validURL))
+	return invalidUnless(nullableCheck(l.Website, validURL) && nullableCheck(l.Renew, validURL) && nullableCheck(l.Help, validURL) && nullableCheck(l.Support, validURL))
 }
 func (l Links) Validate() error {
 	return invalidUnless(validURL(l.Website) && validURL(l.Renew) && validURL(l.Help))

@@ -27,6 +27,14 @@ it('builds a valid production configuration from a brand', () => {
   expect(config.policyKeys).toEqual(config.updateKeys);
 });
 
+it('adds a customer service chat only when the brand has one', () => {
+  expect(brandConfig(brand(), base).links.support).toBeNull();
+  const chat = 'https://go.crisp.chat/chat/embed/?website_id=e1bee65a-29ce-412b-b653-1e309aa1a63a';
+  const config = brandConfig({ ...brand(), support: chat }, base);
+  expect(config.links.support).toBe(chat);
+  expect(config.trustedWebOrigins).toContain('https://go.crisp.chat');
+});
+
 it('lists several endpoint domains in failover order', () => {
   const config = brandConfig({ ...brand(), endpoint: ['https://dl.mooncloud.net/', 'https://dl.mooncloud.org', 'https://dl.mooncloud.net'] }, base);
   expect(config.updateFeedUrls).toEqual(['https://dl.mooncloud.net/v1/release', 'https://dl.mooncloud.org/v1/release']);

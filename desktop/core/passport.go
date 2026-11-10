@@ -9,14 +9,24 @@ import (
 )
 
 // PassportPaths are the panel's sign-up, password reset and one-time web login
-// endpoints (wyx2685/v2board: guest/comm/config, passport/comm/sendEmailVerify,
-// passport/auth/register, passport/auth/forget, user/getQuickLoginUrl).
+// endpoints and invite codes (wyx2685/v2board: guest/comm/config,
+// passport/comm/sendEmailVerify, passport/auth/register, passport/auth/forget,
+// user/getQuickLoginUrl, user/invite/fetch, user/invite/save).
 type PassportPaths struct {
-	ConfigPath     string `json:"configPath"`
-	EmailCodePath  string `json:"emailCodePath"`
-	RegisterPath   string `json:"registerPath"`
-	ResetPath      string `json:"resetPath"`
-	QuickLoginPath string `json:"quickLoginPath"`
+	ConfigPath       string `json:"configPath"`
+	EmailCodePath    string `json:"emailCodePath"`
+	RegisterPath     string `json:"registerPath"`
+	ResetPath        string `json:"resetPath"`
+	QuickLoginPath   string `json:"quickLoginPath"`
+	InviteFetchPath  string `json:"inviteFetchPath"`
+	InviteCreatePath string `json:"inviteCreatePath"`
+}
+
+// InviteView is the account's invite code, which new accounts need to sign up, and how
+// many people signed up with this account's codes.
+type InviteView struct {
+	Code    string `json:"code"`
+	Invited int    `json:"invited"`
 }
 
 // SignupConfig is what the panel asks of a new account.
@@ -39,6 +49,7 @@ type Passport interface {
 	Register(ctx context.Context, endpoint string, form Registration) (Session, error)
 	ResetPassword(ctx context.Context, endpoint, email, password, code string) error
 	QuickLoginURL(ctx context.Context, endpoint string, session Session, redirect string) (string, error)
+	Invite(ctx context.Context, endpoint string, session Session) (InviteView, error)
 }
 
 const panelMessageLimit = 120
@@ -224,6 +235,63 @@ func (p *V2BoardAdapter) QuickLoginURL(ctx context.Context, endpoint string, ses
 		return "", NewAppError("CONTROL_UNAVAILABLE")
 	}
 	return QuickLoginTarget(raw, p.build.TrustedWebOrigins, redirect)
+}
+
+var inviteCodePattern = regexp.MustCompile(`^[A-Za-z0-9]{4,32}$`)
+
+// Invite returns the account's invite code, creating one when it has none.
+func (p *V2BoardAdapter) Invite(ctx context.Context, endpoint string, session Session) (InviteView, error) {
+	paths, err := p.passportPaths()
+	if err != nil {
+		return InviteView{}, err
+	}
+	auth := map[string]string{"authorization": p.contract.AuthPrefix + session.Token}
+	for attempt := 0; ; attempt++ {
+		data, err := p.passportRequest(ctx, endpoint, paths.InviteFetchPath, auth, nil)
+		if err != nil {
+			return InviteView{}, err
+		}
+		invite, found, err := readInvite(data)
+		if err != nil || found {
+			return invite, err
+		}
+		if attempt > 0 {
+			return InviteView{}, NewAppError("CONTROL_UNAVAILABLE")
+		}
+		// The panel creates codes on a GET.
+		if created, err := p.passportRequest(ctx, endpoint, paths.InviteCreatePath, auth, nil); err != nil {
+			return InviteView{}, err
+		} else if created != true {
+			return InviteView{}, NewAppError("CONTROL_UNAVAILABLE")
+		}
+	}
+}
+
+// readInvite reads invite/fetch: {codes: [{code, ...}], stat: [invited, ...]}. found is
+// false when the account has no code yet.
+func readInvite(data any) (InviteView, bool, error) {
+	object, ok := data.(map[string]any)
+	codes, listed := object["codes"].([]any)
+	if !ok || !listed {
+		return InviteView{}, false, NewAppError("CONTROL_UNAVAILABLE")
+	}
+	invite := InviteView{}
+	if stat, ok := object["stat"].([]any); ok && len(stat) > 0 {
+		if count, ok := jsNumeric(stat[0]); ok && count >= 0 && count <= 1e9 && count == float64(int(count)) {
+			invite.Invited = int(count)
+		}
+	}
+	for _, item := range codes {
+		entry, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if code, ok := entry["code"].(string); ok && inviteCodePattern.MatchString(code) {
+			invite.Code = code
+			return invite, true, nil
+		}
+	}
+	return invite, false, nil
 }
 
 var quickLoginFragment = regexp.MustCompile(`^/login\?verify=([A-Za-z0-9-]{16,64})&redirect=([A-Za-z0-9_-]{1,32})$`)

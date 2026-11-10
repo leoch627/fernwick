@@ -167,15 +167,27 @@ type passportPanel struct {
 	mu         sync.Mutex
 	quick      string
 	quickErr   error
+	redirects  []string
+	inviteErr  error
 	resetFails map[string]ErrorCode
 	resets     []string
 	logins     int
 }
 
-func (p *passportPanel) QuickLoginURL(context.Context, string, Session, string) (string, error) {
+func (p *passportPanel) QuickLoginURL(_ context.Context, _ string, _ Session, redirect string) (string, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	p.redirects = append(p.redirects, redirect)
 	return p.quick, p.quickErr
+}
+func (p *passportPanel) Invite(ctx context.Context, endpoint string, session Session) (InviteView, error) {
+	p.mu.Lock()
+	err := p.inviteErr
+	p.mu.Unlock()
+	if err != nil {
+		return InviteView{}, err
+	}
+	return p.DemoPanel.Invite(ctx, endpoint, session)
 }
 func (p *passportPanel) ResetPassword(ctx context.Context, endpoint, email, password, code string) error {
 	p.mu.Lock()
@@ -289,5 +301,92 @@ func TestQuotaRemindersOncePerLevel(t *testing.T) {
 	}
 	if err := r.state.Validate(); err != nil || len(r.state.Quota) != 1 {
 		t.Fatalf("state %+v %v", r.state, err)
+	}
+}
+
+// An account without an invite code gets one: the panel creates codes on a GET.
+func TestInviteFetchesOrCreatesACode(t *testing.T) {
+	fetches := 0
+	adapter, requests := passportAdapter(t, func(r HTTPRequest) HTTPResponse {
+		if strings.HasSuffix(r.URL, "/invite/save") {
+			return HTTPResponse{Status: 200, Body: `{"data":true}`}
+		}
+		if fetches++; fetches == 1 {
+			return HTTPResponse{Status: 200, Body: `{"data":{"codes":[],"stat":[0,0,0,10,0]}}`}
+		}
+		return HTTPResponse{Status: 200, Body: `{"data":{"codes":[{"id":1,"code":"bad code!","status":0},{"id":2,"code":"AbCd1234","pv":0,"status":0}],"stat":[3,1200,0,10,0]}}`}
+	})
+	invite, err := adapter.Invite(context.Background(), "primary", Session{Token: "ACCOUNT_TOKEN"})
+	if err != nil || invite != (InviteView{Code: "AbCd1234", Invited: 3}) {
+		t.Fatalf("%+v %v", invite, err)
+	}
+	paths := []string{}
+	for _, r := range *requests {
+		if r.method != "GET" || r.headers["authorization"] != "ACCOUNT_TOKEN" {
+			t.Fatalf("request %+v", r)
+		}
+		paths = append(paths, r.url[strings.Index(r.url, "/api/"):])
+	}
+	if strings.Join(paths, " ") != "/api/v1/user/invite/fetch /api/v1/user/invite/save /api/v1/user/invite/fetch" {
+		t.Fatalf("paths %v", paths)
+	}
+	// The panel refuses a new code past its limit, in its own words.
+	adapter, _ = passportAdapter(t, func(r HTTPRequest) HTTPResponse {
+		if strings.HasSuffix(r.URL, "/invite/save") {
+			return HTTPResponse{Status: 500, Body: `{"message":"已达到创建数量上限"}`}
+		}
+		return HTTPResponse{Status: 200, Body: `{"data":{"codes":[],"stat":[0]}}`}
+	})
+	if _, err := adapter.Invite(context.Background(), "primary", Session{Token: "ACCOUNT_TOKEN"}); CodeOf(err) != "PANEL_REJECTED" || DetailOf(err) != "已达到创建数量上限" {
+		t.Fatalf("limit: %v", err)
+	}
+	for _, body := range []string{`{"data":null}`, `{"data":{"stat":[1]}}`, `{"data":[]}`} {
+		adapter, _ = passportAdapter(t, func(HTTPRequest) HTTPResponse { return HTTPResponse{Status: 200, Body: body} })
+		if _, err := adapter.Invite(context.Background(), "primary", Session{Token: "ACCOUNT_TOKEN"}); err == nil {
+			t.Errorf("%s accepted", body)
+		}
+	}
+}
+
+// The invite code shows in the window until the account changes; failing to fetch it
+// does not mark the connection as having a problem.
+func TestInviteCommand(t *testing.T) {
+	panel := &passportPanel{}
+	h := newControllerHarness(t, func(deps *ControllerDeps) { deps.Panel = panel }, false)
+	if result := commandForTest(h.controller, map[string]any{"type": "invite"}); !result.OK || result.State.Invite == nil || result.State.Invite.Code != "DEMO2026" {
+		t.Fatalf("invite %+v", result)
+	}
+	panel.mu.Lock()
+	panel.inviteErr = &AppError{Code: "PANEL_REJECTED", Detail: "已达到创建数量上限"}
+	panel.mu.Unlock()
+	if result := commandForTest(h.controller, map[string]any{"type": "invite"}); result.OK || result.Message != "已达到创建数量上限" || result.State.Error != nil {
+		t.Fatalf("refused invite %+v", result)
+	}
+	if result := commandForTest(h.controller, map[string]any{"type": "logout"}); !result.OK || result.State.Invite != nil {
+		t.Fatalf("logout kept the invite %+v", result.State.Invite)
+	}
+}
+
+// 联系客服 opens the operator's chat page as set at build time, with nothing added to it.
+func TestSupportOpensTheChat(t *testing.T) {
+	panel := &passportPanel{}
+	var opened, hint string
+	h := newControllerHarness(t, func(deps *ControllerDeps) {
+		deps.Panel = panel
+		deps.OpenExternal = func(target, h string) (bool, error) { opened, hint = target, h; return true, nil }
+	}, false)
+	chat := "https://go.crisp.chat/chat/embed/?website_id=e1bee65a-29ce-412b-b653-1e309aa1a63a"
+	if result := commandForTest(h.controller, map[string]any{"type": "open-link", "link": "support"}); !result.OK || !result.State.Links.Support || opened != chat || hint != "" || result.State.PendingRenewal {
+		t.Fatalf("support %+v %q", result, opened)
+	}
+	panel.mu.Lock()
+	asked := len(panel.redirects)
+	panel.mu.Unlock()
+	if asked != 0 {
+		t.Fatalf("asked the panel for a web login %d times", asked)
+	}
+	without := newControllerHarness(t, func(deps *ControllerDeps) { deps.Build.Links.Support = nil }, false)
+	if result := commandForTest(without.controller, map[string]any{"type": "open-link", "link": "support"}); result.OK || result.Error != "CONFIGURATION_REQUIRED" || result.State.Links.Support {
+		t.Fatalf("unset support %+v", result)
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -131,9 +132,17 @@ func validateProxyConfig(data []byte) error {
 		DNS         json.RawMessage `json:"dns"`
 		Routing     json.RawMessage `json:"routing"`
 		Observatory json.RawMessage `json:"observatory"`
+		API         json.RawMessage `json:"api"`
+		Stats       json.RawMessage `json:"stats"`
+		Policy      json.RawMessage `json:"policy"`
 	}
 	if strictJSON(data, &config) != nil || len(config.Inbounds) < 1 || len(config.Inbounds) > 2 || len(config.Outbounds) < 1 || len(config.Outbounds) > maxPool+4 {
 		return failure("INVALID_INPUT")
+	}
+	if config.API != nil || config.Stats != nil || config.Policy != nil {
+		if e := validateCoreStats(config.API, config.Stats, config.Policy); e != nil {
+			return e
+		}
 	}
 	for _, in := range config.Inbounds {
 		if in.Listen != "127.0.0.1" || in.Port < 1024 || in.Port > 65535 || !contains([]string{"mixed", "socks"}, in.Protocol) {
@@ -144,6 +153,32 @@ func validateProxyConfig(data []byte) error {
 		if !contains([]string{"vless", "vmess", "trojan", "shadowsocks", "freedom", "blackhole", "dns"}, out.Protocol) {
 			return failure("INVALID_INPUT")
 		}
+	}
+	return nil
+}
+
+// validateCoreStats accepts only the byte counters: the statistics service on a loopback
+// port, never the API services that change inbounds, outbounds or routing.
+func validateCoreStats(api, stats, policy json.RawMessage) error {
+	var a struct {
+		Tag      string   `json:"tag"`
+		Listen   string   `json:"listen"`
+		Services []string `json:"services"`
+	}
+	var st struct{}
+	var p struct {
+		System struct {
+			Up   bool `json:"statsOutboundUplink"`
+			Down bool `json:"statsOutboundDownlink"`
+		} `json:"system"`
+	}
+	if api == nil || stats == nil || policy == nil || strictJSON(api, &a) != nil || strictJSON(stats, &st) != nil || strictJSON(policy, &p) != nil {
+		return failure("INVALID_INPUT")
+	}
+	host, port, e := net.SplitHostPort(a.Listen)
+	number, _ := strconv.Atoi(port)
+	if e != nil || host != "127.0.0.1" || number < 1024 || number > 65535 || a.Tag != "api" || len(a.Services) != 1 || a.Services[0] != "StatsService" {
+		return failure("INVALID_INPUT")
 	}
 	return nil
 }

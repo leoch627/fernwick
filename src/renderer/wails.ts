@@ -1,4 +1,4 @@
-import type { AppView, ClientBridge, CommandResult } from '../shared/view';
+import type { AppView, ClientBridge, CommandResult, TrafficView } from '../shared/view';
 
 // Importing the runtime initializes native handlers. Keep browser previews free
 // of those handlers and let the native environment injected by Wails select it.
@@ -22,6 +22,14 @@ export function wailsBridge(): ClientBridge {
       let unsubscribe: (() => void) | undefined;
       void runtime.then(({ Events }) => {
         if (!cancelled) unsubscribe = Events.On('starrail:state', event => listener(event.data as AppView));
+      });
+      return () => { cancelled = true; unsubscribe?.(); };
+    },
+    traffic(listener) {
+      let cancelled = false;
+      let unsubscribe: (() => void) | undefined;
+      void runtime.then(({ Events }) => {
+        if (!cancelled) unsubscribe = Events.On('starrail:traffic', event => listener((event.data ?? null) as TrafficView | null));
       });
       return () => { cancelled = true; unsubscribe?.(); };
     },

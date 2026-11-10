@@ -20,7 +20,7 @@ export const ContractSchema = z.object({
   loginPath: z.string().regex(/^\/api\/[a-zA-Z0-9/_-]+$/), accountPath: z.string().regex(/^\/api\/[a-zA-Z0-9/_-]+$/), descriptorPath: z.string().regex(/^\/api\/[a-zA-Z0-9/_-]+$/),
   authPrefix: z.enum(['', 'Bearer ']), expiryUnit: z.literal('seconds'),
   logoutPath: z.string().regex(/^\/api\/[a-zA-Z0-9/_-]+$/).nullable().default(null),
-  passport: z.object({ configPath: apiPath, emailCodePath: apiPath, registerPath: apiPath, resetPath: apiPath, quickLoginPath: apiPath }).strict().nullable().default(null),
+  passport: z.object({ configPath: apiPath, emailCodePath: apiPath, registerPath: apiPath, resetPath: apiPath, quickLoginPath: apiPath, inviteFetchPath: apiPath, inviteCreatePath: apiPath }).strict().nullable().default(null),
   activePlanAuthorizesService: z.boolean(), nullExpiryIsUnlimited: z.boolean(), zeroQuotaIsUnlimited: z.boolean(),
   fields: z.object({ accountId: z.string(), email: z.string(), banned: z.string(), planId: z.string(), expires: z.string(), quota: z.string(), upload: z.string(), download: z.string(), subscriptionUrl: z.string() }).strict(),
 }).strict();

@@ -5,6 +5,7 @@
   "api": ["https://api.starrail.work", "https://host.leiterup.de"],
   "subscriptionOrigins": ["https://sub.starrail.us"],
   "website": "https://www.starrail.work/",
+  "support": "https://go.crisp.chat/chat/embed/?website_id=e1bee65a-29ce-412b-b653-1e309aa1a63a",
   "endpoint": ["https://dl.starrail.work", "https://dl.example.net"],
   "publicKey": "-----BEGIN PUBLIC KEY-----\nreplace with the contents of public.pem\n-----END PUBLIC KEY-----\n"
 }

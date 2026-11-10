@@ -372,7 +372,7 @@ func run() error {
 		forgetKeychainSession(dataDir, "session-key", filepath.Join(dataDir, "session.v2.enc"))
 	}
 	if demo {
-		driver = core.UnavailableDriver{}
+		driver = &core.DemoDriver{}
 		panel = core.NewDemoPanel()
 		telemetry = nil
 		key = core.KeyProviderFunc(func(bool) ([]byte, error) { return nil, core.ErrKeyUnavailable })
@@ -458,9 +458,11 @@ func run() error {
 	if !slices.Contains(os.Args[1:], "--hidden") || runtime.GOOS == "linux" {
 		s.show()
 	}
+	var tray *trayMenu
 	if runtime.GOOS != "linux" {
-		newTrayMenu(ctx, s, icon)
+		tray = newTrayMenu(ctx, s, icon)
 	}
+	s.watchTraffic(ctx, tray)
 	s.app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
 		go func() {
 			// macOS notifications require a real application bundle.

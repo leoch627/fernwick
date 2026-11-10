@@ -8,6 +8,7 @@ import (
 	"image/color"
 	"image/png"
 	"regexp"
+	"runtime"
 	"slices"
 	"sync"
 
@@ -103,15 +104,19 @@ type trayMenu struct {
 	ctx     context.Context
 	tray    *application.SystemTray
 	menu    *application.Menu
+	bar     *speedBar
 	on, off []byte
 	mu      sync.Mutex
 	latest  *core.AppView
 	shown   *trayModel
 	wake    chan struct{}
+	// status and rate make up the tooltip; the menu and the traffic loop both change it.
+	status string
+	rate   *core.TrafficRate
 }
 
 func newTrayMenu(ctx context.Context, s *shell, icon []byte) *trayMenu {
-	t := &trayMenu{shell: s, ctx: ctx, tray: s.app.SystemTray.New(), menu: application.NewMenu(), on: icon, off: dimmedIcon(icon), wake: make(chan struct{}, 1)}
+	t := &trayMenu{shell: s, ctx: ctx, tray: s.app.SystemTray.New(), menu: application.NewMenu(), bar: newSpeedBar(s.show), on: icon, off: dimmedIcon(icon), wake: make(chan struct{}, 1)}
 	t.tray.SetIcon(t.off)
 	t.tray.OnClick(s.show)
 	t.apply(s.controller.View())
@@ -158,9 +163,38 @@ func (t *trayMenu) apply(view core.AppView) {
 			t.tray.SetIcon(t.off)
 		}
 	}
-	t.tray.SetTooltip(t.shell.name + " · " + model.status)
+	t.mu.Lock()
+	t.status = model.status
+	tooltip := t.tooltipLocked()
+	t.mu.Unlock()
+	t.tray.SetTooltip(tooltip)
 	t.build(model, view.Preferences)
 	t.tray.SetMenu(t.menu)
+}
+
+func (t *trayMenu) tooltipLocked() string {
+	tooltip := t.shell.name + " · " + t.status
+	if t.rate != nil {
+		tooltip += "\n↑ " + core.FormatRate(t.rate.Up) + "  ↓ " + core.FormatRate(t.rate.Down)
+	}
+	return tooltip
+}
+
+// setSpeed shows the connection's speed beside the icon (macOS) or in the tooltip
+// (Windows, where the menu bar has no text); nil hides it.
+func (t *trayMenu) setSpeed(rate *core.TrafficRate) {
+	t.mu.Lock()
+	t.rate = rate
+	tooltip := t.tooltipLocked()
+	t.mu.Unlock()
+	if rate == nil {
+		t.bar.hide()
+	} else {
+		t.bar.show(*rate)
+	}
+	if runtime.GOOS != "darwin" {
+		t.tray.SetTooltip(tooltip)
+	}
 }
 
 func (t *trayMenu) build(m trayModel, preferences core.Preferences) {

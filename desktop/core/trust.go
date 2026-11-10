@@ -204,7 +204,7 @@ func ValidateBuild(config BuildConfig) (BuildConfig, error) {
 		}
 	}
 	links := []*string{config.Links.Website, config.Links.Renew, config.Links.Help}
-	for _, link := range links {
+	for _, link := range append(links, config.Links.Support) {
 		if link != nil {
 			if _, err := TrustedURL(*link, config.TrustedWebOrigins); err != nil {
 				return BuildConfig{}, err
@@ -245,6 +245,10 @@ func ValidateBuild(config BuildConfig) (BuildConfig, error) {
 				return BuildConfig{}, NewAppError("CONFIGURATION_REQUIRED")
 			}
 			urls = append(urls, *link)
+		}
+		// Customer service is optional.
+		if config.Links.Support != nil {
+			urls = append(urls, *config.Links.Support)
 		}
 		for _, raw := range urls {
 			u, _ := HTTPSURL(raw)

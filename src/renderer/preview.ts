@@ -8,7 +8,7 @@ export function previewBridge(): ClientBridge {
     connection: 'Disconnected', selectedNode: null, actualNode: null, sync: 'Fresh', lastSync: Date.now(), usableUntil: Date.now() + 86400000, error: null,
     nodes: [['🇯🇵 Tokyo 01', 'JP'], ['🇸🇬 Singapore 01', 'SG'], ['🇭🇰 Hong Kong 01', 'HK'], ['🇺🇸 Los Angeles 01', 'US']].map(([name, region], i): NodeView => ({ id: String(i).padStart(64, '0'), name: name!, group: '示例节点', region: region!, protocol: 'vless', compatible: true, reason: null, latency: null, probe: 'untested' }))
       .concat({ id: '9'.repeat(64), name: '🇲🇴 Macau', group: '示例节点', region: 'MO', protocol: 'vless', compatible: false, reason: '运营暂时停用', latency: null, probe: 'untested' }),
-    preferences: { ...defaultPreferences }, storage: 'memory', helperReady: false, proxyPort: 0, policy: '使用内置设置', announcement: null, update: '发现新版本 0.3.0', manualUpdate: false, installing: false, pendingRenewal: false, links: { website: true, renew: true, help: true }, report: { status: 'idle', code: null }, reportAvailable: false, signup: null, now: Date.now(),
+    preferences: { ...defaultPreferences }, storage: 'memory', helperReady: false, proxyPort: 0, policy: '使用内置设置', announcement: null, update: '发现新版本 0.3.0', manualUpdate: false, installing: false, pendingRenewal: false, links: { website: true, renew: true, help: true, support: true }, report: { status: 'idle', code: null }, reportAvailable: false, signup: null, invite: null, now: Date.now(),
     download: { status: 'available', version: '0.3.0', received: 0, total: 25165824, error: null }, rules: '使用内置大陆分流规则', showTrafficSummary: true,
   };
   const listeners = new Set<(s: AppView) => void>();
@@ -34,6 +34,7 @@ export function previewBridge(): ClientBridge {
         if (command.emailCode === '123456') state = { ...state, loggedIn: true };
         else { error = 'PANEL_REJECTED'; message = '邮箱验证码有误'; }
       }
+      if (command.type === 'invite') state = { ...state, invite: { code: 'DEMO2026', invited: 3 } };
       if (command.type === 'preferences') state = { ...state, preferences: { ...command.preferences, favoriteNodeIds: [...state.preferences.favoriteNodeIds], recentNodeIds: [...state.preferences.recentNodeIds] }, selectedNode: command.preferences.nodeId };
       if (command.type === 'favorite-node') {
         const ids = state.preferences.favoriteNodeIds.filter(id => id !== command.nodeId);

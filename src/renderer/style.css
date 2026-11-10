@@ -143,3 +143,10 @@ button.row>svg{color:var(--muted);flex:none}
 .update-actions{display:flex;flex-direction:column;align-items:center;gap:5px;flex:none}
 .favorite-button.on svg{fill:currentColor}
 .search input{min-width:0}
+.speed{display:flex;justify-content:center;gap:16px;margin:0;font-size:12px;color:var(--secondary);font-variant-numeric:tabular-nums}
+.speed span{min-width:78px}
+.speed span:first-child{text-align:right}
+.speed span:last-child{text-align:left}
+.speed b{font-weight:600}
+.speed .up{color:#d45fc6}
+.speed .down{color:#2f86e8}

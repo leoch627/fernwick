@@ -106,6 +106,7 @@ jobs:
           BRAND_API_PRIMARY: ${{ inputs.api_primary || vars.BRAND_API_PRIMARY }}
           BRAND_API_BACKUP: ${{ inputs.api_backup || vars.BRAND_API_BACKUP }}
           BRAND_WEBSITE: ${{ inputs.website || vars.BRAND_WEBSITE }}
+          BRAND_SUPPORT: ${{ vars.BRAND_SUPPORT }}
           BRAND_SUBSCRIPTION_ORIGINS: ${{ vars.BRAND_SUBSCRIPTION_ORIGINS }}
           BRAND_ENDPOINT: ${{ vars.UPDATE_ENDPOINT }}
           BRAND_DOWNLOADS: ${{ vars.DOWNLOAD_ENDPOINT }}

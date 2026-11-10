@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"net"
 	"os"
+	"slices"
 	"strconv"
 	"sync"
 	"time"
@@ -56,8 +57,8 @@ func (d *ProxyDriver) Port() int {
 	}
 	return d.ports.Local
 }
-func freeLoopbackPort(preferred int, avoid int) (int, error) {
-	if preferred >= 1024 && preferred != avoid {
+func freeLoopbackPort(preferred int, avoid ...int) (int, error) {
+	if preferred >= 1024 && !slices.Contains(avoid, preferred) {
 		if listener, err := net.Listen("tcp4", "127.0.0.1:"+strconv.Itoa(preferred)); err == nil {
 			_ = listener.Close()
 			return preferred, nil
@@ -68,7 +69,7 @@ func freeLoopbackPort(preferred int, avoid int) (int, error) {
 		if err != nil {
 			return 0, err
 		}
-		if port != avoid && port >= 1024 {
+		if !slices.Contains(avoid, port) && port >= 1024 {
 			return port, nil
 		}
 	}
@@ -92,6 +93,10 @@ func (d *ProxyDriver) Prepare(ctx context.Context, candidate Candidate) (string,
 	if err != nil {
 		return "", err
 	}
+	stats, err := freeLoopbackPort(0, local, health)
+	if err != nil {
+		return "", err
+	}
 	var user [16]byte
 	var password [24]byte
 	if _, err = rand.Read(user[:]); err != nil {
@@ -100,7 +105,7 @@ func (d *ProxyDriver) Prepare(ctx context.Context, candidate Candidate) (string,
 	if _, err = rand.Read(password[:]); err != nil {
 		return "", err
 	}
-	ports := ProxyPorts{Local: local, Health: ProbeAuth{Port: health, User: hex.EncodeToString(user[:]), Password: base64.RawURLEncoding.EncodeToString(password[:])}}
+	ports := ProxyPorts{Local: local, Stats: stats, Health: ProbeAuth{Port: health, User: hex.EncodeToString(user[:]), Password: base64.RawURLEncoding.EncodeToString(password[:])}}
 	config, err := CompileSystemProxy(candidate, ports)
 	if err != nil {
 		return "", err
@@ -137,6 +142,18 @@ func (d *ProxyDriver) Prepare(ctx context.Context, candidate Candidate) (string,
 	d.ticket = hex.EncodeToString(id[:])
 	d.config, d.ports, d.saved, d.connected = config, ports, saved, false
 	return d.ticket, nil
+}
+
+// Traffic reads the running core's byte counters while connected.
+func (d *ProxyDriver) Traffic(ctx context.Context) (TrafficSample, bool) {
+	d.mu.Lock()
+	port, connected := d.ports.Stats, d.connected
+	d.mu.Unlock()
+	if !connected || port == 0 {
+		return TrafficSample{}, false
+	}
+	sample, err := CoreTraffic(ctx, port)
+	return sample, err == nil
 }
 
 // Protect has nothing to guard: the system proxy changes only once the path is proven.

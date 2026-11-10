@@ -54,7 +54,7 @@ var apiPathPattern = regexp.MustCompile(`^/api/[a-zA-Z0-9/_-]+$`)
 var sessionClaimPattern = regexp.MustCompile(`^[a-zA-Z0-9-]{1,128}$`)
 
 func (c PanelContract) Validate() error {
-	passport := c.Passport == nil || apiPathPattern.MatchString(c.Passport.ConfigPath) && apiPathPattern.MatchString(c.Passport.EmailCodePath) && apiPathPattern.MatchString(c.Passport.RegisterPath) && apiPathPattern.MatchString(c.Passport.ResetPath) && apiPathPattern.MatchString(c.Passport.QuickLoginPath)
+	passport := c.Passport == nil || apiPathPattern.MatchString(c.Passport.ConfigPath) && apiPathPattern.MatchString(c.Passport.EmailCodePath) && apiPathPattern.MatchString(c.Passport.RegisterPath) && apiPathPattern.MatchString(c.Passport.ResetPath) && apiPathPattern.MatchString(c.Passport.QuickLoginPath) && apiPathPattern.MatchString(c.Passport.InviteFetchPath) && apiPathPattern.MatchString(c.Passport.InviteCreatePath)
 	return invalidUnless(apiPathPattern.MatchString(c.LoginPath) && apiPathPattern.MatchString(c.AccountPath) && apiPathPattern.MatchString(c.DescriptorPath) && nullableCheck(c.LogoutPath, apiPathPattern.MatchString) && passport && oneOf(c.AuthPrefix, "", "Bearer ") && c.ExpiryUnit == "seconds")
 }
 

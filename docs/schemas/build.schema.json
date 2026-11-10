@@ -163,12 +163,25 @@
               "type": "null"
             }
           ]
+        },
+        "support": {
+          "default": null,
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uri"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
         "website",
         "renew",
-        "help"
+        "help",
+        "support"
       ],
       "additionalProperties": false
     },

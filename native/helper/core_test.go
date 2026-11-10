@@ -41,7 +41,7 @@ func TestCompiledConfigLoadsInXray(t *testing.T) {
 			c.Mode = mode
 			j := Journal{Interface: Interface{Name: "lo0"}, Tun: tunName(), RouteIPv6: mode == "global", NodeAddress: "203.0.113.10", PoolAddresses: []string{"203.0.113.11", "203.0.113.12", "203.0.113.13", "203.0.113.14", "203.0.113.15"}}
 			command := exec.Command(binary, "run", "-test", "-format", "json", "-config", "stdin:")
-			command.Stdin = bytes.NewReader(compileCoreFor(goos, c, j))
+			command.Stdin = bytes.NewReader(jsonBytes(withCoreStats(compileCoreConfig(goos, c, j), 40001)))
 			if out, err := command.CombinedOutput(); err != nil {
 				t.Fatalf("%s %s mode rejected by xray: %v\n%s", goos, mode, err, out)
 			}

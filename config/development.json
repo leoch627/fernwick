@@ -27,7 +27,8 @@
   ],
   "trustedWebOrigins": [
     "https://api.starrail.work",
-    "https://host.leiterup.de"
+    "https://host.leiterup.de",
+    "https://go.crisp.chat"
   ],
   "trustedResourceOrigins": [],
   "policyUrls": [],
@@ -36,7 +37,8 @@
   "links": {
     "website": "https://host.leiterup.de/",
     "renew": "https://host.leiterup.de/",
-    "help": "https://host.leiterup.de/"
+    "help": "https://host.leiterup.de/",
+    "support": "https://go.crisp.chat/chat/embed/?website_id=e1bee65a-29ce-412b-b653-1e309aa1a63a"
   },
   "policyKeys": {},
   "updateKeys": {},

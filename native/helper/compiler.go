@@ -170,6 +170,18 @@ func route(rule object, target object) object {
 
 func compileCore(c Candidate, j Journal) []byte { return compileCoreFor(runtime.GOOS, c, j) }
 func compileCoreFor(goos string, c Candidate, j Journal) []byte {
+	return jsonBytes(compileCoreConfig(goos, c, j))
+}
+
+// withCoreStats lets the core count what each outbound carries and answer on a loopback
+// port with its statistics service only (Xray's other API services stay off).
+func withCoreStats(config object, port int) object {
+	config["api"] = object{"tag": "api", "listen": "127.0.0.1:" + itoa(port), "services": []string{"StatsService"}}
+	config["stats"] = object{}
+	config["policy"] = object{"system": object{"statsOutboundUplink": true, "statsOutboundDownlink": true}}
+	return config
+}
+func compileCoreConfig(goos string, c Candidate, j Journal) object {
 	sock := outboundSockopt(goos, j)
 	nodes := []Node{c.Node}
 	outbounds := []object{compileOutbound(c.Node, j.NodeAddress, nodeTag(c.Node, 0), sock)}
@@ -251,5 +263,5 @@ func compileCoreFor(goos string, c Candidate, j Journal) []byte {
 		// Like Mihomo's url-test: probe every five minutes and prefer the fastest node.
 		config["observatory"] = object{"subjectSelector": observed, "probeUrl": "https://www.gstatic.com/generate_204", "probeInterval": "5m", "enableConcurrency": true}
 	}
-	return jsonBytes(config)
+	return config
 }

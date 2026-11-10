@@ -119,6 +119,14 @@ func (n *NetworkController) ProxyPort() int {
 	}
 	return 0
 }
+
+// Traffic is the core's byte counters while connected.
+func (n *NetworkController) Traffic(ctx context.Context) (TrafficSample, bool) {
+	if reader, ok := n.driver.(trafficReader); ok && n.View().State == "Connected" {
+		return reader.Traffic(ctx)
+	}
+	return TrafficSample{}, false
+}
 func (n *NetworkController) View() NetworkStatus {
 	n.mu.Lock()
 	defer n.mu.Unlock()

@@ -110,7 +110,7 @@ export class ClientController {
     return {
       brand: this.deps.build.name, version: this.deps.version ?? '0.1.0', environment: this.deps.build.environment, demo: this.deps.demo, loggedIn: !!this.session,
       account: a ? { email: mask(a.email), planName: a.planName, expiryKind: a.expiryKind, expiresAt: a.expiresAt, quotaKind: a.quotaKind, usedBytes: a.usedBytes, quotaBytes: a.quotaBytes, observedAt: a.observedAt, status: restriction(a, this.clock.now()) ? messages[restriction(a, this.clock.now())!] : a.serviceAllowed === 'yes' ? '套餐可用' : '权益待验证' } : null,
-      report: { status: 'idle', code: null }, reportAvailable: false, signup: null,
+      report: { status: 'idle', code: null }, reportAvailable: false, signup: null, invite: null,
       connection: this.network.state, selectedNode: this.preferences.nodeId, actualNode: this.actualNode,
       sync: this.syncStatus, lastSync: this.snapshot?.fullSyncCompletedAt ?? null, usableUntil: this.snapshot?.usableUntil ?? null,
       error: this.error ?? (this.session && this.startupAttempted ? gate : null),
@@ -123,7 +123,7 @@ export class ClientController {
       update: this.updateStatus, manualUpdate: this.manualUpdate, installing: false, pendingRenewal: this.renewalUntil > this.clock.now(),
       download: this.deps.download?.view ?? { status: 'idle', version: null, received: 0, total: 0, error: null },
       rules: this.deps.resources?.status ?? '内置规则待配置', showTrafficSummary: active?.ui.showTrafficSummary ?? true,
-      links: { website: !!this.link('website'), renew: !!this.link('renew'), help: !!this.link('help') }, now: this.clock.now(),
+      links: { website: !!this.link('website'), renew: !!this.link('renew'), help: !!this.link('help'), support: !!this.link('support') }, now: this.clock.now(),
     };
   }
   async start() {
@@ -224,7 +224,8 @@ export class ClientController {
     this.preferenceQueue = next.catch(() => {});
     return next;
   }
-  private link(key: 'website' | 'renew' | 'help') { return this.policy.active?.links[key] ?? this.deps.build.links[key]; }
+  // Customer service is set at build time only; the policy cannot point it elsewhere.
+  private link(key: 'website' | 'renew' | 'help' | 'support') { return key === 'support' ? this.deps.build.links.support : this.policy.active?.links[key] ?? this.deps.build.links[key]; }
   // The native updater requires Authenticode/Developer ID signatures; unsigned Windows/macOS builds update from the download page.
   private get manualUpdate() { return this.updateArtifact?.signatureIdentity === 'unsigned' && process.platform !== 'linux'; }
   private async openDownloadPage() {

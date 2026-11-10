@@ -62,6 +62,14 @@ func (t *TunnelDriver) ProxyPort() int {
 	}
 	return 0
 }
+
+// Traffic reads the active connection's byte counters.
+func (t *TunnelDriver) Traffic(ctx context.Context) (TrafficSample, bool) {
+	if reader, ok := t.current().(trafficReader); ok {
+		return reader.Traffic(ctx)
+	}
+	return TrafficSample{}, false
+}
 func (t *TunnelDriver) current() NetworkDriver {
 	t.mu.Lock()
 	defer t.mu.Unlock()
