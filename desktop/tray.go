@@ -118,7 +118,11 @@ type trayMenu struct {
 func newTrayMenu(ctx context.Context, s *shell, icon []byte) *trayMenu {
 	t := &trayMenu{shell: s, ctx: ctx, tray: s.app.SystemTray.New(), menu: application.NewMenu(), bar: newSpeedBar(s.show), on: icon, off: dimmedIcon(icon), wake: make(chan struct{}, 1)}
 	t.tray.SetIcon(t.off)
-	t.tray.OnClick(s.show)
+	// macOS menu bar icons open their menu on a click; with a click handler the menu would
+	// only answer a right click. Elsewhere a click shows the window and a right click the menu.
+	if runtime.GOOS != "darwin" {
+		t.tray.OnClick(s.show)
+	}
 	t.apply(s.controller.View())
 	s.controller.Subscribe(func(view core.AppView) {
 		t.mu.Lock()

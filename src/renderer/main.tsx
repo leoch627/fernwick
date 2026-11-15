@@ -30,6 +30,8 @@ function Icon({ name, size = 20 }: { name: string; size?: number }) {
     update: <><circle cx="12" cy="12" r="9"/><path d="M12 16.5v-9m-4 4 4-4 4 4"/></>,
     star: <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-2.9-5.6 2.9 1.1-6.2L3 9.6l6.2-.9z"/>,
     history: <><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/></>,
+    refresh: <><path d="M20 11a8 8 0 0 0-14.6-3.5"/><path d="M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14.6 3.5"/><path d="M20 20v-4h-4"/></>,
+    external: <><path d="M14 5h5v5"/><path d="m19 5-8 8"/><path d="M18 14v4a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h4"/></>,
   };
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name] ?? paths.info}</svg>;
 }
@@ -57,6 +59,8 @@ function remaining(expires: string | null, now: number, kind: string) {
   if (diff < 86400000) return { text: `剩余 ${Math.ceil(diff / 3600000)} 小时`, days: 0 };
   return { text: `剩余 ${Math.ceil(diff / 86400000)} 天`, days: Math.ceil(diff / 86400000) };
 }
+/** The day in the computer's own time zone, e.g. 2026-12-03. */
+const day = (iso: string) => { const d = new Date(iso); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 const gb = (value: bigint) => `${Number(value * 10n / 1073741824n) / 10} GB`;
 
 type Action = 'nodes' | 'renew' | 'repair' | 'report' | 'connect' | 'tun' | 'sync';
@@ -86,12 +90,15 @@ const problems: Partial<Record<ErrorCode, { text: string; action?: Action }>> = 
 const actionLabels: Record<Action, string> = { nodes: '换个线路', renew: '去续费', repair: '修复', report: '上报问题', connect: '重新连接', tun: '改用 TUN 模式', sync: '刷新线路' };
 const problem = (code: ErrorCode) => problems[code] ?? { text: messages[code], action: 'report' as Action };
 
-function Sheet({ title, children, close }: { title: string; children: ReactNode; close(): void }) {
+// A sheet is a modal dialog, drawn over everything else on the page: a toast shown while
+// one is open is drawn inside it, or it would sit underneath, unseen.
+function Sheet({ title, children, close, action, toast }: { title: string; children: ReactNode; close(): void; action?: ReactNode; toast?: ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => { ref.current?.showModal(); return () => ref.current?.close(); }, []);
   return <dialog ref={ref} className="sheet" onCancel={close} aria-label={title}>
-    <header><button className="icon-button" aria-label="返回" onClick={close}><Icon name="back"/></button><h2>{title}</h2><span/></header>
+    <header><button className="icon-button" aria-label="返回" onClick={close}><Icon name="back"/></button><h2>{title}</h2>{action ?? <span/>}</header>
     <div className="sheet-body">{children}</div>
+    {toast}
   </dialog>;
 }
 
@@ -99,9 +106,9 @@ type AuthMode = 'login' | 'register' | 'reset';
 /** The panel waits a minute before it sends another code to the same address. */
 const CODE_INTERVAL = 60;
 
-function Login({ state, busy, run }: { state: AppView; busy: string | null; run(command: Command): Promise<boolean> }) {
+function Login({ state, busy, run, lastEmail }: { state: AppView; busy: string | null; run(command: Command): Promise<boolean>; lastEmail: string }) {
   const [mode, setMode] = useState<AuthMode>('login');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(lastEmail);
   const [wait, setWait] = useState(0);
   useEffect(() => { if (wait <= 0) return; const id = setTimeout(() => setWait(wait - 1), 1000); return () => clearTimeout(id); }, [wait]);
   // Sign-up and reset run in the app; a panel that wants a captcha (or a build without
@@ -159,16 +166,43 @@ function Login({ state, busy, run }: { state: AppView; busy: string | null; run(
   </main>;
 }
 
-function NodeSheet({ state, close, run }: { state: AppView; close(): void; run(command: Command): Promise<boolean> }) {
+/** The core refuses a second round of measurements for this long. */
+const PROBE_INTERVAL = 15000;
+let probedAt = 0;
+/** One round measures 64 lines at most: the chosen line, favorites and recent lines go first. */
+const probeOrder = (view: AppView) => {
+  const first = new Set([view.selectedNode, view.actualNode, ...view.preferences.favoriteNodeIds, ...view.preferences.recentNodeIds]);
+  const usable = view.nodes.filter(n => n.compatible);
+  return [...usable.filter(n => first.has(n.id)), ...usable.filter(n => !first.has(n.id))].slice(0, 64).map(n => n.id);
+};
+
+function NodeSheet({ state, close, run, toast }: { state: AppView; close(): void; run(command: Command): Promise<boolean>; toast: ReactNode }) {
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<'all' | 'favorite' | 'recent'>('all');
   const [savingFavorite, setSavingFavorite] = useState(false);
   const favoritePending = useRef(false);
-  // Measure every node when the list opens; the core probes them in isolation.
-  useEffect(() => {
-    const ids = state.nodes.filter(n => n.compatible).slice(0, 64).map(n => n.id);
-    if (ids.length) void bridge.command({ type: 'probe-nodes', nodeIds: ids }).catch(() => undefined);
-  }, []);
+  const [refreshing, setRefreshing] = useState(false);
+  const [cooling, setCooling] = useState(() => Date.now() - probedAt < PROBE_INTERVAL);
+  useEffect(() => { if (!cooling) return; const id = setTimeout(() => setCooling(false), Math.max(0, probedAt + PROBE_INTERVAL - Date.now())); return () => clearTimeout(id); }, [cooling]);
+  // The core probes nodes in isolation. A round that would be refused is not asked for.
+  const probe = async (view: AppView) => {
+    const ids = probeOrder(view);
+    if (!ids.length || Date.now() - probedAt < PROBE_INTERVAL) return;
+    probedAt = Date.now(); setCooling(true);
+    await bridge.command({ type: 'probe-nodes', nodeIds: ids }).catch(() => undefined);
+  };
+  // Measure when the list opens.
+  useEffect(() => { void probe(state); }, []);
+  // Fetch the line list again, then measure the lines it now has.
+  const refresh = async () => {
+    if (refreshing || cooling) return;
+    setRefreshing(true);
+    try {
+      if (!await run({ type: 'sync' })) return;
+      const fresh = await bridge.command({ type: 'state' }).catch(() => null);
+      await probe(fresh?.state ?? state);
+    } finally { setRefreshing(false); }
+  };
   const choose = (nodeId: string | null) => { close(); void run({ type: 'preferences', preferences: { ...state.preferences, nodeId } }); };
   const favorites = new Set(state.preferences.favoriteNodeIds);
   const recency = new Map(state.preferences.recentNodeIds.map((id, index) => [id, index]));
@@ -183,7 +217,7 @@ function NodeSheet({ state, close, run }: { state: AppView; close(): void; run(c
     try { await run({ type: 'favorite-node', nodeId: node.id, favorite: !favorites.has(node.id) }); }
     finally { favoritePending.current = false; setSavingFavorite(false); }
   };
-  return <Sheet title="选择线路" close={close}>
+  return <Sheet title="选择线路" close={close} toast={toast} action={<button className={`icon-button ${refreshing ? 'spinning' : ''}`} aria-label="刷新线路" disabled={refreshing || cooling} onClick={() => void refresh()}><Icon name="refresh" size={18}/></button>}>
     <button className={`node-row auto ${state.selectedNode === null ? 'selected' : ''}`} onClick={() => choose(null)}>
       <span className="flag"><Icon name="sparkle"/></span><span className="node-name"><strong>自动选择</strong></span>
       {state.selectedNode === null && <Icon name="check" size={18}/>}
@@ -237,11 +271,16 @@ function InvitePanel({ state, run }: { state: AppView; run(command: Command): Pr
   </div>;
 }
 
-function SettingsSheet({ state, busy, report, close, run, prefs }: { state: AppView; busy: string | null; report: boolean; close(): void; run(command: Command): Promise<boolean>; prefs(change: Partial<Preferences>): void }) {
+function SettingsSheet({ state, busy, report, close, run, prefs, toast }: { state: AppView; busy: string | null; report: boolean; close(): void; run(command: Command): Promise<boolean>; prefs(change: Partial<Preferences>): void; toast: ReactNode }) {
   const [reporting, setReporting] = useState(report || state.report.status !== 'idle');
   const [inviting, setInviting] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+  const [repairing, setRepairing] = useState(false);
+  // Repairing takes the connection down first; nothing is lost while there is none.
+  const live = state.connection !== 'Disconnected' && state.connection !== 'RecoveryRequired';
   const download = state.download;
-  return <Sheet title="设置" close={close}>
+  return <Sheet title="设置" close={close} toast={toast}>
+    {state.account && <div className="group"><div className="row"><span><strong>账号</strong></span><span className="value">{state.account.email}</span></div></div>}
     <div className="group">
       <div className="row appearance"><span><strong>外观</strong></span>
         <div className="segmented" role="radiogroup" aria-label="外观">
@@ -260,7 +299,7 @@ function SettingsSheet({ state, busy, report, close, run, prefs }: { state: AppV
     <div className="group">
       <button className="row" onClick={() => setReporting(!reporting)} aria-expanded={reporting}><span><strong>上报问题</strong></span><Icon name="chevron" size={16}/></button>
       {reporting && <ReportPanel state={state} run={run}/>}
-      {state.links.support && <button className="row" onClick={() => void run({ type: 'open-link', link: 'support' })}><span><strong>联系客服</strong></span><Icon name="chevron" size={16}/></button>}
+      {state.links.support && <button className="row" onClick={() => void run({ type: 'open-link', link: 'support' })}><span><strong>联系客服</strong></span><Icon name="external" size={16}/></button>}
     </div>
     <div className="group">
       <div className="row"><span><strong>检查更新</strong><small>{state.installing ? (download.status === 'downloading' ? `正在下载 ${Math.round(download.received / Math.max(1, download.total) * 100)}%` : '正在安装') : state.updateError ? state.update : download.status === 'ready' ? `新版本 ${download.version} 已下载` : state.update}</small></span>
@@ -268,10 +307,18 @@ function SettingsSheet({ state, busy, report, close, run, prefs }: { state: AppV
           : <button className="secondary" disabled={!!busy || state.installing || download.status === 'downloading'} onClick={() => void run({ type: 'check-update' })}>检查</button>}
       </div>
       <div className="row"><span><strong>手动下载安装包</strong></span><button className="secondary" onClick={() => void run({ type: 'open-download-page' })}>手动下载</button></div>
-      <div className="row"><span><strong>修复网络组件</strong></span><button className="secondary" disabled={!!busy} onClick={() => void run({ type: 'repair' })}>修复</button></div>
-      {state.links.help && <button className="row" onClick={() => void run({ type: 'open-link', link: 'help' })}><span><strong>使用帮助</strong></span><Icon name="chevron" size={16}/></button>}
+      <div className="row" role="group" aria-label="修复网络组件"><span><strong>{repairing ? '断开连接并修复？' : '修复网络组件'}</strong></span>
+        {repairing ? <div className="confirm"><button className="secondary" onClick={() => setRepairing(false)}>取消</button><button className="secondary leave" onClick={() => { setRepairing(false); void run({ type: 'repair' }); }}>修复</button></div>
+          : <button className="secondary" disabled={!!busy} onClick={() => { if (live) setRepairing(true); else void run({ type: 'repair' }); }}>修复</button>}
+      </div>
+      {state.links.help && <button className="row" onClick={() => void run({ type: 'open-link', link: 'help' })}><span><strong>使用帮助</strong></span><Icon name="external" size={16}/></button>}
     </div>
-    {state.loggedIn && <button className="danger" onClick={() => { close(); void run({ type: 'logout' }); }}>退出登录</button>}
+    {/* Asked first: logging out clears the session and the password has to be typed again. */}
+    {state.loggedIn && (leaving
+      ? <div className="group"><div className="row" role="group" aria-label="确认退出登录"><span><strong>退出登录？</strong></span>
+        <div className="confirm"><button className="secondary" onClick={() => setLeaving(false)}>取消</button><button className="secondary leave" onClick={() => { close(); void run({ type: 'logout' }); }}>退出</button></div>
+      </div></div>
+      : <button className="danger" onClick={() => setLeaving(true)}>退出登录</button>)}
     <p className="version">{state.brand} {state.version}{state.environment === 'test' ? ' · 测试版' : ''}</p>
   </Sheet>;
 }
@@ -328,7 +375,8 @@ function Home({ state, traffic, busy, run, open, prefs }: { state: AppView; traf
   const quota = account?.quotaKind === 'finite' && account.quotaBytes ? BigInt(account.quotaBytes) : 0n;
   const used = BigInt(account?.usedBytes ?? '0');
   const percent = quota > 0n ? Math.min(100, Number(used * 1000n / quota) / 10) : 0;
-  const issue = state.error && !connected ? problem(state.error) : null;
+  // The operator's own words for a maintenance window come before any error it causes.
+  const issue = connected ? null : state.maintenance ? { text: `维护中：${state.maintenance}` } as { text: string; action?: Action } : state.error ? problem(state.error) : null;
   const renewSoon = !!account && (left.days <= 7 || percent >= 90 || issue?.action === 'renew');
   const act = (action: Action) => {
     if (action === 'sync') { void run({ type: 'sync' }); return; }
@@ -360,7 +408,7 @@ function Home({ state, traffic, busy, run, open, prefs }: { state: AppView; traf
     {account && <section className={`card plan-card ${renewSoon ? 'warn' : ''}`} aria-label="套餐">
       <div className="plan-line"><strong>{left.text}</strong>{quota > 0n && state.showTrafficSummary && <span>已用 {gb(used)} / {gb(quota)}</span>}</div>
       {quota > 0n && state.showTrafficSummary && <div className="progress" role="progressbar" aria-label="流量用量" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${percent}%` }}/></div>}
-      <div className="plan-line"><small>{account.planName}</small>
+      <div className="plan-line"><small>{account.planName}{account.expiryKind === 'finite' && account.expiresAt ? ` · ${day(account.expiresAt)} 到期` : ''}</small>
         {state.links.renew && <button className={renewSoon ? 'primary small' : 'link'} onClick={() => void run({ type: 'open-link', link: 'renew' })}>续费</button>}</div>
       {state.pendingRenewal && <button className="link" onClick={() => void run({ type: 'renewal-return' })}>已经续费？点这里刷新</button>}
     </section>}
@@ -371,6 +419,8 @@ function App() {
   const [state, setState] = useState<AppView | null>(null); const [sheet, setSheet] = useState<'nodes' | 'settings' | null>(null);
   const [busy, setBusy] = useState<string | null>(null); const [toast, setToast] = useState<string | null>(null); const [report, setReport] = useState(false);
   const [traffic, setTraffic] = useState<TrafficView | null>(null);
+  // Kept for this run only, so logging out by mistake does not mean typing it again.
+  const lastEmail = useRef('');
   useEffect(() => bridge.traffic?.(setTraffic), []);
   useEffect(() => { const unsubscribe = bridge.subscribe(setState); void bridge.command({ type: 'state' }).then(r => setState(r.state)).catch(() => setToast('客户端没有正常启动，请重新打开')); return unsubscribe; }, []);
   useEffect(() => { if (state) document.documentElement.dataset.theme = state.preferences.theme; }, [state?.preferences.theme]);
@@ -381,19 +431,22 @@ function App() {
       const r = await bridge.command(command); setState(r.state);
       // Connection problems are shown under the button with what to do next.
       // The panel's own words ("邀请码无效") say more than the generic text.
+      if (r.ok && (command.type === 'login' || command.type === 'register' || command.type === 'reset-password')) lastEmail.current = command.email;
       if (!r.ok && r.error && command.type !== 'connect' && command.type !== 'report') setToast(['check-update', 'download-update', 'install-update'].includes(command.type) && r.state.updateError ? r.state.update : r.message || problem(r.error).text);
       return r.ok;
     } catch { setToast('操作没有完成，请重试'); return false; } finally { setBusy(null); }
   };
   const prefs = (change: Partial<Preferences>) => { if (state) void run({ type: 'preferences', preferences: { ...state.preferences, ...change } }); };
   const open = (next: 'nodes' | 'settings', reportOpen = false) => { setReport(reportOpen); setSheet(next); };
+  const notice = toast && <div className="toast" role="alert"><span>{toast}</span><button className="icon-button" aria-label="关闭提示" onClick={() => setToast(null)}><Icon name="close" size={16}/></button></div>;
   if (!state) return <div className="loading"><BrandMark size={48}/><p>{toast ?? '正在打开…'}</p></div>;
   return <div className="app">
-    {state.loggedIn && <header className={`topbar ${nativeTitle ? 'compact' : ''}`}>{!nativeTitle && <span className="brand"><BrandMark size={24}/>{state.brand}</span>}{state.demo && <span className="chip">预览</span>}<button className="icon-button" aria-label="设置" onClick={() => open('settings')}><Icon name="settings"/></button></header>}
-    {state.loggedIn ? <Home state={state} traffic={traffic} busy={busy} run={run} open={open} prefs={prefs}/> : <Login state={state} busy={busy} run={run}/>}
-    {sheet === 'nodes' && <NodeSheet state={state} close={() => setSheet(null)} run={run}/>}
-    {sheet === 'settings' && <SettingsSheet state={state} busy={busy} report={report} close={() => setSheet(null)} run={run} prefs={prefs}/>}
-    {toast && <div className="toast" role="alert"><span>{toast}</span><button className="icon-button" aria-label="关闭提示" onClick={() => setToast(null)}><Icon name="close" size={16}/></button></div>}
+    {/* Settings stay reachable signed out: that is when reporting, support and updates matter most. */}
+    <header className={`topbar ${nativeTitle || !state.loggedIn ? 'compact' : ''}`}>{state.loggedIn && !nativeTitle && <span className="brand"><BrandMark size={24}/>{state.brand}</span>}{state.loggedIn && state.demo && <span className="chip">预览</span>}<button className="icon-button" aria-label="设置" onClick={() => open('settings')}><Icon name="settings"/></button></header>
+    {state.loggedIn ? <Home state={state} traffic={traffic} busy={busy} run={run} open={open} prefs={prefs}/> : <><UpdateCard state={state} run={run}/><Login state={state} busy={busy} run={run} lastEmail={lastEmail.current}/></>}
+    {sheet === 'nodes' && <NodeSheet state={state} close={() => setSheet(null)} run={run} toast={notice}/>}
+    {sheet === 'settings' && <SettingsSheet state={state} busy={busy} report={report} close={() => setSheet(null)} run={run} prefs={prefs} toast={notice}/>}
+    {!sheet && notice}
   </div>;
 }
 createRoot(document.getElementById('root')!).render(<React.StrictMode><App/></React.StrictMode>);

@@ -38,6 +38,10 @@ try {
   await page.getByRole('heading', { name: '未连接' }).waitFor();
   await page.getByText('预览', { exact: true }).waitFor();
   await page.screenshot({ path: 'work/preview-home.png', fullPage: true });
+  // The plan, with the date it runs out, stays in the default window even under an update card.
+  const plan = await page.getByRole('region', { name: '套餐' }).boundingBox();
+  assert.ok(plan.y + plan.height <= 700, `plan card ends at ${plan.y + plan.height}`);
+  await page.getByRole('region', { name: '套餐' }).getByText(/ · \d{4}-\d{2}-\d{2} 到期$/).waitFor();
 
   // A new version is recommended on the home screen; one click downloads and installs it.
   const update = page.getByRole('region', { name: '推荐更新' });
@@ -98,6 +102,11 @@ try {
   assert.equal(await page.getByRole('switch', { name: '全局代理' }).getAttribute('aria-checked'), 'true');
   await page.getByRole('button', { name: /上报问题/ }).click();
   await page.getByRole('button', { name: '导出诊断文件' }).waitFor();
+  // A refusal while a sheet is open is drawn in the sheet, not underneath it.
+  await page.getByRole('button', { name: '手动下载', exact: true }).click();
+  assert.equal(await page.getByRole('alert').evaluate(el => { const box = el.getBoundingClientRect(); return !!document.elementFromPoint(box.left + 20, box.top + box.height / 2)?.closest('.toast'); }), true);
+  await page.getByRole('button', { name: '关闭提示' }).click();
+  await page.getByRole('radio', { name: '跟随系统' }).click(); // the preview forgets the refusal on the next command
   await page.getByRole('button', { name: '返回' }).click();
 
   await page.emulateMedia({ colorScheme: 'dark' });
@@ -112,6 +121,7 @@ try {
   // and favorite actions never choose a node or connect.
   const lists = await browser.newPage({ viewport: { width: 360, height: 640 } });
   lists.on('pageerror', error => failures.push(error.message));
+  await lists.clock.install();
   const recentIds = [fixture.nodes[2].id, fixture.nodes[1].id, fixture.nodes[0].id];
   const listFixture = { ...fixture, nodes: fixture.nodes.map((node, i) => ({ ...node, region: i === 2 ? 'JP' : node.region })), preferences: { ...fixture.preferences, favoriteNodeIds: ['disappeared'], recentNodeIds: [...recentIds, 'disappeared'] } };
   await lists.addInitScript(fakeBridge, listFixture);
@@ -129,6 +139,13 @@ try {
   await lists.getByRole('tab', { name: '最近 3', exact: true }).click();
   assert.equal(await lists.evaluate(() => document.querySelector('dialog').scrollWidth <= innerWidth), true);
   await lists.screenshot({ path: 'work/preview-recent-narrow.png' });
+  // The list was measured when it opened; refreshing waits out the core's interval, then
+  // fetches the lines again and measures them.
+  assert.equal(await lists.getByRole('button', { name: '刷新线路' }).isDisabled(), true);
+  await lists.clock.fastForward(16000);
+  await lists.getByRole('button', { name: '刷新线路' }).click();
+  await lists.waitForFunction(() => window.__commands.filter(type => type === 'probe-nodes').length === 2);
+  assert.deepEqual((await lists.evaluate(() => window.__commands)).slice(-3), ['sync', 'state', 'probe-nodes']);
   await lists.close();
 
   // Failed update checks are visible even before an artifact is selected.
@@ -148,17 +165,32 @@ try {
   assert.equal((await recovery.evaluate(() => window.__commands)).at(-1), 'sync');
   await recovery.close();
 
-  // Signed out: only the login form.
+  // Signed out: the login form, with settings still one click away.
   const login = await browser.newPage({ viewport: { width: 420, height: 700 } });
   login.on('pageerror', error => failures.push(error.message));
   await login.addInitScript(fakeBridge, { ...fixture, loggedIn: false, account: null, nodes: [] });
   await login.goto('http://127.0.0.1:5173/');
   await login.getByRole('textbox', { name: '邮箱' }).fill('user@example.com');
   await login.getByLabel('密码').fill('secret');
-  assert.equal(await login.getByRole('button', { name: '设置' }).count(), 0);
+  await login.getByRole('button', { name: '设置' }).click();
+  await login.getByRole('button', { name: /上报问题/ }).waitFor();
+  assert.equal(await login.getByRole('button', { name: '退出登录' }).count(), 0);
+  await login.getByRole('button', { name: '返回' }).click();
   await login.screenshot({ path: 'work/preview-login.png' });
   await login.getByRole('button', { name: '登录' }).click();
   await login.getByRole('heading', { name: '未连接' }).waitFor();
+  // Logging out asks first, and the login form still has the address afterwards.
+  await login.getByRole('button', { name: '设置' }).click();
+  await login.getByRole('button', { name: '退出登录' }).click();
+  await login.getByRole('group', { name: '确认退出登录' }).getByRole('button', { name: '取消' }).click();
+  assert.equal((await login.evaluate(() => window.__commands)).includes('logout'), false);
+  await login.getByRole('button', { name: '退出登录' }).click();
+  await login.getByRole('group', { name: '确认退出登录' }).getByRole('button', { name: '退出', exact: true }).click();
+  await login.waitForFunction(() => window.__commands.includes('logout'));
+  await login.evaluate(() => window.__set({ loggedIn: false }));
+  assert.equal(await login.getByRole('textbox', { name: '邮箱' }).inputValue(), 'user@example.com');
+  // A new version is offered signed out too.
+  await login.getByRole('region', { name: '推荐更新' }).getByRole('button', { name: '立即更新' }).waitFor();
   await login.close();
 
   // Announcements are text only, renewal is prominent near expiry, updates install in one click,
@@ -197,14 +229,31 @@ try {
   await proxied.evaluate(() => window.__traffic({ up: '1.2 KB/s', down: '8.8 KB/s' }));
   await proxied.getByLabel('上传 1.2 KB/s，下载 8.8 KB/s').waitFor();
   await proxied.screenshot({ path: 'work/preview-speed.png' });
+  // Settings name the account; repairing asks before it takes a live connection down.
+  await proxied.getByRole('button', { name: '设置' }).click();
+  await proxied.getByText(fixture.account.email, { exact: true }).waitFor();
+  const repair = proxied.getByRole('group', { name: '修复网络组件' });
+  await repair.getByRole('button', { name: '修复' }).click();
+  await repair.getByText('断开连接并修复？').waitFor();
+  await repair.getByRole('button', { name: '取消' }).click();
+  assert.equal((await proxied.evaluate(() => window.__commands)).includes('repair'), false);
+  await proxied.getByRole('button', { name: '返回' }).click();
   await proxied.evaluate(() => window.__set({ connection: 'Disconnected', proxyPort: 0, error: 'SYSTEM_PROXY_FAILED' }));
   await proxied.getByRole('status').filter({ hasText: '没能设置系统代理' }).waitFor();
   await proxied.getByRole('status').getByRole('button', { name: '改用 TUN 模式' }).click();
   await proxied.waitForFunction(() => window.__commands.includes('connect'));
   assert.deepEqual((await proxied.evaluate(() => window.__commands)).filter(value => value !== 'state'), ['preferences', 'connect']);
   assert.equal(await proxied.getByLabel(/^上传 /).count(), 0);
+  // A maintenance window shows the operator's reason, not the error connecting ran into.
+  await proxied.evaluate(() => window.__set({ maintenance: '机房迁移，预计 14:00 恢复', error: 'CONTROL_UNAVAILABLE' }));
+  await proxied.getByRole('status').filter({ hasText: '维护中：机房迁移，预计 14:00 恢复' }).waitFor();
+  assert.equal(await proxied.getByRole('status').getByRole('button').count(), 0);
+  await proxied.evaluate(() => window.__set({ maintenance: null, error: null }));
   // The account's invite code is fetched when asked for; 联系客服 opens the operator's chat.
   await proxied.getByRole('button', { name: '设置' }).click();
+  // With no connection to lose, repairing starts at once.
+  await proxied.getByRole('group', { name: '修复网络组件' }).getByRole('button', { name: '修复' }).click();
+  await proxied.waitForFunction(() => window.__commands.at(-1) === 'repair');
   await proxied.getByRole('button', { name: '邀请好友' }).click();
   assert.equal(await proxied.getByLabel('邀请码').textContent(), 'AB12CD34');
   await proxied.getByText('已邀请 2 人').waitFor();

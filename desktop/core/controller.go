@@ -568,6 +568,10 @@ func (c *ClientController) View() AppView {
 		if p.UI.Announcement != nil {
 			view.Announcement = &p.UI.Announcement.Text
 		}
+		if m := c.maintenanceOf(p, now); m != nil {
+			reason := m.Reason
+			view.Maintenance = &reason
+		}
 	}
 	if c.snapshot != nil {
 		syncTime, until := c.snapshot.FullSyncCompletedAt, c.snapshot.UsableUntil
@@ -779,22 +783,26 @@ func (c *ClientController) scheduleLocked() {
 	c.nextPrune = now.Add(time.Hour)
 }
 func (c *ClientController) maintenance(now int64) bool {
-	p := c.policy.Active()
+	return c.maintenanceOf(c.policy.Active(), now) != nil
+}
+
+// maintenanceOf is the policy's maintenance window if it is open on this platform now.
+func (c *ClientController) maintenanceOf(p *Policy, now int64) *Maintenance {
 	if p == nil || p.Maintenance == nil {
-		return false
+		return nil
 	}
 	m := p.Maintenance
 	from, e1 := signedTime(m.StartsAt)
 	until, e2 := signedTime(m.EndsAt)
 	if e1 != nil || e2 != nil || now < from || now >= until {
-		return false
+		return nil
 	}
 	for _, platform := range m.Platforms {
 		if platform == c.deps.Platform {
-			return true
+			return m
 		}
 	}
-	return false
+	return nil
 }
 func (c *ClientController) tick() {
 	now := c.now()
@@ -1446,8 +1454,9 @@ func (c *ClientController) Command(ctx context.Context, raw json.RawMessage) Com
 		code := CodeOf(err)
 		if cmd.Type == "check-update" || cmd.Type == "download-update" || cmd.Type == "install-update" {
 			c.updateFailed(err)
-		} else if cmd.Type != "open-download-page" && cmd.Type != "signup-config" && (cmd.Type != "invite" || code == "AUTH_INVALID") {
-			// An invite code that could not be fetched says nothing about the connection.
+		} else if cmd.Type != "open-download-page" && cmd.Type != "signup-config" && cmd.Type != "probe-nodes" && (cmd.Type != "invite" || code == "AUTH_INVALID") {
+			// An invite code that could not be fetched, or a round of measurements that
+			// could not run, says nothing about the connection.
 			c.fail(code)
 		}
 		return CommandResult{OK: false, State: c.View(), Error: code, Message: DetailOf(err)}

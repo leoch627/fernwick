@@ -11,6 +11,8 @@
 html,body{margin:0;height:100%}
 body{background:var(--glow),var(--bg);background-repeat:no-repeat;color:var(--text);-webkit-font-smoothing:antialiased;user-select:none}
 input,textarea{user-select:text}
+/* What people copy to support or into another program: notices, problems, the local port, the version. */
+.announcement,.problem,.warn,.toast span,.version,.mode-card>.muted,.plan-line,.update-text small{user-select:text}
 button,input,textarea{font:inherit;color:inherit}
 button{cursor:pointer;border:0;background:none;padding:0}
 button:disabled{cursor:default;opacity:.55}
@@ -23,13 +25,18 @@ button:disabled{cursor:default;opacity:.55}
 .warn{color:var(--amber);font-size:13px;margin:0}
 .link{color:var(--accent);font-size:13px;padding:2px 4px}
 .icon-button{display:grid;place-items:center;width:36px;height:36px;border-radius:10px;color:var(--secondary)}
-.icon-button:hover{background:var(--subtle);color:var(--text)}
+.icon-button:hover:not(:disabled){background:var(--subtle);color:var(--text)}
+.icon-button.spinning svg{animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.icon-button.spinning svg{animation:none}}
 .primary{background:var(--accent);color:var(--on-accent);border-radius:12px;padding:12px 18px;font-weight:600}
 .primary:hover:not(:disabled){filter:brightness(1.06)}
 .primary.small{padding:5px 14px;font-size:13px;border-radius:999px}
 .secondary{background:var(--subtle);border:1px solid var(--line-strong);border-radius:10px;padding:6px 14px;font-size:13px;white-space:nowrap}
 .secondary:hover:not(:disabled){background:var(--tint)}
 .danger{width:100%;padding:12px;border-radius:12px;color:var(--red);background:var(--surface);border:1px solid var(--line)}
+.confirm{display:flex;gap:8px;flex:none}
+.confirm .leave{color:var(--red)}
 .chip{font-size:11px;color:var(--warn);background:var(--warn-bg);border:1px solid var(--warn-border);border-radius:999px;padding:1px 8px}
 .topbar{display:flex;align-items:center;gap:8px;height:56px}
 .topbar>.icon-button{margin-left:auto}
@@ -59,6 +66,11 @@ button:disabled{cursor:default;opacity:.55}
 @keyframes pulse{50%{box-shadow:0 0 0 14px var(--tint)}}
 @media(prefers-reduced-motion:reduce){.power.working .power-button{animation:none;box-shadow:0 0 0 10px var(--tint)}}
 .problem{margin:0;color:var(--red);font-size:14px;display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:4px}
+/* The default window is 700 tall. A banner takes its room from the button, so the plan stays in view. */
+.home:has(.update-card,.announcement) .power{padding:12px 0 8px}
+.home:has(.update-card,.announcement) .power-button{width:116px;height:116px}
+.home:has(.update-card,.announcement) .power-button svg{width:40px;height:40px}
+.home:has(.update-card,.announcement) .power h1{margin-top:8px}
 .flag{display:grid;place-items:center;width:36px;height:36px;border-radius:10px;background:var(--subtle);font-size:20px;flex:none;color:var(--accent)}
 .node-name{flex:1;min-width:0;display:flex;flex-direction:column}
 .node-name small{color:var(--secondary);font-size:12px}
@@ -130,6 +142,10 @@ html:has(.sheet[open]){overflow:hidden}
 .row small{color:var(--secondary);font-size:12px}
 button.row:hover{background:var(--subtle)}
 button.row>svg{color:var(--muted);flex:none}
+/* A row that opens in place points down, then up; one that leaves the app has its own icon. */
+button.row[aria-expanded]>svg{transform:rotate(90deg)}
+button.row[aria-expanded=true]>svg{transform:rotate(-90deg)}
+.row>.value{display:block;color:var(--secondary);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;user-select:text}
 .toggle{position:relative;width:44px;height:26px;border-radius:999px;background:var(--line-strong);flex:none;transition:background .2s}
 .toggle::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgb(0 0 0 / .2);transition:transform .2s}
 .toggle.on{background:var(--accent)}

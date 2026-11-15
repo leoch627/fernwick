@@ -51,9 +51,12 @@ type AppView struct {
 	ProxyPort    int             `json:"proxyPort"`
 	Policy       string          `json:"policy"`
 	Announcement *string         `json:"announcement"`
-	UpdateError  *ErrorCode      `json:"updateError"`
-	Update       string          `json:"update"`
-	ManualUpdate bool            `json:"manualUpdate"`
+	// Maintenance is the operator's reason while a maintenance window is open on this
+	// platform; connecting is refused until it ends.
+	Maintenance  *string    `json:"maintenance"`
+	UpdateError  *ErrorCode `json:"updateError"`
+	Update       string     `json:"update"`
+	ManualUpdate bool       `json:"manualUpdate"`
 	// Installing: the user asked to update; the download (if any) and installation run
 	// on their own and the app restarts into the new version.
 	Installing         bool         `json:"installing"`
