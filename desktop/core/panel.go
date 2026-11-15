@@ -409,14 +409,19 @@ func (p *V2BoardAdapter) FetchNodes(ctx context.Context, descriptor Subscription
 	if err != nil {
 		return "", err
 	}
-	response, err := p.http.Request(ctx, HTTPRequest{URL: u, MaxBytes: 14 * 1024 * 1024})
+	request := HTTPRequest{URL: u, MaxBytes: subscriptionArmoredLimit}
+	identity := newSubscriptionIdentity()
+	if identity != nil {
+		request.Headers = map[string]string{subscriptionAgeHeader: identity.Recipient().String()}
+	}
+	response, err := p.http.Request(ctx, request)
 	if err != nil {
 		return "", err
 	}
 	if err = RequireSuccess(response, "subscription"); err != nil {
 		return "", err
 	}
-	return response.Body, nil
+	return openSubscription(response.Body, identity)
 }
 func (p *V2BoardAdapter) Logout(ctx context.Context, endpoint string, session Session) error {
 	if p.contract.LogoutPath == nil {

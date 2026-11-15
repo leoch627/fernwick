@@ -39,6 +39,7 @@ func TestControlRequestWhitelist(t *testing.T) {
 		{"oversized header", &ControlRequest{URL: allowed, Headers: map[string]string{"Authorization": strings.Repeat("a", 8193)}}, "INVALID_INPUT"},
 		// Passing every check reaches the network, which is unavailable here.
 		{"allowed request", &ControlRequest{URL: allowed, Method: "POST", Headers: map[string]string{"Authorization": "token", "Content-Type": "application/json"}, Body: "{}"}, "CONTROL_UNAVAILABLE"},
+		{"subscription recipient", &ControlRequest{URL: allowed, Headers: map[string]string{"x-age-public-key": "age1xh86kh9v23vattr58yedspm3f57sxvnswu9krr6ns438amekx5gsd09uma"}}, "CONTROL_UNAVAILABLE"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

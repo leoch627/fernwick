@@ -38,6 +38,8 @@
 
 源码 `ClientController` 会在 flag/UA 非空时可能插入到期/用量“伪节点”。本客户端在已有完整订阅 URL 上设置**空的 `flag=`**：该提交把空字符串保留为 falsy，走 General.handle 的 URI/Base64 输出且不插入显示伪节点。没有根据名称关键词删除真实节点，也没有替换订阅域名。
 
+订阅请求带 `X-Age-Public-Key: age1…`，与 mihomo proxy-provider 的 `age-secret-key` 约定一致：面板认识这个头时，用其中的 x25519 公钥把整个响应体加密成 age-encryption.org/v1 的 ASCII armor（`-----BEGIN AGE ENCRYPTED FILE-----`），客户端解密后得到同一份 `v2ray-uri-base64-v1` 内容。密钥对每次请求现生成，只在内存里，不落盘。面板不认识这个头时照常返回明文，客户端照常读取；armor 解不开（密钥不符、截断、明文超过 14 MiB）按 `SUBSCRIPTION_INVALID` 处理并换下一个入口。TUN 开启时经网络服务转发，服务的请求头白名单包含这个头。
+
 这项选择必须在真实部署合同测试中确认；若线上分支、中间件或反向代理改变空查询参数语义，不能直接标记部署已验收。未声明额外订阅域名时会拒绝其 URL，需由开发者修改集中配置再构建。
 
 支持解析 VLESS TCP+TLS/REALITY、VMess AEAD WS+TLS、Trojan TCP+TLS 和三种 Shadowsocks AEAD。支持该提交产生的无效应空字段。`insecure=1`、非空证书固定、ECH、未知参数及未实现的传输组合不会被悄悄丢弃。

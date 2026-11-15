@@ -136,7 +136,7 @@ func controlRequest(ctx context.Context, input *ControlRequest, physical Interfa
 		return nil, failure("INVALID_INPUT")
 	}
 	for name, value := range input.Headers {
-		if !contains([]string{"authorization", "content-type", "accept", "cache-control", "if-none-match", "if-modified-since"}, strings.ToLower(name)) || len(value) > 8192 || strings.ContainsAny(value, "\r\n") {
+		if !contains([]string{"authorization", "content-type", "accept", "cache-control", "if-none-match", "if-modified-since", "x-age-public-key"}, strings.ToLower(name)) || len(value) > 8192 || strings.ContainsAny(value, "\r\n") {
 			return nil, failure("INVALID_INPUT")
 		}
 		request.Header.Set(name, value)

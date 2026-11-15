@@ -14,7 +14,9 @@ This project has no declared open-source license for its original application co
 | Twemoji Country Flags font (country-flag-emoji-polyfill 0.1.10) | Country flag emoji where the system draws none (Windows, Linux) | Font build MIT (Copyright (c) 2022 TalkJS); flag artwork from Twemoji, Copyright Twitter, Inc. and other contributors, CC-BY-4.0 (https://creativecommons.org/licenses/by/4.0/), unmodified |
 | go-winres | Windows application icon, manifest and version resources at build time | MIT |
 | Playwright Core | Browser preview tests | Apache-2.0 |
-| Go / golang.org/x/sys | Desktop/helper toolchain and OS interfaces | BSD-3-Clause; bundled license in licenses/golang-x-sys-BSD.txt |
+| Go / golang.org/x/sys / golang.org/x/crypto | Desktop/helper toolchain, OS interfaces and the ciphers age uses | BSD-3-Clause; bundled license in licenses/golang-x-sys-BSD.txt |
+| filippo.io/age v1.3.2 | Opening age-encrypted subscriptions | BSD-3-Clause; bundled license in licenses/age-BSD.txt |
+| filippo.io/hpke v0.4.0 | Linked by filippo.io/age | BSD-3-Clause; bundled license in licenses/hpke-BSD.txt |
 | Microsoft go-winio v0.6.2 | Local Windows named-pipe transport | MIT; bundled license in licenses/go-winio-MIT.txt |
 | Wintun | Windows TUN driver, unmodified DLL from the pinned Xray release | Upstream LICENSE-Wintun bundled alongside wintun.dll |
 | wyx2685/v2board | Referenced API contract; server source not bundled | MIT according to the inspected repository LICENSE |
