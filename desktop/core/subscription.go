@@ -87,12 +87,6 @@ func jsUTF16Length(s string) int {
 	return n
 }
 func nodeString(s string) *string { return &s }
-func nodeValue(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
-}
 
 func subscriptionField(v any, maxLen int) (string, error) {
 	s, ok := v.(string)
