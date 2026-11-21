@@ -154,18 +154,6 @@ func validAppArguments(args, path string) bool {
 	return true
 }
 func runService() error { ctx, cancel := signalContext(); defer cancel(); return serve(ctx) }
-func startDetached(path string, args ...string) error {
-	command := exec.Command(path, args...)
-	command.Env = safeEnvironment()
-	command.Stdin = nil
-	command.Stdout = io.Discard
-	command.Stderr = io.Discard
-	command.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	if e := command.Start(); e != nil {
-		return e
-	}
-	return command.Process.Release()
-}
 func stopInstalledService() error {
 	// launchd kills a service that has not exited after its ExitTimeOut (8s); allow that.
 	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
