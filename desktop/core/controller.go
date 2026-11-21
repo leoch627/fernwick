@@ -385,9 +385,6 @@ func (c *ClientController) commitSnapshot(ctx context.Context, snapshot Snapshot
 	}
 	return nil
 }
-func (c *ClientController) syncDone(code ErrorCode) {
-	c.syncDoneCurrent("", code)
-}
 func (c *ClientController) syncDoneCurrent(generation string, code ErrorCode) {
 	c.mu.Lock()
 	if c.closing || generation != "" && (c.session == nil || c.session.Generation != generation) {
@@ -421,9 +418,6 @@ func (c *ClientController) syncDoneCurrent(generation string, code ErrorCode) {
 	}
 	c.record("sync", event)
 	c.emit()
-}
-func (c *ClientController) restrict(code ErrorCode) {
-	c.restrictCurrent("", code)
 }
 func (c *ClientController) restrictCurrent(generation string, code ErrorCode) bool {
 	c.mu.Lock()
