@@ -41,67 +41,6 @@ func cloneRules(rules Rules) Rules {
 	return rules
 }
 
-type RoutingResources struct {
-	opMu       sync.Mutex
-	mu         sync.RWMutex
-	build      BuildConfig
-	persist    func(ActiveResource) error
-	active     *ActiveResource
-	identities map[string]string
-}
-
-func NewRoutingResources(build BuildConfig, persist func(ActiveResource) error) *RoutingResources {
-	return &RoutingResources{build: build, persist: persist, identities: map[string]string{}}
-}
-func (r *RoutingResources) Activate(body []byte, descriptor Resource, now int64) error {
-	r.opMu.Lock()
-	defer r.opMu.Unlock()
-	rules, err := ValidateResource(body, descriptor, r.build, now)
-	if err != nil {
-		return err
-	}
-	r.mu.RLock()
-	prior := r.identities[descriptor.ID]
-	active := r.active
-	r.mu.RUnlock()
-	if prior != "" && prior != descriptor.SHA256 || active != nil && descriptor.Version < active.Descriptor.Version {
-		return NewAppError("POLICY_INVALID")
-	}
-	next := ActiveResource{descriptor, rules}
-	if r.persist == nil {
-		return NewAppError("STORAGE_FAILED")
-	}
-	if err = r.persist(next); err != nil {
-		return err
-	}
-	r.mu.Lock()
-	r.active = &next
-	r.identities[descriptor.ID] = descriptor.SHA256
-	r.mu.Unlock()
-	return nil
-}
-func (r *RoutingResources) Current(now int64, baseline Rules) Rules {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	if r.active != nil {
-		expiry, _ := signedTime(r.active.Descriptor.ExpiresAt)
-		if expiry > now {
-			return cloneRules(r.active.Rules)
-		}
-	}
-	return cloneRules(baseline)
-}
-func (r *RoutingResources) Active() *ActiveResource {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	if r.active == nil {
-		return nil
-	}
-	result := *r.active
-	result.Rules = cloneRules(result.Rules)
-	return &result
-}
-
 type ResourceIdentity struct {
 	ID      string `json:"id"`
 	SHA256  string `json:"sha256"`
