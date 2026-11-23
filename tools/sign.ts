@@ -1,4 +1,4 @@
-import { createPrivateKey, createPublicKey, sign, generateKeyPairSync } from 'node:crypto';
+import { createPrivateKey, sign, generateKeyPairSync } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { strictJson } from '../src/domain/json';

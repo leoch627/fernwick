@@ -1,6 +1,6 @@
 import type { Account, BuildConfig, Policy } from '../shared/schema';
 import type { ParsedNodes, Session, Snapshot, SubscriptionDescriptor } from '../domain/model';
-import { createSnapshot, restriction, tightenSnapshot } from '../domain/authorization';
+import { createSnapshot, restriction } from '../domain/authorization';
 import { AppError, errorCode, type ErrorCode } from '../shared/errors';
 import { Budget } from '../domain/time';
 import type { PanelAdapter } from './panel';
